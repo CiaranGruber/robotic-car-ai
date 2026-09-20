@@ -1,0 +1,8 @@
+build/
+install/
+log/
+.verification/
+__pycache__/
+.pytest_cache/
+*.pyc
+.venv/
