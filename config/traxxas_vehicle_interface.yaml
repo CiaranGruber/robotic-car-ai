@@ -1,0 +1,92 @@
+# Traxxas public parameters, documented from its 0.1.0 candidate contract:
+# https://gitlab.unimelb.edu.au/dream/traxxas_vehicle_interface/-/blob/dev/docs/ros-interface.md
+# ALL application parameters are startup-only: restart the VEHICLE INTERFACE
+# after applying an admitted YAML change. It reconnects Disarmed; restart does
+# not authorize motion. The policy launch itself does not load this file into
+# the vehicle node. DREAM must explicitly map allowed student requests.
+/**/traxxas_vehicle_interface:
+  ros__parameters:
+    # Maximum drive-command change per second, normalized units/s, positive
+    # finite double. Default 50.0. Lower values soften ordinary effort changes;
+    # this is not a desired speed or a limit on physical acceleration.
+    drive_slew_rate_per_s: 50.0
+
+    # Maximum ordinary steering-command change, normalized units/s, positive
+    # finite double. Default 10.0. Lower values make commanded steering slower.
+    steering_slew_rate_per_s: 10.0
+
+    # Number of encoder PERIOD samples averaged by the wheel-speed estimator:
+    # integer in [1, 1024], default 6. Larger windows smooth noise but lag changes.
+    # This is not the number of telemetry messages or encoder ticks per wheel.
+    encoder_time_filter_window: 6
+
+    # Seconds with no new encoder period before declaring wheel speed zero;
+    # positive finite double, default 3.0. Low speeds produce sparse ticks, so
+    # making this too short falsely reports stopped wheels. Missing USB/ROS
+    # telemetry is different and is never replaced by a measured zero speed.
+    encoder_timeout_seconds: 3.0
+
+    # REFERENCE ONLY: the following defaults describe the component, NOT the
+    # effective calibration/identity of your car. Leave these commented unless
+    # DREAM deliberately delegates a particular setting for your exercise.
+
+    # Policy-command deadline in seconds, positive and > one 0.01 s control
+    # cycle; default 0.5. Missing new actions disables vehicle control. Also
+    # bounds the fresh-zero wait after Enable. Keep normal policy intervals
+    # comfortably shorter; do not increase this to hide a blocked calculation.
+    # policy_command_timeout_s: 0.5
+    # Coherent MCU telemetry deadline, seconds, >= two nominal 0.02 s reports;
+    # default 0.1. This does not change the firmware's own deadlines.
+    # telemetry_timeout_s: 0.1
+
+    # Autonomous steering interval, normalized: -1 <= minimum < 0 < maximum <= 1.
+    # Student [-1,1] steering is scaled into this interval. Physical per-car
+    # restrictions/trim come from DREAM. Manual RC is not limited by these ROS
+    # endpoints. Set a related pair together, not one endpoint in isolation.
+    # steering_min_normalized: -0.5
+    # steering_max_normalized: 0.5
+    # Initial centre correction, normalized, within the configured interval.
+    # Runtime trim uses explicit steering-trim topics, not live parameter edits.
+    # steering_trim_normalized: 0.0
+
+    # RC receiver calibration in integer MICROSECONDS, minimum < centre < maximum,
+    # all inside the MCU's accepted PWM range. These are physical measurements,
+    # not gains. Incorrect calibration changes what neutral/forward/reverse mean.
+    # rc_drive_min_us: 1000
+    # rc_drive_center_us: 1500
+    # rc_drive_max_us: 2000
+    # rc_steer_min_us: 1000
+    # rc_steer_center_us: 1500
+    # rc_steer_max_us: 2000
+    # Reverse-stop threshold, integer us, strictly between drive minimum/centre.
+    # The interface converts it to a normalized threshold for the stop gesture.
+    # rc_stop_threshold_us: 1400
+
+    # Wheel geometry/scaling (positive finite doubles). These define what a
+    # measured period means physically; copying incorrect values corrupts speed.
+    # Same-polarity sensor cycles per revolution of the encoder shaft:
+    # encoder_cycles_per_revolution: 3.0
+    # Sensor-shaft revolutions per ONE wheel revolution:
+    # encoder_to_wheel_ratio: 2.72
+    # Wheel diameter in METRES (not radius or millimetres):
+    # wheel_diameter_m: 0.105
+
+    # Raw measured pan shaft's JointState name: nonempty string. Its angle is
+    # not automatically the camera optical orientation; DREAM supplies kinematics.
+    # pan_encoder_joint_name: camera_pan_encoder
+
+    # Additional device identity restriction: empty normally discovers the sole
+    # eligible DREAM Traxxas MCU. A supplied ID must be canonical 16-digit
+    # uppercase hexadecimal, excluding all-zero/all-F. It cannot disambiguate
+    # multiple attached Traxxas MCUs; that situation is rejected.
+    # expected_device_id: ""
+    # Empty uses the component's approved firmware-build expectation for the
+    # detected board; it does NOT mean accept arbitrary firmware. Only use an
+    # explicit build ID for an intentionally selected compatible development build.
+    # Format: <12 lowercase hex or unborn>-<clean or dirty>-<16 lowercase hex>.
+    # expected_firmware_build_id: ""
+    # Optional reported-board restriction (string); empty adds no restriction
+    # beyond the interface's supported board/MCU combinations.
+    # expected_target_board: ""
+    # Live hardware uses the real ROS clock; true is unsupported.
+    # use_sim_time: false

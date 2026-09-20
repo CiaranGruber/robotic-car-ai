@@ -1,0 +1,7 @@
+# Exact units-bearing message contract required by the Traxxas interface.
+# dream_interfaces v0.1.0. Selecting it for the robot underlay belongs to DREAM.
+repositories:
+  dream_interfaces:
+    type: git
+    url: https://gitlab.unimelb.edu.au/dream/dream_interfaces.git
+    version: 9b6ef917c0b8bc31efe6ca07b8a3d25f29c35fdd

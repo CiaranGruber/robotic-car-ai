@@ -1,0 +1,67 @@
+# OAK-D public parameters, documented from the component's 0.1.0 contract:
+# https://gitlab.unimelb.edu.au/dream/oakd_cone_detector/-/blob/main/README.md
+# Active entries request ordinary perception/visualization tuning. DREAM must
+# admit these requests when launching its detector service; starting the POLICY
+# alone does not load this file into a detector. Restart the DETECTOR after edits.
+# Reference entries below are commented so generic examples cannot overwrite
+# the robot's selected device identity or mounting-frame configuration.
+/**/oakd_cone_detector:
+  ros__parameters:
+    # Camera acquisition/detection rate in Hz: positive finite double, default
+    # 10.0. Also controls policy update cadence in cone_detection mode. Higher
+    # rates cost compute/USB bandwidth; they are requests, not guaranteed rates.
+    camera_frame_frequency_hz: 10.0
+
+    # Minimum neural-network class confidence, normalized [0.0, 1.0], default
+    # 0.5. Increasing it discards more uncertain cones and may produce more empty
+    # frames. A confident detection still needs usable depth to be published.
+    detection_confidence_threshold: 0.5
+
+    # Accepted CAMERA DEPTH interval [minimum, maximum], metres; two finite
+    # doubles, 0 < minimum < maximum <= 65.535. Default [0.1, 5.0]. This is
+    # technical depth filtering, not a road-boundary/forward-distance rule in
+    # base_link. Invalid depth is omitted; a resulting empty array is valid data.
+    detection_depth_range_m: [0.1, 5.0]
+
+    # Infrared dot-projector intensity, normalized [0.0, 1.0], default 0.0 (off).
+    # Can help stereo depth on low-texture surfaces; results depend on the
+    # environment. This is the camera projector, not a vehicle actuator.
+    ir_laser_dot_projector_intensity_normalized: 0.0
+
+    # Create optional debug-image streams at startup (booleans, default false).
+    # Enable only what you need: images cost USB, CPU and network bandwidth.
+    # Neither option changes the meaning of the cone_detections topic.
+    publish_annotated_image: false
+    publish_depth_image: false
+
+    # Debug-image size relative to source resolution, double [1/640, 1], default
+    # 0.5. Smaller images cost less to display/transmit. One of TWO settings that
+    # also support explicit live ROS parameter updates on the detector.
+    debug_image_scale: 0.5
+
+    # Maximum debug-image publishing rate, Hz, double in [0, camera frequency].
+    # Default 1.0. Zero pauses host debug publication (not cone processing or
+    # device queue draining). Also supports explicit live ROS parameter updates.
+    # Editing this YAML alone does not send such a live update.
+    debug_image_publish_frequency_hz: 1.0
+
+    # REFERENCE ONLY: identity/frames come from the selected robot composition.
+    # Nonempty ID selects an OAK device; empty works only with exactly one
+    # compatible camera. Do not copy another robot's device ID.
+    # depthai_device_id: ""
+    # Optical frame: +x right, +y down, +z forwards; nonempty string.
+    # camera_optical_frame_id: oakd_rgb_camera_optical_frame
+    # Output positions are metres in this frame, normally base_link. TF must be
+    # available at image acquisition time; missing TF suppresses the batch,
+    # rather than publishing a misleading empty frame. Pan needs dynamic TF.
+    # Setting equal optical/output frame IDs intentionally uses camera axes
+    # without TF; the default AI4R policy will reject that frame mismatch.
+    # output_frame_id: base_link
+
+    # REFERENCE ONLY: standard diagnostic reporting, independent of policy rate.
+    # period: seconds, positive finite double; use_fqn: boolean, includes the
+    # node's full namespaced identity in diagnostics when true. Defaults below.
+    # diagnostic_updater:
+    #   period: 1.0
+    #   use_fqn: false
+    # All entries except the two debug scale/rate settings are startup-only.
