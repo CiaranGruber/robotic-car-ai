@@ -53,7 +53,13 @@
     # camera_optical_frame_id: oakd_rgb_camera_optical_frame
     # Output positions are metres in this frame, normally base_link. TF must be
     # available at image acquisition time; missing TF suppresses the batch,
-    # rather than publishing a misleading empty frame. Pan needs dynamic TF.
+    # rather than publishing a misleading empty frame. DREAM's base_link origin
+    # is nominal ground directly below the agreed vehicle CG. Its default fixed
+    # zero-pan optical pose is 0.10 m behind the CG centreline, 0.30 m above
+    # ground, and tilted 20 degrees down. config/camera_mount.yaml can override
+    # those three values for the next detector start/restart. This flat-ground
+    # pose does not compensate for terrain or vehicle pitch. Physical pan
+    # requires measured dynamic TF before transformed positions can be trusted.
     # Setting equal optical/output frame IDs intentionally uses camera axes
     # without TF; the default AI4R policy will reject that frame mismatch.
     # output_frame_id: base_link

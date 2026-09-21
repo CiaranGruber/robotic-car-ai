@@ -1,21 +1,45 @@
 #!/usr/bin/env python3
-"""The AI4R student policy: read observations, calculate actions, publish them.
+"""
+This AI4R policy node:
+> Reads observations from the various sensors,
+> Calculates actions to take,
+> Publishes those actions so that that get implemented on the actual car.
+> Does all that with one executor thread.
 
-Start reading at calculate_policy_actions(), especially the INSERT POLICY CODE
-markers. The rest of this file connects that small calculation to ROS and stops
-publishing driving actions when the measurements it requires are unavailable.
+This node is provided a single monotlithic python file, which means that it
+contains lots of lines of code for the real-time ROS details of:
+> Getting observations into a format that is easy for the policy to use.
+> Getting the policies action into a format that can be passed to the actaul car.
+> A state machine to mangage the behaviour of the node.
+> Error checking and handling.
+You do NOT need to worry about those detail to edit and use this node.
 
-Operator sequence (vehicle control and policy control are separate):
-  1. Start this node: it repeatedly publishes zero drive and zero steering.
-  2. Request vehicle Enable separately and wait for its Enabled status. Our new
-     zero commands satisfy the vehicle's pre-enable neutral-command handshake.
-  3. Request policy state 3 to run your code. Request state 2 to publish zeros.
-State 1 stops publishing; it is NOT a vehicle Disarm or an immediate stop.
+You SHOULD:
+> Start reading the code in this file at the calculate_policy_actions() function.
+> You should especially focus on reading the block of comments marked as:
+  > EXPLANATION OF THE OBSERVATIONS
+  > EXPLANATION OF THE ACTIONS
+> Implements your policy code between the INSERT POLICY CODE markers.
+> NEVER do any of the following in your policy code because they will block the
+  real-time loop and crash the car:
+  > NEVER sleep!
+  > NEVER wait for input!
+  > NEVER run an unbounded computation loop!
+  > NEVER do a ROS spin!
+> Also read the YAML files in the "config" folder. Those files allow you to change
+  key values within the policy and across the greater system without editing the
+  code of the respective nodes. For YAML parameter file changes to take effect,
+  you need to restart the respective nodes.
 
-Edit config/ai4r_policy.yaml for the update source and required measurements.
-There is one executor thread. Never sleep, spin, wait for input, or run an
-unbounded loop in policy code: that also delays this node's watchdog. The
-vehicle interface has its own independent command-loss watchdog.
+The nominal operator sequence for running this policy on the actual car is:
+  1. Start this policy_node (on startup it continually publishes zero drive and
+     zero steering).
+  2. Request vehicle Enable for the Traxxas node and wait for its Enabled status
+     (the zero commands from this policy_node are required to satisfy the Traxxas
+     node's pre-enable neutral-command guard).
+  3. Run your policy code by requesting policy state 3 (for example by clicking the
+     respective button in Foxglove).
+  4. Stop your policy code by requesting policy state 2, which publishes zeros.
 """
 
 from copy import deepcopy
@@ -196,8 +220,10 @@ class PolicyNode(Node):
         self.create_subscription(UInt16, "policy_fsm_transition_request",
                                  self.fsm_transition_request_callback, 10)
 
-        # DREAM supplies the mounting TF. We only look it up; this policy does
-        # not create or broadcast a competing robot/camera transform tree.
+        # DREAM owns mounting TF, including the camera's fixed zero-pan pose
+        # relative to ground-level base_link. Physical panning needs measured
+        # dynamic TF; this policy only looks up transforms and does not
+        # broadcast a competing tree.
         self.tf_buffer = Buffer(node=self)
         self.tf_listener = TransformListener(self.tf_buffer, self, spin_thread=False)
 
@@ -466,11 +492,17 @@ class PolicyNode(Node):
 
     def calculate_policy_actions(self, observations, sensor_age_s, sensor_stamp_ns,
                                  dt, policy_elapsed_s, is_first_policy_step):
-        """STUDENT STARTING POINT: calculate one action from a current snapshot.
+        """
+        STUDENT STARTING POINT
 
-        This function is called by run_policy_step() only in publishing-policy
-        state and only while the required observations are healthy. It does not
-        need to publish ROS messages or manage the state machine itself.
+        This function:
+        > Calculate one action from the most recent observations.
+        > Is called repeatedly at the specified frequency (hence why it is important
+          that you do NOT block this function with sleep or while loops or similar).
+        > Is called only when this policy_node is in the publishing-policy state and
+          only while the required observations are healthy.
+        > Does NOT need to publish ROS messages or manage the state machine itself
+          (that is all taken care of in other functions).
         """
         cone_data_available = observations["cone_detections"] is not None
         cones = observations["cone_detections"] or []
@@ -493,46 +525,87 @@ class PolicyNode(Node):
         angular_velocity_rad_per_sec = observations["imu_angular_velocity"]
         specific_force_m_per_sec_squared = observations["imu_specific_force"]
 
+        # ===============================
+        # EXPLANATION OF THE OBSERVATIONS
+        # ===============================
         # OBSERVATIONS (all lengths/angles use metres/radians):
         # - x_coords/y_coords/z_coords and cone_colour/confidence are parallel
-        #   lists. Index i describes one cone. In the normal base_link frame,
-        #   +x is forwards, +y left, +z upwards. These are CAR coordinates, not
-        #   world positions. Use ConeDetection.COLOR_YELLOW / COLOR_BLUE (1/2).
-        #   A valid empty frame gives num_cones == 0 and cone_data_available True.
-        #   No current optional frame gives num_cones == 0 and availability False.
-        # - Wheel speed is UNSIGNED. It does not tell you forward versus reverse.
-        #   The vehicle node estimates it from sparse encoder periods, so low
-        #   speeds take longer to measure. encoder_timeout_seconds controls when
-        #   it concludes no encoder ticks means stopped; our sensor timeout
-        #   instead detects missing telemetry. None is not a measured zero.
+        #   lists.
+        #   - Index i describes one cone.
+        #   - In the normal base_link frame, +x is forwards, +y left, +z upwards
+        #     from nominal ground directly below the vehicle CG.
+        #   - Hence, z_coords is the detected point's nominal height above that
+        #     ground plane (it is NOT the cone's total height).
+        #   - The fixed camera pose does NOT compensate for terrain or vehicle pitch.
+        #   - The (x,y,z) coords are CAR coordinates (they are NOT world positions).
+        #   - Use ConeDetection.COLOR_YELLOW / COLOR_BLUE (1/2).
+        #   - A valid empty frame gives num_cones == 0 and cone_data_available True.
+        #   - If cone detections are configured to be optional for this policy_node
+        #     and no fresh cone detection message is available, then num_cones is 0
+        #     and cone_data_available is False.
+        #
+        # - Wheel speed is UNSIGNED.
+        #   - It does not tell you forward versus reverse.
+        #   - The vehicle's Traxxas node estimates wheel speed from sparse encoder
+        #     periods, so low speeds take longer to measure.
+        #   - The encoder_timeout_seconds for the vehicle's Traxxas node controls
+        #     when it concludes that no encoder ticks means wheel stopped.
+        #   - The sensor timeout in this policy_node instead detects missing
+        #     wheel speed telemetry.
+        #   - None is not a measured zero.
+        #
         # - lidar_ranges[i] is measured at angle_min + i * angle_increment in
-        #   lidar['frame_id']. The scan is NOT rotated into the body frame here.
-        #   lidar also contains angle_min/max/increment, time_increment,
-        #   scan_time, range_min/max, and intensities. Retain only finite rays
-        #   between range_min and range_max when your algorithm needs hits.
-        #   Infinity can mean no return; NaN is not a zero-distance obstacle.
+        #   lidar['frame_id'].
+        #   - The raw scan and its origin are unchanged by the base_link
+        #     ground-origin convention.
+        #   - The lidar data is NOT rotated, it is in the frame of the lidar
+        #     device.
+        #   - Lidar also contains angle_min/max/increment, time_increment,
+        #     scan_time, range_min/max, and intensities.
+        #   - You should retain only finite rays between range_min and range_max
+        #     when your algorithm needs to detect real hits.
+        #   - Infinity can mean no return; NaN is not a zero-distance obstacle.
+        #
         # - IMU quaternion/roll/pitch/vectors are in the policy body frame after
-        #   the external mounting TF is applied. Absolute orientation uses
-        #   magnetic ENU (east/north/up). Relative heading is re-zeroed ONLY when
-        #   entering policy state, and wrapped to [-pi, pi]. Angles can drift.
-        #   +x roll is forwards-axis rotation; +y pitch is left-axis rotation.
-        #   Specific force INCLUDES GRAVITY; it is not pure driving acceleration.
-        #   Partial messages are normal: each IMU field may independently be None.
+        #   the external mounting TF is applied.
+        #   - Absolute orientation uses magnetic ENU (east/north/up).
+        #   - Relative heading is re-zeroed ONLY when entering policy state, and
+        #     wrapped to [-pi, pi]. Angles can drift.
+        #   - A +x roll is forwards-axis rotation.
+        #   - A +y pitch is left-axis rotation.
+        #   - Specific force INCLUDES GRAVITY; it is not pure driving acceleration.
+        #   - Partial messages are normal and each IMU field may independently be
+        #     None.
+        #
         # - sensor_age_s[name] is the age in seconds of the last accepted sample,
-        #   or None if none exists. sensor_stamp_ns holds its ROS stamp in ns
-        #   (None for wheel speed). Optional expired observations above are None.
-        # - dt is ACTUAL monotonic seconds between policy steps; it is 0.0 on
-        #   the first step. Guard division by dt. Timer mode can reuse a sensor
-        #   sample across several steps; a policy step is not a new measurement.
+        #   or None if none exists.
+        #   - sensor_stamp_ns holds its ROS stamp in ns (None for wheel speed).
+        #   - If an optional observations is expired, then its value is None.
+        #
+        # - dt is ACTUAL monotonic seconds between policy steps.
+        #   - It is 0.0 on the first step.
+        #   - Hence, if you use dt in your policy code, then you need to have a
+        #     guard in your code to avoid division by dt.
+        #   - If you operate this policy_node in timer mode, then it can reuse a
+        #     sensor sample across several steps. In other words, a policy step is
+        #     not necessarily a new measurement.
+        #
         # - policy_elapsed_s is seconds since entering policy state.
-        #   is_first_policy_step lets you reset an integrator once per run.
+        #   - The is_first_policy_step flag allows you reset an integrator (or similar)
+        #     once per run.
 
-        # ACTIONS are NORMALIZED, finite values in [-1, 1]:
+        # ===============================
+        # EXPLANATION OF THE ACTIONS
+        # ===============================
+        # ACTIONS are NORMALIZED values in [-1, 1]:
         # - drive_action requests motor effort (ESC), NOT speed in m/s.
+        #
         # - steering_action is the calibrated steering interval; zero is centre.
+        #
         # - camera_pan_action is an independent servo target, NOT an angle in
         #   radians. None means send no target and retain its current position.
         #   It can move even while vehicle drive is disabled. Zero means centre.
+        #
         # Values outside [-1,1] are clipped. NaN/infinity/programming errors stop
         # the policy. Invalid data never becomes a motor command.
         drive_action = 0.0
@@ -546,6 +619,14 @@ class PolicyNode(Node):
         # =======================================
 
         # This starter deliberately keeps the drive and steering at zero.
+        #
+        # Code for a "working" policy is NOT provided because it tend to causing
+        # anchoring and minimal changes from the provided code.
+        #
+        # The following comments are example for how the observation variables
+        # available in this function can be used to implement various aspects
+        # of a policy.
+        #
         # Example: a state variable for a speed controller (uncomment to use):
         # if is_first_policy_step:
         #     self.speed_error_integral = 0.0

@@ -478,24 +478,39 @@ def test_installed_configs_and_namespaced_loading(tmp_path):
 def test_installed_launch_starts_executable_and_shuts_down(tmp_path):
     assert os.access(SCRIPT, os.X_OK), "Installed policy script is not executable"
     environment = dict(os.environ, ROS_LOG_DIR=str(tmp_path / "ros_logs"))
-    process = subprocess.Popen(
-        ["ros2", "launch", "ai4r_policy", "ai4r_policy.launch.py", "namespace:=launch_check"],
-        cwd=tmp_path, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, start_new_session=True)
-    try:
+    output_path = tmp_path / "launch-output.log"
+    with output_path.open("w", encoding="utf-8") as output_file:
+        process = subprocess.Popen(
+            ["ros2", "launch", "ai4r_policy", "ai4r_policy.launch.py", "namespace:=launch_check"],
+            cwd=tmp_path, env=environment, stdout=output_file, stderr=subprocess.STDOUT,
+            text=True, start_new_session=True)
         try:
-            output, _ = process.communicate(timeout=2.0)
-            pytest.fail("Policy launch exited before shutdown was requested:\n" + output)
-        except subprocess.TimeoutExpired:
+            marker = "Policy update source: cone_detection"
+            deadline = time.monotonic() + 10.0
+            output = ""
+            while time.monotonic() < deadline:
+                output_file.flush()
+                output = output_path.read_text(encoding="utf-8", errors="replace")
+                if marker in output:
+                    break
+                if process.poll() is not None:
+                    pytest.fail("Policy launch exited before readiness:\n" + output)
+                time.sleep(0.05)
+            else:
+                pytest.fail("Policy launch did not become ready within 10 seconds:\n" + output)
+
+            assert process.poll() is None, output
             process.send_signal(signal.SIGINT)
-            output, _ = process.communicate(timeout=5.0)
-        assert process.returncode == 0, output
-        assert "Policy update source: cone_detection" in output
-        assert "[ERROR]" not in output and "Traceback" not in output
-    finally:
-        if process.poll() is None:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.communicate(timeout=3.0)
+            process.wait(timeout=5.0)
+            output_file.flush()
+            output = output_path.read_text(encoding="utf-8", errors="replace")
+            assert process.returncode == 0, output
+            assert marker in output
+            assert "[ERROR]" not in output and "Traceback" not in output
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait(timeout=3.0)
 
 
 @pytest.mark.parametrize("mode", ["lidar", "timer"])

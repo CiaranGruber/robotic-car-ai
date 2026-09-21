@@ -55,10 +55,24 @@ and record review for safety, public-interface, CI-policy, release and hotfix
 changes; an assistant's technical review does not fulfill that requirement.
 Final `v*` tags are Maintainer-controlled and immutable by convention.
 
-The initial CI covers MRs and distinct protected-branch history checks. First
-release preparation must add reviewed final/candidate tag build/identity and
-packaging jobs before any release tag is created; no release is authorized by
-this initial implementation.
+The portable release-contract check exercises tag identity, promotion and sync
+topology, and deterministic source packaging without ROS:
+
+```bash
+python3 -B tests/test_release_contract.py -v
+```
+
+MR CI runs the full synthetic fast gate and creates a source-package preview.
+Protected-branch checks validate topology without repeating that ROS suite.
+Annotated `vX.Y.Z-rc.N` tags may identify the exact frozen `dev` candidate;
+annotated final `vX.Y.Z` tags identify the matching two-parent promotion on
+`main`. Tagged CI builds the installed policy and pinned interfaces package,
+checks launch/IDL, and retains the deterministic source archive,
+`release.json`, and `SHA256SUMS`. Candidate assets are evidence only. After
+successful final-tag CI and recorded human review, a maintainer publishes the
+exact final-tag files as durable GitLab Release assets. Tools here never create
+or move tags, merge branches, or publish releases. See
+[the v0.1.0 release record](docs/release-v0.1.0.md).
 
 Keep sensor parameter comments aligned with the selected component contracts.
 Configuration eligibility, robot calibration, component selection and TF belong
