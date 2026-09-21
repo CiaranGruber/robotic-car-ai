@@ -1,0 +1,12 @@
+# Optional DREAM camera-mount overrides. This is a source configuration file,
+# not a ROS parameter file. DREAM reads it when starting or restarting
+# oakd_cone_detector; the standalone ai4r_policy launch does not use it.
+#
+# The shipped empty mapping keeps DREAM's defaults. To override them, replace
+# the final {} with any subset of these example values:
+#   height_above_ground_m: 0.30  # finite metres, >= 0
+#   forward_from_cg_m: -0.10     # finite metres; positive is forwards
+#   downward_tilt_deg: 20.0      # finite degrees, strictly between -90 and 90;
+#                                  positive tilts down
+# Omitted fields retain their defaults. No other keys are accepted.
+{}

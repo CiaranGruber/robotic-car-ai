@@ -1,0 +1,99 @@
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.[1-9][0-9]*)?$/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "schedule"'
+    # Feature pushes (including those with an open MR) have no branch pipeline.
+    # Keep protected-branch history and explicitly requested pipelines enabled.
+    - when: never
+
+stages: [verify, package]
+variables:
+  GIT_DEPTH: "0"
+  DEBIAN_FRONTEND: noninteractive
+  PYTHONDONTWRITEBYTECODE: "1"
+
+verify-fast:
+  image: ros:jazzy-ros-base-noble
+  stage: verify
+  interruptible: true
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "main" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "schedule"'
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git cmake build-essential python3-colcon-common-extensions python3-pytest python3-yaml ros-jazzy-ament-cmake-pytest ros-jazzy-tf2-ros-py
+    - |
+      revision=$(python3 -c 'import yaml; print(yaml.safe_load(open("ci/dependencies.repos"))["repositories"]["dream_interfaces"]["version"])')
+      mkdir -p .verification/dependencies
+      git clone --no-checkout "https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.unimelb.edu.au/dream/dream_interfaces.git" .verification/dependencies/dream_interfaces
+      git -C .verification/dependencies/dream_interfaces checkout --detach "$revision"
+      git -C .verification/dependencies/dream_interfaces remote set-url origin https://gitlab.unimelb.edu.au/dream/dream_interfaces.git
+    - rosdep update
+    - rosdep install --from-paths . .verification/dependencies/dream_interfaces --ignore-src -r -y --rosdistro jazzy
+  script:
+    - AI4R_INTERFACES_SOURCE="$CI_PROJECT_DIR/.verification/dependencies/dream_interfaces" bash tools/verify_fast.sh
+    - python3 -B tests/test_release_contract.py -v
+    - git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main refs/heads/dev:refs/remotes/origin/dev
+    - python3 -B tools/package_source.py
+  artifacts:
+    when: always
+    paths: [.verification/ws/log/, .verification/ws/build/ai4r_policy/test_results/, build/release/]
+    reports:
+      junit: .verification/ws/build/ai4r_policy/test_results/**/*.xml
+    expire_in: 14 days
+
+verify-history:
+  image: python:3.12-alpine
+  stage: verify
+  interruptible: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && ($CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "main")'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "main" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
+  before_script:
+    - apk add --no-cache git
+  script:
+    - git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main refs/heads/dev:refs/remotes/origin/dev
+    - python3 -B tools/check_history.py
+
+build-tagged:
+  image: ros:jazzy-ros-base-noble
+  stage: package
+  interruptible: false
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.[1-9][0-9]*)?$/'
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git cmake build-essential python3-colcon-common-extensions python3-yaml ros-dev-tools
+    - . /opt/ros/jazzy/setup.sh
+    - |
+      revision=$(python3 -c 'import yaml; print(yaml.safe_load(open("ci/dependencies.repos"))["repositories"]["dream_interfaces"]["version"])')
+      mkdir -p .verification/dependencies
+      git clone --no-checkout "https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.unimelb.edu.au/dream/dream_interfaces.git" .verification/dependencies/dream_interfaces
+      git -C .verification/dependencies/dream_interfaces checkout --detach "$revision"
+      git -C .verification/dependencies/dream_interfaces remote set-url origin https://gitlab.unimelb.edu.au/dream/dream_interfaces.git
+    - rosdep update
+    - rosdep install --from-paths . .verification/dependencies/dream_interfaces --ignore-src -r -y --rosdistro jazzy
+  script:
+    - mkdir -p .verification/release_ws/src
+    - ln -s "$CI_PROJECT_DIR" .verification/release_ws/src/ai4r_policy
+    - ln -s "$CI_PROJECT_DIR/.verification/dependencies/dream_interfaces" .verification/release_ws/src/dream_interfaces
+    - cd .verification/release_ws
+    - colcon build --packages-select dream_interfaces ai4r_policy --cmake-args -DBUILD_TESTING=OFF
+    - . install/setup.sh
+    - ros2 interface show dream_interfaces/msg/DriveAndSteer
+    - ros2 launch ai4r_policy ai4r_policy.launch.py --show-args
+    - cd "$CI_PROJECT_DIR"
+    - git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main refs/heads/dev:refs/remotes/origin/dev
+    - python3 -B tools/package_source.py
+  artifacts:
+    paths: [build/release/]
+    expire_in: 30 days
+  # Candidate artifacts are evidence only. A maintainer publishes final-tag
+  # assets after successful CI and recorded human review.

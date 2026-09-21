@@ -1,0 +1,53 @@
+# BNO08x public parameters, documented from the component's 0.1.0 contract:
+# https://gitlab.unimelb.edu.au/dream/bno08x_imu_interface/-/blob/dev/docs/ros-interface.md
+# ALL settings are startup-only, including attempts to set the same value.
+# Restart the IMU INTERFACE after applying admitted changes. Restarting just
+# the policy does not apply this file. DREAM owns service launch/configuration.
+/**/bno08x_imu_interface:
+  ros__parameters:
+    # Nonempty list, no duplicates. Supported products are exactly:
+    # orientation, angular_velocity, accelerometer_specific_force, magnetic_field.
+    # The first three feed sensor_msgs/Imu on imu/data. magnetic_field optionally
+    # creates imu/mag in tesla; it is an extension point, not an initial policy
+    # subscription. Sampling rates are firmware-owned (nominal 50 Hz requests),
+    # not configured here. Disabling a field required by your policy stops it.
+    enabled_products: [orientation, angular_velocity, accelerometer_specific_force]
+
+    # Minimum accepted reported accuracy PER product. Allowed strings:
+    # unreliable, low, medium, high. Default unreliable admits usable calibrating
+    # samples with a diagnostic warning; higher requirements can suppress data
+    # until calibration improves. Accuracy is not an angular covariance value.
+    # Partial IMU messages are normal. Absent fields have covariance[0] == -1;
+    # their numerical zeros must not be interpreted as fresh measurements.
+    minimum_accuracy:
+      orientation: unreliable
+      angular_velocity: unreliable
+      accelerometer_specific_force: unreliable
+      magnetic_field: unreliable
+
+    # REFERENCE ONLY: nonempty sensor frame, no whitespace or leading slash.
+    # The driver preserves native sensor axes and magnetic ENU orientation. A
+    # frame name does not rotate readings; DREAM must supply the mounting TF.
+    # With ground-level base_link, DREAM's nominal IMU translation has z =
+    # 0.10 m; the mounting rotation is unchanged. Translation does not alter the
+    # vectors consumed here. The policy applies the TF rotation and re-zeroes
+    # heading on entry to its publishing-policy state. There is no IMU-driver
+    # tare parameter here.
+    # sensor_frame_id: fsm300_sensor
+
+    # REFERENCE ONLY: optional restrictions on the selected firmware/board.
+    # Empty means unbound standalone operation, reported in diagnostics. Supplied
+    # mismatches suppress measurements; never copy the connected device's values
+    # merely to make a mismatch disappear. There is no device-ID/serial-port
+    # parameter in this driver's public contract.
+    # Board string: empty, waveshare_rp2040_zero, or waveshare_rp2350_zero.
+    # expected_target_board: ""
+    # Exact source commit: empty or 40 lowercase hexadecimal characters.
+    # expected_firmware_commit: ""
+    # Exact provider build ID: empty or 64 lowercase hexadecimal characters.
+    # expected_firmware_build_id: ""
+
+    # Live USB sensor interface only. true is unsupported; timestamps estimate
+    # MCU callback receipt, not precise physical acquisition time. Angular rate
+    # is rad/s and specific force is m/s^2 INCLUDING gravity, not motion alone.
+    # use_sim_time: false
