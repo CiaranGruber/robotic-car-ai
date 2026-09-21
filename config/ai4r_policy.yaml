@@ -86,9 +86,14 @@
 
     # Coordinate frame expected for cone positions and used for body-frame IMU
     # observations (nonempty, no leading slash/whitespace). Normally base_link:
-    # +x forwards, +y left, +z up. DREAM must configure the detector consistently
-    # and supply IMU mounting and camera-pan TF. A ROS namespace does not prefix
-    # a frame ID. Changing this string does not rotate or move a physical sensor.
+    # +x forwards, +y left, +z up, with its origin at nominal ground directly
+    # below the agreed vehicle CG. Cone z is a detected point's nominal height
+    # above that ground plane, not cone total height. DREAM must configure the
+    # detector consistently and supply IMU mounting TF. The fixed camera pose
+    # does not compensate for terrain or vehicle pitch; physical panning
+    # invalidates it until measured dynamic TF is available. Raw lidar remains
+    # in its message frame with its existing origin. A ROS namespace does not
+    # prefix a frame ID. Changing this string does not rotate or move a sensor.
     policy_frame_id: base_link
 
     # Live robot only. true is rejected; simulated-clock/bag playback operation

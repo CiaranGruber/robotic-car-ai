@@ -6,12 +6,14 @@ The canonical [DREAM guide](https://gitlab.unimelb.edu.au/dream/dream_system/-/b
 governs repository workflow; preserve explicit user authority and Solo/Co-op
 preferences. Ordinary implementation requests authorize in-scope edits/checks.
 
-- Keep all policy code in scripts/policy_node.py. The comments and four YAML
-  files are the student documentation. Preserve the insertion markers.
+- Keep all policy code in scripts/policy_node.py. The comments, four ROS parameter
+  files and optional camera_mount.yaml are the student documentation. Preserve
+  the insertion markers.
 - Keep one selected trigger, explicit resume, per-field IMU validity and
   freshness, zero publication independent of sensor callbacks, and pan hold.
 - The policy never enables the vehicle. DREAM owns hardware services,
-  calibrated facts, mounting/pan TF and admitted component overrides.
+  calibrated facts and admitted component overrides. Its camera TF is fixed at
+  zero pan; physical panning needs a measured dynamic TF before use.
 - Preserve existing edits. Do not edit other repositories, flash hardware,
   change a live robot configuration, merge, or release without task authority.
 - Run the CONTRIBUTING.md fast command against the pinned message definition.

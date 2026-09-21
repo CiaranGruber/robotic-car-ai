@@ -28,8 +28,11 @@
     # REFERENCE ONLY: nonempty sensor frame, no whitespace or leading slash.
     # The driver preserves native sensor axes and magnetic ENU orientation. A
     # frame name does not rotate readings; DREAM must supply the mounting TF.
-    # The policy applies that rotation and re-zeroes heading on entry to its
-    # publishing-policy state. There is no IMU-driver tare parameter here.
+    # With ground-level base_link, DREAM's nominal IMU translation has z =
+    # 0.10 m; the mounting rotation is unchanged. Translation does not alter the
+    # vectors consumed here. The policy applies the TF rotation and re-zeroes
+    # heading on entry to its publishing-policy state. There is no IMU-driver
+    # tare parameter here.
     # sensor_frame_id: fsm300_sensor
 
     # REFERENCE ONLY: optional restrictions on the selected firmware/board.

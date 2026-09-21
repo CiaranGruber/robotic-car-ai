@@ -1,9 +1,12 @@
 # ai4r_policy
 
 Student ROS 2 policy package for the DREAM robot, targeting Ubuntu 24.04 and
-ROS 2 Jazzy. Version 0.1.0 is an initial development candidate, not a release or
-a physically qualified driving controller. [Acceptance](docs/acceptance.md)
-records observed software checks and remaining robot checks.
+ROS 2 Jazzy. Version 0.1.0 describes the first source release; its published
+annotated tag and successful release CI establish the release identity.
+It is not a physically qualified driving controller.
+[Acceptance](docs/acceptance.md) records observed software checks and remaining
+robot checks, and [the release record](docs/release-v0.1.0.md) defines promotion,
+tag, artifact, and publication evidence.
 
 **Start with [scripts/policy_node.py](scripts/policy_node.py)** and its
 `INSERT POLICY CODE` section. It contains the observation/action explanations
@@ -29,6 +32,17 @@ incompatible. The compatible `dream_interfaces` v0.1.0 dependency is pinned in
 [ci/dependencies.repos](ci/dependencies.repos). Staff/developer standalone build
 and test instructions are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
+For managed DREAM runs, keep this package in the external student workspace and
+set `~/.config/dream/ai4r.yaml` to:
+
+```yaml
+student_workspace: ~/ai4r_student_workspace
+```
+
+DREAM uses that workspace's installed overlay only for `ai4r_policy`. Its
+[AI4R runtime guide](https://gitlab.unimelb.edu.au/dream/dream_system/-/blob/feature/initial-autonomous-car-stack/docs/ai4r-runtime.md)
+describes the explicit build, source-YAML validation and restart commands.
+
 With the compatible underlay and student overlay sourced:
 
 ```bash
@@ -37,9 +51,10 @@ ros2 launch ai4r_policy ai4r_policy.launch.py namespace:=car
 
 The launch supports optional `namespace` and `params_file` arguments. Shipped
 policy settings load first, then the explicit overlay. It starts only the
-`ai4r_policy` node and does not respawn it. DREAM supplies hardware services and
-mounting/pan TF separately. Managed policy execution and component-configuration
-loading still require the DREAM integration described below.
+`ai4r_policy` node and does not respawn it. DREAM owns hardware services and
+mounting transforms separately. Its camera transform describes the fixed
+zero-pan pose; physically panning the camera invalidates that transform until a
+measured dynamic TF is supplied.
 
 The policy starts in state **2: publishing zero drive and steering**. It holds
 the pan target by sending no pan command. Vehicle Enable/Disable/Disarm is
@@ -64,8 +79,13 @@ command does not prove physical stopping or take control away from manual RC.
 All names below are relative to the selected namespace. The fixed node name is
 `ai4r_policy`. Sensor subscriptions keep the latest observations; IMU fields have
 independent validity/freshness. Cone positions are metres in `policy_frame_id`
-(normally `base_link`); lidar stays in its message frame. Body IMU vectors use
-mounting TF, and relative heading resets only when entering policy state 3.
+(normally `base_link`). DREAM places the normal `base_link` origin on nominal
+ground directly below the agreed vehicle centre of gravity: +x forwards, +y
+left, +z up. A cone position's `z` is the detected point's nominal height above
+that ground plane, not the cone's total height. The fixed-pose transform does
+not compensate for terrain or vehicle pitch. Lidar remains raw in its message
+frame with its existing origin. Body IMU vectors use mounting TF, and relative
+heading resets only when entering policy state 3.
 
 | Topic | Type | Direction / QoS |
 | --- | --- | --- |
@@ -86,17 +106,39 @@ outputs or student exceptions stop the policy. A pan target of `None` holds;
 zero recentres. Drive is motor effort, not a speed setpoint. Full meanings and
 examples are beside the variables in the Python file.
 
-Four commented parameter files are installed:
+Four commented ROS parameter files are installed:
 
 - [ai4r_policy.yaml](config/ai4r_policy.yaml): triggers, required sensors and timing.
 - [traxxas_vehicle_interface.yaml](config/traxxas_vehicle_interface.yaml): vehicle tuning and commented calibration/identity references.
 - [oakd_cone_detector.yaml](config/oakd_cone_detector.yaml): perception and debug settings.
 - [bno08x_imu_interface.yaml](config/bno08x_imu_interface.yaml): selected IMU products and accuracy.
 
-Policy settings are startup-only. Restart the affected node after editing its
-startup YAML. The policy launch loads only its own file; the other files are
-requests for DREAM to admit and pass to the independently launched components.
-Commented reference values do not override robot calibration.
+The optional [camera mount file](config/camera_mount.yaml) is also installed,
+but it is DREAM source configuration, not ROS parameters. The shipped `{}` uses
+the defaults: camera optical centre `0.30 m` above nominal ground, `0.10 m`
+behind the CG (`forward_from_cg_m: -0.10`), centred at `y = 0`, and tilted
+`20 degrees` down. It accepts only `height_above_ground_m` (finite and
+nonnegative), `forward_from_cg_m` (finite and signed), and
+`downward_tilt_deg` (finite, strictly between `-90` and `90`, positive down).
+Fields may be omitted to inherit their defaults; a missing file also uses all
+defaults.
+
+Policy settings are startup-only. DREAM reads the current source YAML under
+`~/ai4r_student_workspace/src/ai4r_policy/config/` on each new start or restart,
+so editing these files needs no student-workspace rebuild. Restart only the
+affected unit: `dream runtime restart ai4r_policy` for policy settings, or
+`dream runtime restart traxxas_vehicle_interface`, `oakd_cone_detector`, or
+`bno08x_imu_interface` for that component's YAML. Camera-mount changes take
+effect through `dream runtime restart oakd_cone_detector`. DREAM validates and
+snapshots the effective camera configuration before stopping a running detector;
+malformed YAML, unknown keys, or invalid values therefore leave it running with
+its previous snapshot. An idempotent `dream runtime start oakd_cone_detector`
+does not restart or reload an already-running unit. Restarting policy alone does
+not reload a hardware unit. The standalone policy launch loads only its own ROS
+parameter file and never consumes `camera_mount.yaml`; DREAM admits component
+requests before passing them to independently launched units. Commented
+reference values do not override robot calibration. See the [runtime guide](https://gitlab.unimelb.edu.au/dream/dream_system/-/blob/feature/classroom-ros-environment/docs/ai4r-runtime.md)
+for the complete source-YAML workflow.
 
 Direct-node equivalent for integrations that need one (Python ROS launch):
 
@@ -115,13 +157,24 @@ policy = Node(
 
 ## Integration status and development
 
-This is the standalone source repository. DREAM still needs compatible component
-selection, the managed policy runtime unit, admission/loading of the three
-component YAMLs, and body/IMU/panning-camera TF. The policy does not own those
-services, perform hardware discovery, or install student dependencies.
+This is the standalone source repository. DREAM's AI4R integration defines the
+managed policy and component runtime units and admits source-YAML overrides.
+Its `base_link` origin is nominal ground directly below the agreed CG. The
+default zero-pan camera optical pose is `[-0.10, 0.00, 0.30]` m relative to that
+origin, with a 20-degree downward tilt; the optional camera mount file overrides
+height, forward offset and tilt. The nominal IMU translation now has
+`z = 0.10 m` in this ground-level frame, with its existing rotation unchanged.
+Sensor observations retain their contracts except that transformed
+cone `z` is rebased to the ground-level origin; raw lidar data is unchanged.
+Physical pan motion requires a measured dynamic transform before cone positions
+can be trusted. The fixed flat-ground pose does not compensate for terrain or
+vehicle pitch, and physical frame validation remains separate. The policy does
+not own those services, perform hardware discovery, or install student
+dependencies.
 
 `dev` is the active development branch; `main` is the release-ready line.
-Immutable tags identify releases. Use feature branches and reviewed MRs;
-safety, public-interface and CI-policy changes require recorded human review.
+Annotated immutable tags identify candidates and releases. Use feature branches
+and reviewed MRs; safety, public-interface and CI-policy changes require recorded
+human review.
 See [contribution checks](CONTRIBUTING.md), [change history](CHANGELOG.md),
 [acceptance](docs/acceptance.md), and the [MIT license](LICENSE).
