@@ -13,7 +13,106 @@ not actual sensor/vehicle response.
 Keep revision, command, result and limitations here; retain detailed logs in
 CI artifacts or merge requests rather than a tracked evidence directory.
 
+## Student-facing review, 2026-09-28
+
+The owner reviewed `scripts/policy_node.py`, `config/ai4r_policy.yaml` and
+`config/aruco_detector.yaml` at commit
+`5d81db2353e798d687b0a65dfb6a0d3862805e80` and approved them without changes in
+the development conversation. The reviewed Git blobs, respectively, are
+`f6b2eee08e259fe08f77aab9a4f0eafbc45f84f8`,
+`35b77406b6af2c938f8999cd2809b0ec6b1fe197` and
+`c47dbe135b816282a82977d307a956ec7299c9b7`.
+This records approval of those three student-facing files. Review of the wider
+cross-repository changes and final MR verification remains separate.
+
 ## Observed software evidence
+
+### Cartesian lidar observations, 2026-09-27
+
+The candidate based on `890857e` prepares body-frame Cartesian points for every
+accepted raw scan, with original ray indices and separate freshness requirements.
+The assistant ran `AI4R_INTERFACES_SOURCE=... bash tools/verify_fast.sh` on jah
+against exact-clean interfaces `d95da38bbea66ff2a91f6f52ab24ea18ba116f8c`:
+64 pytest cases / 65 colcon checks passed, no failures or skips. Both packages
+built and installed launch arguments were checked. Cases cover three-axis TF,
+invalid-ray filtering, index correspondence, empty results, failed conversion,
+rejected scans, copied snapshots, both freshness deadlines and explicit recovery.
+
+The public student build passed. A synthetic check used the installed policy
+and actual DREAM mounting-TF launch action in isolated localhost domain 219,
+omitting the physical driver. For 720 rays the callback median was 3.182 ms,
+p95 3.291 ms and maximum 33.623 ms across 200 samples on jah. This includes raw
+validation, storage and conversion, but excludes DDS delivery and student policy
+execution. It is a short observation, not a worst-case timing bound. Runtime,
+configuration and test hashes matched the local feature source after CRLF
+normalization. The accompanying commit identifies the implementation; only
+acceptance documentation was added after verification. Logs and the probe remain
+under `/home/poi/lidar_cartesian_20260927/evidence/` and the matching DREAM system
+evidence record. Physical lidar, mounting accuracy and driving were **not run**.
+
+### Cone publication latency, 2026-09-27
+
+The candidate based on `bed86cf` consumes interface
+`d95da38bbea66ff2a91f6f52ab24ea18ba116f8c` and keeps cone publication latency
+attached to the corresponding batch. Student coordinate lists and the function
+signature remain unchanged; the internal cone observation is now a dictionary.
+The assistant ran the required `AI4R_INTERFACES_SOURCE=... bash tools/verify_fast.sh`
+on jah against the exact clean interface checkout: 53 pytest cases / 54 colcon
+checks passed, no failures or skips, and installed launch arguments were checked.
+The new cases cover nonempty/empty batches, independent acquisition-based age,
+copied snapshots, stale availability and rejection of invalid latency without
+refreshing data or triggering a policy step. The earlier overflow regression
+also remains in the passing suite. Source hashes matched the local changes
+after CRLF normalization; the accompanying feature commit identifies the tested
+implementation. The log is `/home/poi/cone_latency_20260927/evidence/policy-fast.log`.
+Only synthetic ROS peers ran; physical driving remains untested.
+
+### Fiducial overflow and comment audit fixes, 2026-09-27
+
+The assistant verified the executable, configuration and test sources committed
+in `d6395cc2dddf3cff69a18c670fa67a7723b16619` on jah, using a disposable workspace
+and exact-clean interfaces `6711f6ce7799f0d97dfa4bf9f6bc40c52b39857b`.
+The required `AI4R_INTERFACES_SOURCE=... bash tools/verify_fast.sh` passed:
+48 pytest cases / 49 colcon checks, zero failures or skips, and installed launch
+arguments checked. Source hashes matched the local files after CRLF normalization;
+the disposable script's executable mode was restored from Git's source archive.
+
+The new regression failed against the preceding runtime source with the expected
+unhandled transform `ValueError`. With the fix it confirms whole-batch rejection,
+unchanged cached freshness, no policy trigger, expiry to zero publication, and
+continued explicit-resume requirements after fresh data returns. The two YAML
+comment omissions are corrected. Logs are retained on jah under
+`/home/poi/aruco_test_20260926/evidence/policy-audit-fast.log` and
+`policy-audit-regression-before.log`, with local development copies. These checks
+use synthetic ROS data; no camera, vehicle interface or physical actuator ran.
+
+### ArUco filter configuration, 2026-09-27
+
+Policy source `0adf7d5` adds the detector-owned allowed-ID and consecutive-frame
+settings to the student YAML and its installed-configuration check. The required
+`AI4R_INTERFACES_SOURCE=... bash tools/verify_fast.sh` passed on jah against
+exact-clean interfaces `6711f6ce7799f0d97dfa4bf9f6bc40c52b39857b`: 47 pytest
+cases / 48 colcon checks, no failures or skips. The log is retained at
+`/home/poi/aruco_test_20260926/evidence/policy-filters-fast.log`. The policy runtime
+Python source is unchanged by this filter configuration update; these are
+synthetic checks, not physical driving evidence.
+
+### ArUco development snapshot, 2026-09-26
+
+The uncommitted 0.2.0 snapshot based on `ff6049d` built on jah against the new
+working-tree fiducial interfaces and passed all 47 installed pytest cases.
+Synthetic ROS cases cover camera-to-policy pose transformation, dictionary and
+batch validation, fresh empty detections, stale required-input stopping,
+recovery and the fiducial trigger. They establish software behavior only.
+
+Logs remain in `/home/poi/aruco_test_20260926/evidence/policy-tests.log` and the
+system development evidence record. The standalone gate subsequently passed
+against exact-clean interface commit `6711f6ce7799f0d97dfa4bf9f6bc40c52b39857b`:
+47 pytest cases / 48 colcon checks, zero failures or skips, with both packages
+built and installed launch arguments inspected. Four portable release/provenance
+regressions passed after source packaging was changed to record the dependency
+manifest's exact commit without inferring the old v0.1.0 release tag. No physical
+vehicle response or camera mounting accuracy was tested.
 
 ### Release preparation, 2026-09-22
 
