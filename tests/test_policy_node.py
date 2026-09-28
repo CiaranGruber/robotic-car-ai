@@ -413,6 +413,31 @@ def test_shipped_student_calculation_is_zero_and_handles_missing_observations(ma
     assert not node.pan_publisher.messages
 
 
+def test_cone_filter_removes_gated_duplicate_and_off_row_cones(make_node):
+    settings = make_node().cone_filter
+    yellow, blue = ConeDetection.COLOR_YELLOW, ConeDetection.COLOR_BLUE
+    slope = math.tan(math.radians(10))  # Car 10 degrees off the lane direction.
+    lane = [(x, side * 0.5 + slope * x, 0.1, colour, 0.9)
+            for x in (0.5, 1.0, 1.5, 2.0, 2.5, 3.0) for side, colour in ((1, yellow), (-1, blue))]
+    outliers = [(1.25, 0.9 + slope * 1.25, 0.1, yellow, 0.9),   # Off the yellow row.
+                (1.75, -0.5 + slope * 1.75, 0.1, yellow, 0.9),  # Wrong colour in the blue row.
+                (5.0, 0.0, 0.1, blue, 0.9),                    # Beyond range.
+                (2.0, 0.0, 1.2, blue, 0.9),                    # Too high to be a cone.
+                (1.0, 0.52 + slope, 0.1, yellow, 0.6)]         # Less confident duplicate.
+    result = policy.filter_cone_outliers(lane + outliers, settings)
+    assert sorted(result.kept) == sorted(lane)
+    assert result.rejected_count == len(outliers)
+    assert result.row_slope == pytest.approx(slope)
+    assert result.row_offsets[yellow] == pytest.approx(0.5)
+    assert result.row_offsets[blue] == pytest.approx(-0.5)
+
+    # One cone per colour gives no row to check: keep it rather than guess.
+    single = [(1.0, 0.5, 0.1, yellow, 0.9), (1.0, -0.5, 0.1, blue, 0.9)]
+    result = policy.filter_cone_outliers(single, settings)
+    assert result.kept == single and result.row_slope is None
+    assert policy.filter_cone_outliers([], settings).rejected_count == 0
+
+
 def test_invalid_sensor_content_and_runtime_parameter_changes(make_node):
     node = make_node()
     bad_cone = cones(node)
@@ -435,6 +460,8 @@ def test_invalid_sensor_content_and_runtime_parameter_changes(make_node):
     ("timer", [], {"timestamp_tolerance_s": -1.0}),
     ("timer", [], {"policy_frame_id": "/base_link"}),
     ("timer", [], {"use_sim_time": True}),
+    ("timer", [], {"cone_filter.row_residual_m": 0.0}),
+    ("timer", [], {"cone_filter.max_fit_cones_per_colour": 50}),
 ])
 def test_invalid_startup_settings_fail(make_node, mode, required, extra):
     with pytest.raises(ValueError):

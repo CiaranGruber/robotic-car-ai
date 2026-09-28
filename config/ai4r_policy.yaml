@@ -100,6 +100,35 @@
     # is not supported by this initial package or the live vehicle/IMU drivers.
     use_sim_time: false
 
+    # CONE OUTLIER FILTER (filter_cone_outliers in policy_node.py). Removes
+    # detections that cannot belong to the Stage 1 lane before the policy uses
+    # them: outside the view volume, duplicates, or off their colour's row (both
+    # rows share one fitted direction). Starting values follow the shared
+    # defaults in docs/movement-policy-tasks.md; replace them after Task A1.
+    cone_filter:
+      # Keep cones with 0 < x <= this, metres ahead of base_link. Default 4.0,
+      # the shared camera range.
+      max_forward_m: 4.0
+      # Keep cones with |y| <= this, metres. Default 2.0: half the 1.0 m lane,
+      # a 0.2 m start offset and a 15 degree heading error seen 4 m ahead.
+      max_lateral_m: 2.0
+      # Accepted detected-point height above nominal ground, metres. The fixed
+      # camera pose ignores vehicle pitch, so keep this band loose.
+      min_height_m: -0.15
+      max_height_m: 0.45
+      # Minimum classification confidence in [0.0, 1.0]. The detector already
+      # applies its own threshold (default 0.5); raising this removes more.
+      min_confidence: 0.5
+      # Same-colour detections closer than this (metres) count as one cone; the
+      # most confident is kept. Keep it well below the 0.5 m cone spacing.
+      merge_distance_m: 0.1
+      # Maximum distance (metres) of a cone from its fitted colour row. Keep it
+      # well below half the 1.0 m lane width but above detector position noise.
+      row_residual_m: 0.15
+      # Nearest cones per colour used for the row fit: INTEGER from 2 to 12.
+      # Bounds calculation time; farther cones are still checked against the fit.
+      max_fit_cones_per_colour: 8
+
     # ADD YOUR OWN PARAMETER: also declare and read it in policy_node.py.
     # Example for the commented controller in that file:
     # speed_kp: 0.2

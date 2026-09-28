@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.1 - 2026-09-28
+
+- Add a bounded cone outlier filter for Stage 1: view-volume and confidence
+  gating, duplicate merging, and rejection of cones off their colour row using a
+  shared-direction row fit. Settings are under `cone_filter` in the policy YAML;
+  policy code receives `filtered_cones` and `debug1` reports rejected cones.
+
 ## 0.1.0 - 2026-09-22
 
 - Add a single-file student policy with cone-detection, lidar and timer update

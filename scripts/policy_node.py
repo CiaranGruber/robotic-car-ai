@@ -137,6 +137,126 @@ def wrap_angle(angle):
     return math.atan2(math.sin(angle), math.cos(angle))
 
 
+# ---- Cone outlier filter -------------------------------------------------------
+# Cones are (x, y, z, colour, confidence) tuples in policy_frame_id. Stage 1
+# assumes each colour forms one roughly straight row and that both rows are
+# parallel. Every loop is bounded by the batch size and max_fit_cones_per_colour,
+# so the filter is safe to call inside the real-time policy step.
+MIN_PAIR_SPACING_M = 0.05  # Closer same-colour pairs give no usable row direction.
+
+
+@dataclass(frozen=True)
+class ConeFilterSettings:
+    """Startup-only filter settings; meanings are in ai4r_policy.yaml."""
+    max_forward_m: float
+    max_lateral_m: float
+    min_height_m: float
+    max_height_m: float
+    min_confidence: float
+    merge_distance_m: float
+    row_residual_m: float
+    max_fit_cones_per_colour: int
+
+    def validate(self):
+        distances = (self.max_forward_m, self.max_lateral_m, self.merge_distance_m, self.row_residual_m)
+        if not all(finite_number(v) and v > 0.0 for v in distances):
+            raise ValueError("cone_filter distances must be finite and positive")
+        if not (finite_number(self.min_height_m) and finite_number(self.max_height_m)
+                and self.min_height_m < self.max_height_m):
+            raise ValueError("cone_filter heights must be finite with min_height_m < max_height_m")
+        if not finite_number(self.min_confidence) or not 0.0 <= self.min_confidence <= 1.0:
+            raise ValueError("cone_filter.min_confidence must be within [0, 1]")
+        # The row fit costs about (cones per colour)^4 steps; keep it bounded.
+        if not isinstance(self.max_fit_cones_per_colour, int) or not 2 <= self.max_fit_cones_per_colour <= 12:
+            raise ValueError("cone_filter.max_fit_cones_per_colour must be an integer from 2 to 12")
+
+
+@dataclass
+class ConeFilterResult:
+    kept: list                # Accepted cones, same tuples as the input, sorted by x.
+    rejected_count: int       # Gated + merged duplicates + off-row cones.
+    row_slope: float | None   # dy/dx shared by all rows in the car frame; None if unfitted.
+    row_offsets: dict         # Colour -> row y at x = 0; empty if unfitted.
+
+
+def gate_cones(cones, settings):
+    """Drop cones outside the plausible view volume or below the confidence floor."""
+    return [c for c in cones
+            if 0.0 < c[0] <= settings.max_forward_m
+            and abs(c[1]) <= settings.max_lateral_m
+            and settings.min_height_m <= c[2] <= settings.max_height_m
+            and c[4] >= settings.min_confidence]
+
+
+def merge_duplicate_cones(cones, merge_distance_m):
+    """Keep only the most confident of same-colour detections closer than merge_distance_m."""
+    kept = []
+    for cone in sorted(cones, key=lambda c: c[4], reverse=True):
+        if all(cone[3] != other[3]
+               or math.hypot(cone[0] - other[0], cone[1] - other[1]) >= merge_distance_m
+               for other in kept):
+            kept.append(cone)
+    return kept
+
+
+def _best_row_offset(row, slope, row_residual_m):
+    """Return (inliers, residual sum, offset) for the offset most cones agree on."""
+    intercepts = [c[1] - slope * c[0] for c in row]
+    best = None
+    for candidate in intercepts:
+        inliers = [v for v in intercepts if abs(v - candidate) <= row_residual_m]
+        score = (len(inliers), -sum(abs(v - candidate) for v in inliers))
+        if best is None or score > best[0]:
+            best = (score, sum(inliers) / len(inliers))
+    (count, negative_residual), offset = best
+    return count, -negative_residual, offset
+
+
+def fit_parallel_rows(cones, row_residual_m, max_fit_cones_per_colour):
+    """Fit y = offsets[colour] + slope * x, with one slope shared by every colour row.
+
+    Deterministic exhaustive RANSAC over the nearest cones of each colour: every
+    same-colour pair proposes a slope, each colour takes the offset most of its
+    cones agree with, and the proposal with most inliers (then least residual)
+    wins. Sharing the slope lets a good row outvote a bad cone in a short row.
+    Returns (slope, offsets), or None if no colour has two separated cones.
+    """
+    rows = {}
+    for cone in sorted(cones, key=lambda c: c[0]):
+        row = rows.setdefault(cone[3], [])
+        if len(row) < max_fit_cones_per_colour:
+            row.append(cone)
+    slopes = [(q[1] - p[1]) / (q[0] - p[0])
+              for row in rows.values() for i, p in enumerate(row) for q in row[i+1:]
+              if abs(q[0] - p[0]) >= MIN_PAIR_SPACING_M]
+    best = None
+    for slope in slopes:
+        fits = {colour: _best_row_offset(row, slope, row_residual_m) for colour, row in rows.items()}
+        score = (sum(f[0] for f in fits.values()), -sum(f[1] for f in fits.values()))
+        if best is None or score > best[0]:
+            best = (score, slope, {colour: f[2] for colour, f in fits.items()})
+    return None if best is None else best[1:]
+
+
+def filter_cone_outliers(cones, settings):
+    """Gate, merge duplicates, then drop cones that are off their colour's row.
+
+    With fewer than two separated cones of any colour there is no row to check,
+    so gated and merged cones are all kept. A colour with only one or two cones
+    cannot reliably identify its own wrong cone; more cones make the fit stronger.
+    """
+    candidates = merge_duplicate_cones(gate_cones(cones, settings), settings.merge_distance_m)
+    fit = fit_parallel_rows(candidates, settings.row_residual_m, settings.max_fit_cones_per_colour)
+    if fit is None:
+        kept, slope, offsets = candidates, None, {}
+    else:
+        slope, offsets = fit
+        kept = [c for c in candidates
+                if abs(c[1] - offsets[c[3]] - slope * c[0]) <= settings.row_residual_m]
+    kept.sort(key=lambda c: c[0])
+    return ConeFilterResult(kept, len(cones) - len(kept), slope, offsets)
+
+
 class PolicyNode(Node):
     def __init__(self, **kwargs):
         super().__init__("ai4r_policy", **kwargs)
@@ -186,6 +306,18 @@ class PolicyNode(Node):
         # self.speed_kp = self.get_parameter('speed_kp').value
         # YAML alone does not declare a parameter. A value such as 0.2 is a
         # floating-point number; 0 is an integer, which is a different ROS type.
+
+        # Cone outlier filter settings: see cone_filter in ai4r_policy.yaml.
+        cone_filter_defaults = {
+            "max_forward_m": 4.0, "max_lateral_m": 2.0,
+            "min_height_m": -0.15, "max_height_m": 0.45,
+            "min_confidence": 0.5, "merge_distance_m": 0.1,
+            "row_residual_m": 0.15, "max_fit_cones_per_colour": 8}
+        for name, default in cone_filter_defaults.items():
+            self.declare_parameter(f"cone_filter.{name}", default, ParameterDescriptor(read_only=True))
+        self.cone_filter = ConeFilterSettings(**{
+            name: self.get_parameter(f"cone_filter.{name}").value for name in cone_filter_defaults})
+        self.cone_filter.validate()
 
         self.fsm_state = FSM_STATE_PUBLISHING_ZERO_ACTIONS
         self.state_reason = "Startup: waiting for an explicit policy request"
@@ -617,6 +749,14 @@ class PolicyNode(Node):
         # =======================================
         # START OF: INSERT POLICY CODE BELOW HERE
         # =======================================
+
+        # Cone outlier filter: policy code below should use filtered_cones, not
+        # cones. cone_filter.row_slope/row_offsets describe the fitted rows
+        # (None/{} when unfitted). The filter never changes drive or steering by
+        # itself; debug1 shows how many cones it rejected (reuse debug1 freely).
+        cone_filter = filter_cone_outliers(cones, self.cone_filter)
+        filtered_cones = cone_filter.kept
+        debug1 = float(cone_filter.rejected_count)
 
         # This starter deliberately keeps the drive and steering at zero.
         #
