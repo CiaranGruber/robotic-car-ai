@@ -40,7 +40,7 @@ student_workspace: ~/ai4r_student_workspace
 ```
 
 DREAM uses that workspace's installed overlay only for `ai4r_policy`. Its
-[AI4R runtime guide](https://gitlab.unimelb.edu.au/dream/dream_system/-/blob/feature/initial-autonomous-car-stack/docs/ai4r-runtime.md)
+[AI4R runtime guide](https://gitlab.unimelb.edu.au/dream/dream_system/-/blob/main/docs/ai4r-runtime.md)
 describes the explicit build, source-YAML validation and restart commands.
 
 With the compatible underlay and student overlay sourced:

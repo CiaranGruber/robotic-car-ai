@@ -62,6 +62,8 @@ from std_msgs.msg import Float32, Int8, String, UInt16
 from dream_interfaces.msg import ConeDetection, ConeDetections, DriveAndSteer
 from tf2_ros import Buffer, TransformException, TransformListener
 
+from policy.input_output import ConeColour, convert_observations, convert_actions
+from policy.policy_runner import run_movement_policy
 
 # These values and the request/status topics match the previous AI4R policy.
 FSM_STATE_NOT_PUBLISHING_ACTIONS = 1
@@ -414,7 +416,7 @@ class PolicyNode(Node):
         # A partial IMU message may contain gyro but no orientation. Covariance
         # [0] == -1 marks an ABSENT field; its numeric zeros are not measurements.
         fields = (("imu_orientation", msg.orientation_covariance, msg.orientation),
-                  ("imu_angular_velocity", msg.angular_velocity_covariance, msg.angular_velocity),
+                  ("imu_angular_velocity", msg.angular_velocity_covariance, msg.ang_velocity),
                   ("imu_specific_force", msg.linear_acceleration_covariance, msg.linear_acceleration))
         for name, covariance, measurement in fields:
             if covariance[0] == -1.0:
@@ -620,7 +622,7 @@ class PolicyNode(Node):
 
         # This starter deliberately keeps the drive and steering at zero.
         #
-        # Code for a "working" policy is NOT provided because it tend to causing
+        # Code for a "working" policy is NOT provided because it tends to cause
         # anchoring and minimal changes from the provided code.
         #
         # The following comments are example for how the observation variables
@@ -647,6 +649,35 @@ class PolicyNode(Node):
         #             for i, distance in enumerate(lidar_ranges)
         #             if math.isfinite(distance)
         #             and lidar['range_min'] <= distance <= lidar['range_max']]
+
+        colour_converter = {
+            ConeDetection.COLOR_YELLOW: ConeColour.YELLOW,
+            ConeDetection.COLOR_BLUE: ConeColour.BLUE
+        }
+
+        observations = convert_observations(
+            cone_data_available=cone_data_available,
+            num_cones=num_cones,
+            x_coords=x_coords,
+            y_coords=y_coords,
+            z_coords=z_coords,
+            cone_colour=[colour_converter[colour] for colour in cone_colour],
+            cone_confidence=cone_confidence,
+            wheel_speed_in_meters_per_second=wheel_speed_in_meters_per_second,
+            lidar=lidar,
+            roll_angle_in_radians=roll_angle_in_radians,
+            pitch_angle_in_radians=pitch_angle_in_radians,
+            heading_angle_in_radians=heading_angle_in_radians,
+            angular_velocity_rad_per_sec=angular_velocity_rad_per_sec,
+            specific_force_m_per_sec_squared=specific_force_m_per_sec_squared,
+            sensor_age_s=sensor_age_s,
+            sensor_stamp_ns=sensor_stamp_ns,
+            dt=dt,
+            policy_elapsed_s=policy_elapsed_s,
+            is_first_policy_step=is_first_policy_step,
+        )
+        actions = run_movement_policy(observations)
+        drive_action, steering_action, camera_pan_action, debug1, debug2 = convert_actions(actions)
 
         # =====================================
         # END OF: INSERT POLICY CODE ABOVE HERE
