@@ -182,6 +182,20 @@ nonnegative), `forward_from_cg_m` (finite and signed), and
 Fields may be omitted to inherit their defaults; a missing file also uses all
 defaults.
 
+The optional [lidar mount file](config/lidar_mount.yaml) likewise ships `{}` to
+inherit DREAM's baseline: scan origin 0.20 m forward of the CG, centred laterally,
+0.12 m above nominal ground, level with 180-degree yaw. It admits
+`forward_from_cg_m`, `left_from_cg_m`, `height_above_ground_m`, `roll_deg`,
+`pitch_deg` and `yaw_deg`. Distances are finite metres, height is nonnegative,
+and angles are finite degrees in [-180, 180]. Rotations are absolute,
+right-handed `Rz(yaw) * Ry(pitch) * Rx(roll)` from the lidar frame into
+`base_link`, not offsets added to the default. The file documents signs and
+measurement references. Apply edits using `dream runtime restart rplidar_c1`;
+policy restart alone does not reload the pose. Invalid settings leave the
+current lidar run intact. Cartesian points use the updated TF; raw scan ranges
+are unchanged. Install the matching DREAM lidar-mount support first; older
+DREAM versions ignore this optional file. No dynamic/IMU compensation is added.
+
 Policy settings are startup-only. DREAM reads the current source YAML under
 `~/ai4r_student_workspace/src/ai4r_policy/config/` on each new start or restart,
 so editing these files needs no student-workspace rebuild. Restart only the
@@ -194,7 +208,7 @@ malformed YAML, unknown keys, or invalid values therefore leave it running with
 its previous snapshot. An idempotent `dream runtime start oakd_cone_detector`
 does not restart or reload an already-running unit. Restarting policy alone does
 not reload a hardware unit. The standalone policy launch loads only its own ROS
-parameter file and never consumes `camera_mount.yaml`; DREAM admits component
+parameter file and never consumes `camera_mount.yaml` or `lidar_mount.yaml`; DREAM admits component
 requests before passing them to independently launched units. The active vehicle
 settings override DREAM's baselines; use measured calibration and geometry for
 your car. Omitted settings inherit the baseline. This requires DREAM's expanded

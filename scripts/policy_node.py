@@ -850,6 +850,9 @@ class PolicyNode(Node):
         #   - Both forms are prepared once per accepted scan, before a policy
         #     update. Conversion is always enabled, including for radial-only
         #     policies. Use either representation or both in your code below.
+        #   - Edit config/lidar_mount.yaml to change the mounting pose, then run
+        #     dream runtime restart rplidar_c1. This affects Cartesian points;
+        #     the raw scan stays in its original lidar frame.
         #   - Cartesian points always match the latest accepted raw scan. If
         #     its transform/conversion fails, raw data remains available and the
         #     old Cartesian result is discarded immediately.
