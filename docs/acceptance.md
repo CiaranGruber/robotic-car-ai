@@ -27,6 +27,46 @@ cross-repository changes and final MR verification remains separate.
 
 ## Observed software evidence
 
+### Student Traxxas settings and policy comments, 2026-09-29/30
+
+The working-tree Traxxas YAML was checked on Windows with Python 3.12 and
+PyYAML 6.0.2 against the matching DREAM parameter resolver. All 19 active
+settings (the original four plus 15 newly delegated settings) were admitted,
+retained their types and existing defaults, and resolved to the baseline when
+omitted. This was a source-configuration check, not an installed ROS test.
+
+The assistant subsequently checked exact clean policy commit
+`a6b7cbfef839adf140da43efe356b900514fee76` on the supplied Jetson Orin Nano,
+Ubuntu 24.04.5 LTS / aarch64, Python 3.12.3 and ROS Jazzy. The required installed
+fast gate passed: 64 pytest cases / 65 colcon checks, zero errors, failures or
+skips, and installed launch arguments checked. All four release-contract tests
+and source packaging passed. The installed Traxxas YAML was byte-identical to
+source; the matching DREAM resolver admitted all 19 settings, preserved their
+types/defaults in launch YAML and inherited the baseline for omitted values.
+
+The owner's comment edits were committed as `4ada8d0`, followed by a small
+comment correction/whitespace pass. An AST comparison confirmed unchanged
+executable behavior; the only docstring change is a grammar correction.
+Exact clean candidate `4c8b55480a2dcc84618982784d56d635df2aea39` was then
+verified again on that Jetson using exact clean `dream_interfaces`
+`5f50902ccee44e8370d6e2be85607b3054ffbf98` from `ci/dependencies.repos`:
+
+- `AI4R_INTERFACES_SOURCE=... bash tools/verify_fast.sh`: 64 pytest cases /
+  65 colcon checks passed, no errors, failures or skips; installed launch
+  arguments checked.
+- `python3 -B tests/test_release_contract.py -v`: all four tests passed.
+- `python3 -B tools/package_source.py --output ...`: source-package preview
+  passed in a fresh output directory. The first attempt correctly refused to
+  overwrite the previous run's existing `build/release` directory.
+
+Logs and the verification manifest are retained under
+`/tmp/student-traxxas-verify.NpwVqxx9/final` on the test host and attached to the
+implementation MR. Subsequent acceptance edits change documentation only.
+Tests used localhost domain 218 and synthetic peers; no physical driver or
+actuator ran. Deployment and physical vehicle checks remain **not run**.
+Install the matching DREAM delegation update before using the new active
+student YAML; older DREAM versions reject these newly admitted settings.
+
 ### Cartesian lidar observations, 2026-09-27
 
 The candidate based on `890857e` prepares body-frame Cartesian points for every
