@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## [0.3.0] - release preparation
+
+- Expose eight drive/steering output endpoints and final PWM bounds in the
+  student Traxxas YAML. Requires DREAM 0.8.0 and Traxxas firmware/interface 0.5.0;
+  restart the vehicle interface to apply changes. Default drive maximum is
+  1750 us. Policy algorithms and the consumed IDL are unchanged by this feature.
 
 - Add optional `lidar_mount.yaml` for student position and roll/pitch/yaw
   overrides through DREAM. An empty mapping inherits the current mounting pose;

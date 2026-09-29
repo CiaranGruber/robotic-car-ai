@@ -254,3 +254,9 @@ and reviewed MRs; safety, public-interface and CI-policy changes require recorde
 human review.
 See [contribution checks](CONTRIBUTING.md), [change history](CHANGELOG.md),
 [acceptance](docs/acceptance.md), and the [MIT license](LICENSE).
+
+Traxxas output mapping and final PWM bounds are documented beside the eight
+integer microsecond settings in `config/traxxas_vehicle_interface.yaml`. DREAM
+admits and validates them before vehicle-interface restart. They affect manual
+RC fallback too; restarting only the policy does not reload them. Matching
+firmware/interface 0.5.0 is required.
