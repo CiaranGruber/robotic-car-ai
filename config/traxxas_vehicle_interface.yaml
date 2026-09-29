@@ -8,6 +8,25 @@
 # for your car. Omit a setting to inherit DREAM's system/component baseline.
 /**/traxxas_vehicle_interface:
   ros__parameters:
+    # Firmware output mapping and final PWM bounds, integer MICROSECONDS.
+    # Each axis: 0 < pwm_min <= output_min < 1500 < output_max <= pwm_max <= 20000.
+    # Normalized full effort maps to the output endpoints, with neutral fixed at
+    # 1500 us. Final PWM bounds also constrain ESC calibration. These affect host
+    # control AND manual RC fallback; they are different from RC input calibration
+    # and the host's normalized autonomous steering limits below.
+    # MCU settings live in RAM: retained across USB disconnect, reset on Pico
+    # reboot. The vehicle interface reapplies and verifies them on every connection.
+    # Edit related values together, then restart traxxas_vehicle_interface.
+    # Values fitting the PWM period are not necessarily suitable for your actuator.
+    drive_output_min_us: 1100
+    drive_output_max_us: 1750
+    steer_output_min_us: 1000
+    steer_output_max_us: 2000
+    drive_pwm_min_us: 1000
+    drive_pwm_max_us: 2000
+    steer_pwm_min_us: 1000
+    steer_pwm_max_us: 2000
+
     # Maximum drive-command change per second, normalized units/s, positive
     # finite double. Default 50.0. Lower values soften ordinary effort changes;
     # this is not a desired speed or a limit on physical acceleration.
