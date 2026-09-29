@@ -822,6 +822,7 @@ def test_invalid_startup_settings_fail(make_node, mode, required, extra):
 
 
 def test_installed_configs_and_namespaced_loading(tmp_path):
+    assert yaml.safe_load((SHARE / "config/lidar_mount.yaml").read_text()) == {}
     for name in ("ai4r_policy", "traxxas_vehicle_interface", "oakd_cone_detector",
                  "bno08x_imu_interface", "aruco_detector"):
         document = yaml.safe_load((SHARE / "config" / f"{name}.yaml").read_text())

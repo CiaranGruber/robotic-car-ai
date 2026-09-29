@@ -681,7 +681,7 @@ class PolicyNode(Node):
         STUDENT STARTING POINT
 
         This function:
-        > Calculate one action from the most recent observations.
+        > Calculates one action from the most recent observations.
         > Is called repeatedly at the specified frequency (hence why it is important
           that you do NOT block this function with sleep or while loops or similar).
         > Is called only when this policy_node is in the publishing-policy state and
@@ -689,6 +689,8 @@ class PolicyNode(Node):
         > Does NOT need to publish ROS messages or manage the state machine itself
           (that is all taken care of in other functions).
         """
+
+        # CONE DETECTOR OBSERVATIONS: EXTRACT INTO LOCAL VARIABLES
         cone_batch = observations["cone_detections"]
         cone_data_available = cone_batch is not None
         cones = [] if cone_batch is None else cone_batch["detections"]
@@ -701,6 +703,8 @@ class PolicyNode(Node):
         z_coords = [cone[2] for cone in cones]
         cone_colour = [cone[3] for cone in cones]
         cone_confidence = [cone[4] for cone in cones]
+
+        # FIDUCIAL MARKER OBSERVATIONS: EXTRACT INTO LOCAL VARIABLES
         fiducial_data = observations["fiducial_detections"]
         fiducials_available = fiducial_data is not None
         fiducial_dictionary_name = (None if fiducial_data is None
@@ -708,7 +712,11 @@ class PolicyNode(Node):
         fiducial_source_frame_id = (None if fiducial_data is None
                                     else fiducial_data["source_frame_id"])
         fiducials = [] if fiducial_data is None else fiducial_data["detections"]
+
+        # WHEEL SPEED OBSERVATION: EXTRACT INTO LOCAL VARIABLE
         wheel_speed_in_meters_per_second = observations["wheel_speed"]
+
+        # 2D LIDAR SCAN OBSERVATIONS: EXTRACT INTO LOCAL VARIABLES
         lidar_scan = observations["lidar_scan"]
         lidar_scan_available = lidar_scan is not None
         lidar_ranges = [] if lidar_scan is None else lidar_scan["ranges"]
@@ -717,6 +725,8 @@ class PolicyNode(Node):
         lidar_cartesian_available = lidar_cartesian is not None
         lidar_points_xyz = [] if lidar_cartesian is None else lidar_cartesian["points_xyz"]
         lidar_scan_indices = [] if lidar_cartesian is None else lidar_cartesian["scan_indices"]
+
+        # IMU OBSERVATIONS: EXTRACT INTO LOCAL VARIABLES
         orientation_xyzw = observations["imu_orientation"]
         roll_angle_in_radians = pitch_angle_in_radians = heading_angle_in_radians = None
         if orientation_xyzw is not None:
@@ -729,9 +739,11 @@ class PolicyNode(Node):
         # ===============================
         # EXPLANATION OF THE OBSERVATIONS
         # ===============================
-        # OBSERVATIONS (all lengths/angles use metres/radians):
-        # - x_coords/y_coords/z_coords and cone_colour/confidence are parallel
-        #   lists.
+        # NOTE: All lengths use meters and all angles use radians
+        #
+        # CONE DETECTOR OBSERVATIONS:
+        # - LOCAL VARIABLE NAMES: x_coords/y_coords/z_coords and cone_colour/confidence
+        #   - These are all parallel lists.
         #   - Index i describes one cone.
         #   - In the normal base_link frame, +x is forwards, +y left, +z upwards
         #     from nominal ground directly below the vehicle CG.
@@ -744,94 +756,149 @@ class PolicyNode(Node):
         #   - If cone detections are configured to be optional for this policy_node
         #     and no fresh cone detection message is available, then num_cones is 0
         #     and cone_data_available is False.
-        # - cone_acquisition_to_publish_latency_s is the fixed time from camera
-        #   acquisition (end-of-exposure for OAK-D) to immediately before the
-        #   detector called publish(). Exposure duration is excluded: this is
-        #   not exposure-start-to-publication latency. It includes device/host
-        #   processing and queues, excludes downstream transport, and is None
-        #   when no fresh cone batch is available.
-        # - cone_measurement_age_s is how old the acquisition is NOW, including
-        #   transport and time spent waiting for this policy step. It uses the
-        #   same end-of-exposure reference for OAK-D. Use this for
-        #   measurement age; DO NOT add the publication latency again.
-        #   Age remains available for a stale batch, and is None before any batch.
-        #   Empty batches have timing too; zero cones does not mean zero latency.
+        # - LOCAL VARIABLE NAME: cone_acquisition_to_publish_latency_s
+        #   - This is the fixed time from camera acquisition (end-of-exposure for OAK-D)
+        #     to immediately before the detector called publish().
+        #   - Exposure duration is excluded: this is not exposure-start-to-publication
+        #     latency.
+        #   - It includes device/host processing and queues, excludes downstream transport,
+        #     and is None when no fresh cone batch is available.
+        # - LOCAL VARIABLE NAME: cone_measurement_age_s
+        #   - This is how old the acquisition is NOW, including transport and time spent
+        #     waiting for this policy step.
+        #   - It uses the same end-of-exposure reference for OAK-D.
+        #   - Use this for measurement age; DO NOT add the publication latency again.
+        #   - Age remains available for a stale batch, and is None before any batch.
+        #   - Empty batches have timing too; zero cones does not mean zero latency.
         #
-        # - Wheel speed is UNSIGNED.
-        #   - It does not tell you forward versus reverse.
-        #   - The vehicle's Traxxas node estimates wheel speed from sparse encoder
-        #     periods, so low speeds take longer to measure.
+        # WHEEL SPEED OBSERVATION
+        # - LOCAL VARIABLE NAME: wheel_speed_in_meters_per_second
+        #   - This is the wheel speed estimate based on the measurement of the
+        #     angular speed of the gearbox.
+        #   - The vehicle's Traxxas node performs the calculations to estimate wheel
+        #     speed from sparse encoder periods.
+        #   - Sparse encoder periods means that low speeds take longer to measure.
+        #   - Wheel speed is UNSIGNED, i.e., it does not tell you forward versus reverse.
         #   - The encoder_timeout_seconds for the vehicle's Traxxas node controls
-        #     when it concludes that no encoder ticks means wheel stopped.
-        #   - The sensor timeout in this policy_node instead detects missing
-        #     wheel speed telemetry.
+        #     when it concludes that no encoder ticks means "wheels are stopped".
+        #   - The sensor timeout here in this policy_node detects missing wheel speed
+        #     telemetry.
         #   - None is not a measured zero.
         #
-        # - fiducials is a list of marker dictionaries. Each dictionary has:
-        #   id (int), marker_size_m (float), corners (four canonical-order (u,v)
-        #   pixel pairs), pose_valid (bool), position_xyz and orientation_xyzw
-        #   in policy_frame_id (tuples, or None when pose_valid is false), and
-        #   reprojection_error_px (float; NaN means unavailable).
-        #   - fiducial_dictionary_name scopes every marker ID in this batch.
-        #   - fiducial_source_frame_id is the camera optical frame for corners;
-        #     corners remain source-image pixels after the poses are transformed.
+        # FIDUCIAL MARKER OBSERVATIONS
+        # - LOCAL VARIABLE NAME: fiducials
+        #   - This is a list of marker dictionaries. Each dictionary has:
+        #     - id (int)
+        #     - marker_size_m (float)
+        #     - corners (four canonical-order (u,v) pixel pairs)
+        #     - pose_valid (bool)
+        #     - position_xyz (tuples in policy_frame_id; or None when pose_valid is false)
+        #     - orientation_xyzw (tuples in policy_frame_id; or None when pose_valid is false)
+        #     - reprojection_error_px (float; NaN means unavailable).
+        # - LOCAL VARIABLE NAME: fiducial_dictionary_name
+        #   - This scopes every marker ID in this batch.
+        # - LOCAL VARIABLE NAME: fiducial_source_frame_id
+        #   - This is the camera optical frame for corners; corners remain source-image pixels
+        #     after the poses are transformed.
+        # - ADDITIONAL NOTES:
         #   - Repeated IDs remain separate records in their received order.
-        #   - An accepted empty batch gives fiducials == [] and
-        #     fiducials_available True. It is fresh data and can trigger a step;
-        #     marker absence has no automatic timeout or remembered pose.
+        #   - An accepted empty batch gives fiducials == [] and fiducials_available True.
+        #     It is fresh data and can trigger a step; marker absence has no automatic
+        #     timeout or remembered pose.
         #   - Optional missing/stale data gives fiducials_available False.
         #
-        # - lidar_ranges[i] is measured at angle_min + i * angle_increment in
-        #   lidar_scan['frame_id'] (the lidar's original frame).
+        # 2D LIDAR SCAN OBSERVATIONS
+        # - LOCAL VARIABLE NAME: lidar_scan_available
+        #   - This is False when the raw scan is missing/stale.
+        # - LOCAL VARIABLE NAME: lidar_ranges[i]
+        #   - This is the distance measured at angle_min + i * angle_increment.
+        #   - It is measured in the frame: lidar_scan['frame_id'] (which is the
+        #     lidar's original frame).
         #   - The raw scan and its origin are unchanged by the base_link
         #     ground-origin convention.
-        #   - The lidar data is NOT rotated, it is in the frame of the lidar
-        #     device.
-        #   - lidar_scan also contains angle_min/max/increment, time_increment,
-        #     scan_time, range_min/max, and intensities.
+        #   - The lidar data is NOT rotated, it is in the frame of the lidar device.
+        # - LOCAL VARIABLE NAME: lidar_intensities[i]
+        #   - When supplied, this is matched to the i-th entry in lidar_ranges.
+        #   - The list is empty if the lidar supplies no intensities; check before indexing.
+        #   - This is the intensity of the ray when received back at the detector.
+        #   - Intensity is device-specific; it is not a calibrated accuracy estimate.
+        # - LOCAL VARIABLE NAME: lidar_scan
+        #   - This is the dictionary with all details of the lidar scan.
+        #   - Most relevant is that it contains:
+        #     - angle_min / angle_max / angle_increment
+        #     - time_increment
+        #     - scan_time
+        #     - range_min / range_max
         #   - You should retain only finite rays between range_min and range_max
         #     when your algorithm needs to detect real hits.
         #   - Infinity can mean no return; NaN is not a zero-distance obstacle.
-        #   - lidar_scan_available is False when the raw scan is missing/stale.
-        # - lidar_points_xyz is a list of (x, y, z) tuples in metres in
-        #   policy_frame_id: normally body x forward, y left, z up.
+        # - LOCAL VARIABLE NAME: lidar_cartesian_available
+        #   - This is False when the conversion of the lidar scan ranges into
+        #     cartesian coordinates is missing/stale.
+        #   - Hence, this distinguishes unavailable conversion from a fresh scan
+        #     with no usable returns (True with an empty list).
+        # - LOCAL VARIABLE NAME: lidar_points_xyz
+        #   - This is a list of (x, y, z) tuples in metres in policy_frame_id,
+        #     which is normally body x forward, y left, z up.
         #   - Only finite returns within the scan's inclusive range limits are
         #     included. Every tuple is a usable point; there are no placeholders.
-        #   - lidar_scan_indices[j] is the original ray index for point j:
-        #     lidar_ranges[lidar_scan_indices[j]] is its original range.
-        #     The same index accesses intensities when the scan supplies them.
+        # - LOCAL VARIABLE NAME: lidar_scan_indices[j]
+        #   - This is matched to the length of lidar_points_xyz
+        #   - This is the original ray index for point j, hence the original range
+        #     can be extracted as: lidar_ranges[lidar_scan_indices[j]]
+        # - ADDITIONAL NOTES:
         #   - Both forms are prepared once per accepted scan, before a policy
         #     update. Conversion is always enabled, including for radial-only
         #     policies. Use either representation or both in your code below.
-        #   - lidar_cartesian_available distinguishes unavailable conversion
-        #     from a fresh scan with no usable returns (True with an empty list).
+        #   - Edit config/lidar_mount.yaml to change the mounting pose, then run
+        #     dream runtime restart rplidar_c1. This affects Cartesian points;
+        #     the raw scan stays in its original lidar frame.
         #   - Cartesian points always match the latest accepted raw scan. If
         #     its transform/conversion fails, raw data remains available and the
         #     old Cartesian result is discarded immediately.
         #   - Require lidar_scan and/or lidar_cartesian in required_sensors to
         #     stop driving when the data your policy uses is unavailable.
         #     Cartesian data expires at either representation's timeout.
-        #   - The scan stamp is the first ray's acquisition time. One mounting
-        #     transform is used for the whole scan; points have no per-ray motion
-        #     correction or IMU levelling. The scan's timing fields are retained.
+        #   - The scan stamp is the first ray's acquisition time.
+        #   - One mounting transform is used for the whole scan; points have no
+        #     per-ray motion correction or IMU levelling.
+        #   - The scan's timing fields are retained.
         #
-        # - IMU quaternion/roll/pitch/vectors are in the policy body frame after
-        #   the external mounting TF is applied.
+        # IMU OBSERVATIONS:
+        # - LOCAL VARIABLE NAME: orientation_xyzw
+        #   - This is the orientation quaternion as an (x, y, z, w) tuple, or None.
+        # - LOCAL VARIABLE NAMES: roll_angle_in_radians, pitch_angle_in_radians
+        #   - A +x roll is forwards-axis rotation (i.e., car body tilts to the right).
+        #   - A +y pitch is left-axis rotation (i.e., car nose dips down).
+        # - LOCAL VARIABLE NAME: heading_angle_in_radians
+        #   - This is the yaw of the car.
+        #   - This is a relative heading that is re-zeroed ONLY when entering policy state.
+        #   - It is wrapped to [-pi, pi].
+        # - LOCAL VARIABLE NAME: angular_velocity_rad_per_sec
+        #   - This is the 3-axis gyroscope measurement, i.e., angular velocity about
+        #     each axis.
+        # - LOCAL VARIABLE NAME: specific_force_m_per_sec_squared
+        #   - This is the 3-axis accelerometer measurement, i.e., linear acceleration
+        #     along each axis.
+        #   - Specific force means that it INCLUDES GRAVITY; hence it is NOT pure
+        #     driving acceleration.
+        # - ADDITIONAL NOTES:
+        #   - IMU quaternion/roll/pitch/vectors are in the policy body frame after
+        #     the external mounting TF is applied.
+        #   - Angles can drift.
         #   - Absolute orientation uses magnetic ENU (east/north/up).
-        #   - Relative heading is re-zeroed ONLY when entering policy state, and
-        #     wrapped to [-pi, pi]. Angles can drift.
-        #   - A +x roll is forwards-axis rotation.
-        #   - A +y pitch is left-axis rotation.
-        #   - Specific force INCLUDES GRAVITY; it is not pure driving acceleration.
-        #   - Partial messages are normal and each IMU field may independently be
-        #     None.
+        #   - Partial messages are normal and each IMU field may independently be None.
         #
-        # - sensor_age_s[name] is the age in seconds of the last accepted sample,
-        #   or None if none exists.
-        #   - sensor_stamp_ns holds its ROS stamp in ns (None for wheel speed).
+        # OTHER RELEVANT INFORMATION:
+        # - LOCAL VARIABLE NAME: sensor_age_s[name]
+        #   - This is the age in seconds of the last accepted sample of that "name"
+        #     sensor; or None if none exists.
+        # - LOCAL VARIABLE NAME: sensor_stamp_ns[name]
+        #   - This holds the respective ROS stamp in ns (None for wheel speed).
         #   - If an optional observations is expired, then its value is None.
         #
-        # - dt is ACTUAL monotonic seconds between policy steps.
+        # - LOCAL VARIABLE NAME: dt
+        #   - This is the ACTUAL monotonic seconds between policy steps.
         #   - It is 0.0 on the first step.
         #   - Hence, if you use dt in your policy code, then you need to have a
         #     guard in your code to avoid division by dt.
@@ -839,24 +906,37 @@ class PolicyNode(Node):
         #     sensor sample across several steps. In other words, a policy step is
         #     not necessarily a new measurement.
         #
-        # - policy_elapsed_s is seconds since entering policy state.
-        #   - The is_first_policy_step flag allows you reset an integrator (or similar)
-        #     once per run.
+        # - LOCAL VARIABLE NAME: policy_elapsed_s
+        #   - This is the time (in seconds) since entering policy state.
+        #
+        # - LOCAL VARIABLE NAME: is_first_policy_step
+        #   - This flag allows you reset an integrator (or similar) once per run.
 
         # ===============================
         # EXPLANATION OF THE ACTIONS
         # ===============================
         # ACTIONS are NORMALIZED values in [-1, 1]:
-        # - drive_action requests motor effort (ESC), NOT speed in m/s.
         #
-        # - steering_action is the calibrated steering interval; zero is centre.
+        # - LOCAL VARIABLE NAME: drive_action
+        #   - This requests motor effort (ESC), NOT speed in m/s.
         #
-        # - camera_pan_action is an independent servo target, NOT an angle in
-        #   radians. None means send no target and retain its current position.
-        #   It can move even while vehicle drive is disabled. Zero means centre.
+        # - LOCAL VARIABLE NAME: steering_action
+        #   - This requests steering position; zero is centre.
+        #   - This is NOT an angle in radians; it is a request normalized
+        #     over the configured steering interval, with steering trim applied.
+        #
+        # - LOCAL VARIABLE NAME: camera_pan_action
+        #   - This is the pan-servo target position.
+        #   - This is NOT an angle in radians; it is a request normalized
+        #     over the full pan-servo range available.
+        #   - None means send no target and retain its current position.
+        #   - It can move even while vehicle drive is disabled.
+        #   - Zero means centre.
         #
         # Values outside [-1,1] are clipped. NaN/infinity/programming errors stop
         # the policy. Invalid data never becomes a motor command.
+
+        # Initialize drive and steering to zero; None holds the camera pan position.
         drive_action = 0.0
         steering_action = 0.0
         camera_pan_action = None

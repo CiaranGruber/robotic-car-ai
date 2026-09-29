@@ -154,7 +154,7 @@ examples are beside the variables in the Python file.
 Five commented ROS parameter files are installed:
 
 - [ai4r_policy.yaml](config/ai4r_policy.yaml): triggers, required sensors and timing.
-- [traxxas_vehicle_interface.yaml](config/traxxas_vehicle_interface.yaml): vehicle tuning and commented calibration/identity references.
+- [traxxas_vehicle_interface.yaml](config/traxxas_vehicle_interface.yaml): editable steering limits/trim, timeouts, slew rates, RC calibration and wheel/encoder settings; commented identity and pan-joint references.
 - [oakd_cone_detector.yaml](config/oakd_cone_detector.yaml): perception and debug settings.
 - [bno08x_imu_interface.yaml](config/bno08x_imu_interface.yaml): selected IMU products and accuracy.
 - [aruco_detector.yaml](config/aruco_detector.yaml): dictionary, marker sizes and detection filtering.
@@ -182,6 +182,20 @@ nonnegative), `forward_from_cg_m` (finite and signed), and
 Fields may be omitted to inherit their defaults; a missing file also uses all
 defaults.
 
+The optional [lidar mount file](config/lidar_mount.yaml) likewise ships `{}` to
+inherit DREAM's baseline: scan origin 0.20 m forward of the CG, centred laterally,
+0.12 m above nominal ground, level with 180-degree yaw. It admits
+`forward_from_cg_m`, `left_from_cg_m`, `height_above_ground_m`, `roll_deg`,
+`pitch_deg` and `yaw_deg`. Distances are finite metres, height is nonnegative,
+and angles are finite degrees in [-180, 180]. Rotations are absolute,
+right-handed `Rz(yaw) * Ry(pitch) * Rx(roll)` from the lidar frame into
+`base_link`, not offsets added to the default. The file documents signs and
+measurement references. Apply edits using `dream runtime restart rplidar_c1`;
+policy restart alone does not reload the pose. Invalid settings leave the
+current lidar run intact. Cartesian points use the updated TF; raw scan ranges
+are unchanged. Install the matching DREAM lidar-mount support first; older
+DREAM versions ignore this optional file. No dynamic/IMU compensation is added.
+
 Policy settings are startup-only. DREAM reads the current source YAML under
 `~/ai4r_student_workspace/src/ai4r_policy/config/` on each new start or restart,
 so editing these files needs no student-workspace rebuild. Restart only the
@@ -194,9 +208,12 @@ malformed YAML, unknown keys, or invalid values therefore leave it running with
 its previous snapshot. An idempotent `dream runtime start oakd_cone_detector`
 does not restart or reload an already-running unit. Restarting policy alone does
 not reload a hardware unit. The standalone policy launch loads only its own ROS
-parameter file and never consumes `camera_mount.yaml`; DREAM admits component
-requests before passing them to independently launched units. Commented
-reference values do not override robot calibration. See the [runtime guide](https://gitlab.unimelb.edu.au/dream/dream_system/-/blob/feature/classroom-ros-environment/docs/ai4r-runtime.md)
+parameter file and never consumes `camera_mount.yaml` or `lidar_mount.yaml`; DREAM admits component
+requests before passing them to independently launched units. The active vehicle
+settings override DREAM's baselines; use measured calibration and geometry for
+your car. Omitted settings inherit the baseline. This requires DREAM's expanded
+Traxxas delegation; older versions reject the newly exposed settings. Commented
+reference values remain system-owned. See the [runtime guide](https://gitlab.unimelb.edu.au/dream/dream_system/-/blob/feature/classroom-ros-environment/docs/ai4r-runtime.md)
 for the complete source-YAML workflow.
 
 Direct-node equivalent for integrations that need one (Python ROS launch):
@@ -237,3 +254,9 @@ and reviewed MRs; safety, public-interface and CI-policy changes require recorde
 human review.
 See [contribution checks](CONTRIBUTING.md), [change history](CHANGELOG.md),
 [acceptance](docs/acceptance.md), and the [MIT license](LICENSE).
+
+Traxxas output mapping and final PWM bounds are documented beside the eight
+integer microsecond settings in `config/traxxas_vehicle_interface.yaml`. DREAM
+admits and validates them before vehicle-interface restart. They affect manual
+RC fallback too; restarting only the policy does not reload them. Matching
+firmware/interface 0.5.0 is required.
