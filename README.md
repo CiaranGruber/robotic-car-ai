@@ -154,7 +154,7 @@ examples are beside the variables in the Python file.
 Five commented ROS parameter files are installed:
 
 - [ai4r_policy.yaml](config/ai4r_policy.yaml): triggers, required sensors and timing.
-- [traxxas_vehicle_interface.yaml](config/traxxas_vehicle_interface.yaml): vehicle tuning and commented calibration/identity references.
+- [traxxas_vehicle_interface.yaml](config/traxxas_vehicle_interface.yaml): editable steering limits/trim, timeouts, slew rates, RC calibration and wheel/encoder settings; commented identity and pan-joint references.
 - [oakd_cone_detector.yaml](config/oakd_cone_detector.yaml): perception and debug settings.
 - [bno08x_imu_interface.yaml](config/bno08x_imu_interface.yaml): selected IMU products and accuracy.
 - [aruco_detector.yaml](config/aruco_detector.yaml): dictionary, marker sizes and detection filtering.
@@ -195,8 +195,11 @@ its previous snapshot. An idempotent `dream runtime start oakd_cone_detector`
 does not restart or reload an already-running unit. Restarting policy alone does
 not reload a hardware unit. The standalone policy launch loads only its own ROS
 parameter file and never consumes `camera_mount.yaml`; DREAM admits component
-requests before passing them to independently launched units. Commented
-reference values do not override robot calibration. See the [runtime guide](https://gitlab.unimelb.edu.au/dream/dream_system/-/blob/feature/classroom-ros-environment/docs/ai4r-runtime.md)
+requests before passing them to independently launched units. The active vehicle
+settings override DREAM's baselines; use measured calibration and geometry for
+your car. Omitted settings inherit the baseline. This requires DREAM's expanded
+Traxxas delegation; older versions reject the newly exposed settings. Commented
+reference values remain system-owned. See the [runtime guide](https://gitlab.unimelb.edu.au/dream/dream_system/-/blob/feature/classroom-ros-environment/docs/ai4r-runtime.md)
 for the complete source-YAML workflow.
 
 Direct-node equivalent for integrations that need one (Python ROS launch):

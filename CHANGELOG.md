@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Organize the student policy comments by observation and action, explaining
+  local variables, optional lidar intensities, IMU orientation and normalized
+  steering. Policy behavior is unchanged.
+
+- Expose steering limits/trim, command and telemetry timeouts, RC calibration,
+  and wheel/encoder geometry in the student Traxxas YAML. Requires the matching
+  DREAM delegation update; defaults are unchanged and edits require restarting
+  `traxxas_vehicle_interface`.
+
 ## [0.2.0] - 2026-09-28
 
 - Always prepare body-frame Cartesian lidar points alongside the original scan,
