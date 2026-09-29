@@ -27,6 +27,39 @@ cross-repository changes and final MR verification remains separate.
 
 ## Observed software evidence
 
+### Student lidar mounting configuration, 2026-09-30
+
+The uncommitted candidate on `feature/student-lidar-mount`, based on
+`d244b246984d0cc6d64876ffd9e506b610494da5`, was checked on the supplied Jetson
+Orin Nano (Ubuntu 24.04.5 LTS, aarch64, Python 3.12.3, ROS Jazzy), using exact
+clean `dream_interfaces` revision `5f50902ccee44e8370d6e2be85607b3054ffbf98`.
+`AI4R_INTERFACES_SOURCE=... bash tools/verify_fast.sh` passed all 64 pytest
+cases / 65 colcon checks, with no errors, failures or skips. Installed launch
+arguments were checked, including installation of the empty `lidar_mount.yaml`
+mapping. The node changes are comments only; executable behavior is unchanged.
+
+The normalized SHA-256 of `config/lidar_mount.yaml` was
+`2e4463e748064ef2a3e13916e285f1d88bb819123efa0f165ac4c3e745d7348f`;
+that of `scripts/policy_node.py` was
+`cd5b5a4fafc14afe09d410633edd98b45b1cc2f70f3e48219fde99541ecbcdee`.
+Logs and a source manifest are retained under
+`/tmp/student-lidar-verify.3P2Yuw3r` on the test host and in the local
+`.test-artifacts/student-lidar-mount` directory. Subsequent acceptance edits
+change documentation only. DREAM's matching acceptance record owns the
+configuration/restart contracts and live lidar/TF checks. The policy gate used
+synthetic peers in localhost domain 218; no policy-controlled vehicle test was
+performed. Deployment and physical mounting accuracy remain **not tested**.
+
+The implementation was subsequently committed as
+`ffe7d3d0233af745b0d8a19ac1a6210a893882d4`. A fresh live scan captured at
+2026-09-30 01:29:56 AEST was converted by calling that source's
+`PolicyNode._convert_lidar_scan` directly, producing 600 valid points from 720
+rays. The owner explicitly confirmed that the 180-degree plot matches the
+car's current physical surroundings, supporting the unchanged default yaw.
+DREAM's acceptance record retains the capture identity and operator evidence.
+This records the default orientation; metric calibration and MR diff review
+remain separate.
+
 ### Student Traxxas settings and policy comments, 2026-09-29/30
 
 The working-tree Traxxas YAML was checked on Windows with Python 3.12 and

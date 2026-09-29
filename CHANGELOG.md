@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add optional `lidar_mount.yaml` for student position and roll/pitch/yaw
+  overrides through DREAM. An empty mapping inherits the current mounting pose;
+  changes require restarting `rplidar_c1`. Policy behavior is unchanged.
+
 - Organize the student policy comments by observation and action, explaining
   local variables, optional lidar intensities, IMU orientation and normalized
   steering. Policy behavior is unchanged.
