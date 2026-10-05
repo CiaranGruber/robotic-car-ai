@@ -5,6 +5,8 @@
 .idea/
 .venv/
 .vscode/
+.github/
+wheels/
 build/
 install/
 log/

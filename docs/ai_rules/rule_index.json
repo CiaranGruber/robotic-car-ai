@@ -6,7 +6,7 @@
     },
     {
         "name": "0.01_basic_codebase_rules",
-        "description": "Basic codebase conventions for dependencies and where tests live.",
+        "description": "Basic conventions for dependencies, tests, and files not uploaded to the car.",
         "when_to_use": "always"
     },
     {

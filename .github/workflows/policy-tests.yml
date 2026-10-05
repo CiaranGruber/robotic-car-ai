@@ -21,7 +21,12 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        # PyPI packages from requirements.txt; custom packages from wheels/.
+        run: |
+          pip install -r requirements.txt
+          if compgen -G "wheels/*.whl" > /dev/null; then
+            pip install wheels/*.whl
+          fi
 
       - name: Run policy tests
         run: python -m pytest tests/policy/ -v
