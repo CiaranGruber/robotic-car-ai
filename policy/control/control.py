@@ -5,7 +5,7 @@ This file is responsible for receiving the car commands from the policy and conv
 actions
 """
 from policy.control.actions import Instruction
-from policy.input_output import CarActions, CarObservations
+from policy.input_output import CarActions, CarObservations, default_actions
 
 
 def determine_car_actions(observations: CarObservations, instructions: list[Instruction]) -> CarActions:
@@ -15,4 +15,4 @@ def determine_car_actions(observations: CarObservations, instructions: list[Inst
     :param instructions: The instructions chosen by the policy
     :return: The drive, steering and camera pan actions for the car to take
     """
-    pass
+    return default_actions()
