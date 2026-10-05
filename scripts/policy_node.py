@@ -64,6 +64,7 @@ from dream_interfaces.msg import (ConeDetection, ConeDetections, DriveAndSteer,
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from policy.action_policy.mpc import MpcConfig
+from policy.control.control import ControlConfig
 from policy.input_output import ConeColour, convert_observations, convert_actions
 from policy.policy_runner import MovementPolicy
 
@@ -209,13 +210,17 @@ class PolicyNode(Node):
         # YAML alone does not declare a parameter. A value such as 0.2 is a
         # floating-point number; 0 is an integer, which is a different ROS type.
 
-        # MPC settings: see mpc in ai4r_policy.yaml. MpcConfig in
-        # policy/action_policy/mpc.py holds their defaults and checks them.
-        mpc_defaults = asdict(MpcConfig())
-        for name, default in mpc_defaults.items():
-            self.declare_parameter(f"mpc.{name}", default, ParameterDescriptor(read_only=True))
-        self.movement_policy = MovementPolicy(MpcConfig(**{
-            name: self.get_parameter(f"mpc.{name}").value for name in mpc_defaults}))
+        # MPC and control settings: see mpc and control in ai4r_policy.yaml.
+        # MpcConfig (policy/action_policy/mpc.py) and ControlConfig
+        # (policy/control/control.py) hold their defaults and check them.
+        settings = {}
+        for prefix, config_type in (("mpc", MpcConfig), ("control", ControlConfig)):
+            defaults = asdict(config_type())
+            for name, default in defaults.items():
+                self.declare_parameter(f"{prefix}.{name}", default, ParameterDescriptor(read_only=True))
+            settings[prefix] = config_type(**{
+                name: self.get_parameter(f"{prefix}.{name}").value for name in defaults})
+        self.movement_policy = MovementPolicy(settings["mpc"], settings["control"])
 
         self.fsm_state = FSM_STATE_PUBLISHING_ZERO_ACTIONS
         self.state_reason = "Startup: waiting for an explicit policy request"
