@@ -420,7 +420,7 @@ def convert_observations(
                 LidarDetection(lidar["angle_min"] + i * lidar["angle_increment"], ld_range, intensity)
                 for i, (ld_range, intensity) in enumerate(zip(lidar["ranges"], intensities))
             ],
-            sensor_age=get_sensor_age("lidar"),
+            sensor_age=get_sensor_age("lidar_scan"),
             frame_id=lidar["frame_id"],
             angle_min=lidar["angle_min"],
             angle_max=lidar["angle_max"],

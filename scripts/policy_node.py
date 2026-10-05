@@ -1013,7 +1013,7 @@ class PolicyNode(Node):
             cone_colour=[colour_converter[colour] for colour in cone_colour],
             cone_confidence=cone_confidence,
             wheel_speed_in_meters_per_second=wheel_speed_in_meters_per_second,
-            lidar=lidar,
+            lidar=lidar_scan,
             roll_angle_in_radians=roll_angle_in_radians,
             pitch_angle_in_radians=pitch_angle_in_radians,
             heading_angle_in_radians=heading_angle_in_radians,
