@@ -7,8 +7,8 @@ governs repository workflow; preserve explicit user authority and Solo/Co-op
 preferences. Ordinary implementation requests authorize in-scope edits/checks.
 
 - Read rules in `./docs/ai_rules` and read all rules starting with 0.XX
-- Keep all policy code in scripts/policy_node.py and the policy/ module. The comments, four ROS parameter
-  files and optional camera_mount.yaml are the student documentation. Preserve
+- Keep all policy code in scripts/policy_node.py and the policy/ module. The comments, five ROS parameter
+  files and optional camera_mount.yaml/lidar_mount.yaml are the student documentation. Preserve
   the insertion markers.
 - Keep one selected trigger, explicit resume, per-field IMU validity and
   freshness, zero publication independent of sensor callbacks, and pan hold.
