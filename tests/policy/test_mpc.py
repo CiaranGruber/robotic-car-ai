@@ -1,6 +1,6 @@
 """Hardware-free checks of the MPC movement policy, without ROS.
 
-Run from the repository root with: python3 -m pytest tests/test_mpc.py
+Run from the repository root with: python3 -m pytest tests/policy/test_mpc.py
 """
 import dataclasses
 import math
@@ -9,7 +9,7 @@ import sys
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from policy.action_policy.mpc import MpcConfig  # noqa: E402
 from policy.action_policy.policy import MpcPolicy  # noqa: E402

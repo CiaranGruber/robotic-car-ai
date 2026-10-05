@@ -1,1 +1,4 @@
 dreamgym~=0.2.2
+numpy
+scipy
+pytest
