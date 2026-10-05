@@ -112,7 +112,8 @@
     # tuning in the Task A4 log-book.
     mpc:
       # Speed to drive at, m/s, positive double. The prediction assumes it.
-      target_speed_m_per_s: 1.0
+      # 0.5 for the first car runs; the shared default is 1.0.
+      target_speed_m_per_s: 0.5
       # Number of predicted steps: INTEGER >= 1. More steps cost more calculation
       # time (Task A6). Keep target_speed_m_per_s * step_s * horizon_steps within
       # the camera range (shared default 4 m); the default predicts 1.2 m ahead.
@@ -135,3 +136,28 @@
       # Lane width, metres, positive double (shared default 1.0). Used to find the
       # centre when only one cone row is visible.
       lane_width_m: 1.0
+
+    # TEMPORARY CONTROL SETTINGS (ControlConfig in policy/control/control.py,
+    # which checks them) until Car Control's conversion is ready. These are
+    # UNMEASURED starting guesses: check them with the wheels off the ground
+    # before driving. Drive is forwards only, and zero when wheel speed is
+    # missing, so add wheel_speed to required_sensors for car runs.
+    control:
+      # Front-to-rear axle distance, metres, positive double (approximate).
+      wheelbase_m: 0.335
+      # Front wheel angle at full steering (+-1), radians, in (0, pi/2). Default
+      # 45 degrees, likely larger than the real car. Keep tan(this) / wheelbase_m
+      # consistent with mpc.max_curvature_per_m.
+      max_steering_angle_rad: 0.785
+      # true if a positive steering action turns LEFT. UNVERIFIED: on a stand,
+      # put the car left of the lane centre; the wheels must turn RIGHT.
+      positive_steering_turns_left: true
+      # Speed controller (feedforward + PI on wheel speed), effort doubles >= 0.
+      # Feedforward effort per m/s of requested speed.
+      drive_effort_per_m_per_s: 0.1
+      # Effort per m/s of speed error.
+      speed_kp: 0.1
+      # Effort per metre of accumulated speed error.
+      speed_ki: 0.1
+      # Largest drive effort ever requested, double in (0, 1]. Keep it small.
+      max_drive_effort: 0.2
