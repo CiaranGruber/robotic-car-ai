@@ -5,7 +5,7 @@ pytest skips them unless run with --run-unseen. Pass thresholds are the same as 
 
 Signs: left of the lane centre and pointing left are positive. Cone index 0 is the pair on the start line.
 """
-from stage1_scenarios import Disturbances, Stage1Case
+from stage1_scenarios import Disturbances, Lane, Stage1Case
 from policy.input_output import ConeColour
 
 UNSEEN_CASES = (
@@ -15,6 +15,7 @@ UNSEEN_CASES = (
                0.1, 15.0, 1.0,
                Disturbances(missed_cones=((ConeColour.BLUE, 4), (ConeColour.BLUE, 5)),
                             wrong_colour_cones=((ConeColour.YELLOW, 8),)), seed=12),
-    Stage1Case("U3", "unseen", "0.1 m right, 0.8 m/s, noise, delay and a missed cone near the end", -0.1, 0.0, 0.8,
-               Disturbances(noise_m=0.02, delay_s=0.2, missed_cones=((ConeColour.YELLOW, 11),)), seed=13),
+    Stage1Case("U3", "unseen", "7 m x 0.9 m lane, 0.1 m right, 0.8 m/s, noise, delay and a missed cone near the end",
+               -0.1, 0.0, 0.8, Disturbances(noise_m=0.02, delay_s=0.2, missed_cones=((ConeColour.YELLOW, 11),)),
+               lane=Lane(length_m=7.0, width_m=0.9, cone_spacing_m=0.5), seed=13),
 )

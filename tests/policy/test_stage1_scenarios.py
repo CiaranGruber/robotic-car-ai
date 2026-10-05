@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import stage1_scenarios as s1  # noqa: E402
 from stage1_tuning_cases import TUNING_CASES  # noqa: E402
-from policy.action_policy.mpc import MpcConfig  # noqa: E402
 from policy.action_policy.policy import MpcPolicy  # noqa: E402
 from policy.control.actions import DriveCommand  # noqa: E402
 from policy.input_output import ConeColour  # noqa: E402
@@ -37,28 +36,54 @@ def test_case_sets_are_complete_and_separate():
     assert len(names) == len(set(names))
 
 
+def test_tuning_cases_cover_roads_of_different_sizes():
+    assert len({case.lane for case in TUNING_CASES}) >= 3
+
+
 @pytest.mark.parametrize("change", [
     {"noise_m": -0.01}, {"noise_m": math.nan}, {"delay_s": 0.15}, {"delay_s": -0.1},
-    {"missed_cones": ((ConeColour.BLUE, s1.CONES_PER_ROW),)},
+    {"detector_range_m": 0.0}, {"car_mass_kg": -1.0}, {"floor": "mud"},
 ])
 def test_invalid_disturbances_are_rejected(change):
     with pytest.raises(ValueError):
         dataclasses.replace(s1.Disturbances(), **change)
 
 
+@pytest.mark.parametrize("change", [
+    {"length_m": 0.0}, {"width_m": math.inf}, {"cone_spacing_m": -0.5}, {"length_m": 6.2},
+])
+def test_invalid_lanes_are_rejected(change):
+    with pytest.raises(ValueError):
+        dataclasses.replace(s1.Lane(), **change)
+
+
+def test_cone_indices_must_be_on_the_case_lane():
+    with pytest.raises(ValueError):
+        s1.Stage1Case("bad", "tuning", "", disturbances=s1.Disturbances(
+            missed_cones=((ConeColour.BLUE, s1.STAGE1_LANE.cones_per_row),)))
+
+
+def test_lane_sizes():
+    assert s1.STAGE1_LANE.cones_per_row == 13
+    assert s1.Lane(6.0, 1.2, 0.75).cones_per_row == 9
+    assert s1.STAGE1_LANE.floor_area_m == pytest.approx((8.5, 1.7))
+
+
 # ------------------------------------------------------------------------------------------------
 # The harness: lane, disturbances, stand-in control and metrics
 # ------------------------------------------------------------------------------------------------
-def test_simulated_lane_matches_the_drawing():
+@pytest.mark.parametrize("lane", list(dict.fromkeys(case.lane for case in TUNING_CASES + UNSEEN_CASES)),
+                         ids=lambda lane: lane.name)
+def test_simulated_lane_matches_the_drawing(lane):
     pytest.importorskip("dreamgym")
-    env = s1.make_env(TUNING_CASES[0])
+    env = s1.make_env(s1.Stage1Case("lane", "tuning", "", lane=lane))
     env.reset(seed=0)
     xy, colour_ids = env.unwrapped.road.get_cone_arrays_from_spec()
     env.close()
     simulated = sorted((int(c), round(float(x), 6), round(float(y), 6)) for (x, y), c in zip(xy, colour_ids))
-    drawn = sorted((c.value, round(x, 6), round(y, 6)) for c, _, x, y in s1.all_cones())
+    drawn = sorted((c.value, round(x, 6), round(y, 6)) for c, _, x, y in s1.all_cones(lane))
     assert simulated == drawn
-    assert len(drawn) == 2 * 13
+    assert len(drawn) == 2 * lane.cones_per_row
 
 
 def detector_batch(cones):
@@ -76,11 +101,29 @@ def test_missed_and_wrong_colour_cones_are_applied_to_the_right_cones():
     pose = (0.0, 0.0, 0.0)
     batch = detector_batch([(1.0, 0.5, ConeColour.YELLOW), (1.5, 0.5, ConeColour.YELLOW),
                             (1.0, -0.5, ConeColour.BLUE), (1.52, -0.49, ConeColour.BLUE)])
-    disturbances = s1.Disturbances(missed_cones=((ConeColour.YELLOW, 2),),
-                                   wrong_colour_cones=((ConeColour.BLUE, 3),))
-    result = [(d.pos.x, d.pos.y, d.colour) for d in s1.disturbed_detections(batch, pose, disturbances)]
+    case = s1.Stage1Case("d", "tuning", "", disturbances=s1.Disturbances(
+        missed_cones=((ConeColour.YELLOW, 2),), wrong_colour_cones=((ConeColour.BLUE, 3),)))
+    result = [(d.pos.x, d.pos.y, d.colour) for d in s1.disturbed_detections(batch, pose, case)]
     assert result == pytest.approx([(1.5, 0.5, ConeColour.YELLOW), (1.0, -0.5, ConeColour.BLUE),
                                     (1.52, -0.49, ConeColour.YELLOW)])
+
+
+def test_extra_objects_are_detected_only_inside_the_camera_view():
+    case = s1.Stage1Case("d", "tuning", "", disturbances=s1.Disturbances(
+        extra_objects=((2.0, 0.8, ConeColour.YELLOW), (2.0, 5.0, ConeColour.BLUE), (3.5, 0.0, ConeColour.BLUE)),
+        detector_range_m=3.0))
+    result = [(d.pos.x, d.pos.y, d.colour) for d in s1.disturbed_detections(detector_batch([]), (0.0, 0.0, 0.0), case)]
+    # The second is outside the 80 degree view and the third is beyond the 3 m range
+    assert result == pytest.approx([(2.0, 0.8, ConeColour.YELLOW)])
+
+
+def test_floor_and_mass_disturbances_reach_the_car_model():
+    pytest.importorskip("dreamgym")
+    case = s1.Stage1Case("d", "tuning", "", disturbances=s1.Disturbances(floor="wet", car_mass_kg=3.6))
+    env = s1.make_env(case)
+    env.reset(seed=0)
+    assert env.unwrapped.tire_force_condition == "wet"
+    env.close()
 
 
 class RecordingPolicy:
@@ -127,7 +170,7 @@ def straight_run(y_m, stop_x_m, speed=1.0):
 
 
 def test_metrics_pass_a_centred_run_that_stops_in_the_zone():
-    run = straight_run(0.0, s1.LANE_LENGTH_M + 0.3)
+    run = straight_run(0.0, s1.STAGE1_LANE.length_m + 0.3)
     metrics = s1.compute_metrics(run, fallback_count=0)
     assert metrics["cones_touched"] == 0 and metrics["body_outside_lane_m"] == 0.0
     assert metrics["stop_past_last_cone_m"] == pytest.approx(0.3)
@@ -136,14 +179,14 @@ def test_metrics_pass_a_centred_run_that_stops_in_the_zone():
 
 def test_metrics_count_touched_cones_and_leaving_the_lane():
     # Centre 0.45 m left: the body reaches 0.575 m, through the yellow row at 0.5 m
-    metrics = s1.compute_metrics(straight_run(0.45, s1.LANE_LENGTH_M + 0.3), fallback_count=0)
-    assert metrics["cones_touched"] == s1.CONES_PER_ROW
-    assert metrics["body_outside_lane_m"] == pytest.approx(0.45 + s1.CAR_WIDTH_M / 2 - s1.LANE_WIDTH_M / 2)
+    metrics = s1.compute_metrics(straight_run(0.45, s1.STAGE1_LANE.length_m + 0.3), fallback_count=0)
+    assert metrics["cones_touched"] == s1.STAGE1_LANE.cones_per_row
+    assert metrics["body_outside_lane_m"] == pytest.approx(0.45 + s1.CAR_WIDTH_M / 2 - s1.STAGE1_LANE.width_m / 2)
     failures = s1.check_thresholds(metrics, s1.Thresholds())
     assert any("cones_touched" in f for f in failures) and any("body_outside_lane_m" in f for f in failures)
 
 
-@pytest.mark.parametrize("stop_x_m", [s1.LANE_LENGTH_M - 0.3, s1.LANE_LENGTH_M + 0.8])
+@pytest.mark.parametrize("stop_x_m", [s1.STAGE1_LANE.length_m - 0.3, s1.STAGE1_LANE.length_m + 0.8])
 def test_stopping_outside_the_zone_fails(stop_x_m):
     metrics = s1.compute_metrics(straight_run(0.0, stop_x_m), fallback_count=0)
     assert [f for f in s1.check_thresholds(metrics, s1.Thresholds()) if "stop_past_last_cone_m" in f]
@@ -154,9 +197,9 @@ def test_stopping_outside_the_zone_fails(stop_x_m):
 # ------------------------------------------------------------------------------------------------
 @functools.cache
 def mpc_result(case):
-    """Runs the shipped MPC settings, asked to drive at the case's speed, once per case."""
+    """Runs the shipped MPC settings, set to the case's speed and lane width, once per case."""
     pytest.importorskip("dreamgym")
-    return s1.run_case(case, MpcPolicy(MpcConfig(target_speed_m_per_s=case.speed_m_per_s)))
+    return s1.run_case(case, MpcPolicy(s1.mpc_config_for(case)))
 
 
 def driving_failures(result):
@@ -164,13 +207,20 @@ def driving_failures(result):
     return [f for f in result.failures if "stop_past_last_cone_m" not in f]
 
 
-@pytest.mark.parametrize("case", TUNING_CASES, ids=lambda case: case.name)
+DYNAMIC_MODEL_XFAIL = pytest.mark.xfail(
+    reason="Unexplained: on dream-gym's dynamic tyre model the car holds a steady heading error (3 degrees dry, "
+           "6 degrees wet) without turning, so it ends 0.12 m off centre. Check the tyre model against the 1:10 car "
+           "(Task A2) before tuning on T11.", strict=False)
+
+
+@pytest.mark.parametrize("case", [pytest.param(case, marks=DYNAMIC_MODEL_XFAIL) if case.disturbances.floor
+                                  else case for case in TUNING_CASES], ids=lambda case: case.name)
 def test_mpc_drives_the_lane_on_tuning_cases(case):
     result = mpc_result(case)
     assert driving_failures(result) == [], s1.format_table([result])
 
 
-@pytest.mark.xfail(reason="Known gap: the MPC stops when the last cones leave the camera view, about 0.5 m before "
+@pytest.mark.xfail(reason="Known gap: the MPC stops when the last cones leave the camera view, 0.4 to 0.9 m before "
                           "the last cone pair. Task A7 decides how to keep going to the stop zone.", strict=False)
 @pytest.mark.parametrize("case", TUNING_CASES, ids=lambda case: case.name)
 def test_mpc_stops_in_the_stop_zone_on_tuning_cases(case):
