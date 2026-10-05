@@ -3,9 +3,14 @@ lanes.py
 
 This file holds the related types for the lane detection module
 """
-from dataclasses import dataclass
+from __future__ import annotations
 
-from dreamgym.envs import Road
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Only imported for type checking, because dreamgym is not installed on the car
+    from dreamgym.envs import Road
 
 
 @dataclass

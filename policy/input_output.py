@@ -2,8 +2,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Iterable
 
-from scripts.policy_node import Observation
-
 
 @dataclass(frozen=True)
 class Position:

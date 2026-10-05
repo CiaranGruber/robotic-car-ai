@@ -43,7 +43,7 @@ The nominal operator sequence for running this policy on the actual car is:
 """
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import math
 from numbers import Real
 import time
@@ -62,8 +62,9 @@ from std_msgs.msg import Float32, Int8, String, UInt16
 from dream_interfaces.msg import ConeDetection, ConeDetections, DriveAndSteer
 from tf2_ros import Buffer, TransformException, TransformListener
 
+from policy.action_policy.mpc import MpcConfig
 from policy.input_output import ConeColour, convert_observations, convert_actions
-from policy.policy_runner import run_movement_policy
+from policy.policy_runner import MovementPolicy
 
 # These values and the request/status topics match the previous AI4R policy.
 FSM_STATE_NOT_PUBLISHING_ACTIONS = 1
@@ -188,6 +189,14 @@ class PolicyNode(Node):
         # self.speed_kp = self.get_parameter('speed_kp').value
         # YAML alone does not declare a parameter. A value such as 0.2 is a
         # floating-point number; 0 is an integer, which is a different ROS type.
+
+        # MPC settings: see mpc in ai4r_policy.yaml. MpcConfig in
+        # policy/action_policy/mpc.py holds their defaults and checks them.
+        mpc_defaults = asdict(MpcConfig())
+        for name, default in mpc_defaults.items():
+            self.declare_parameter(f"mpc.{name}", default, ParameterDescriptor(read_only=True))
+        self.movement_policy = MovementPolicy(MpcConfig(**{
+            name: self.get_parameter(f"mpc.{name}").value for name in mpc_defaults}))
 
         self.fsm_state = FSM_STATE_PUBLISHING_ZERO_ACTIONS
         self.state_reason = "Startup: waiting for an explicit policy request"
@@ -676,7 +685,7 @@ class PolicyNode(Node):
             policy_elapsed_s=policy_elapsed_s,
             is_first_policy_step=is_first_policy_step,
         )
-        actions = run_movement_policy(observations)
+        actions = self.movement_policy.step(observations)
         drive_action, steering_action, camera_pan_action, debug1, debug2 = convert_actions(actions)
 
         # =====================================
