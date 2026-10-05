@@ -105,3 +105,33 @@
     # speed_kp: 0.2
     # Explain its units/range here. A YAML entry alone does not declare a ROS
     # parameter. Use 0.2/0.0 for doubles; integer 0 has a different ROS type.
+
+    # MPC SETTINGS (MpcConfig in policy/action_policy/mpc.py, which checks them;
+    # invalid values stop the node from starting). Starting values follow the
+    # shared defaults in docs/movement-policy-tasks.md where one exists; record
+    # tuning in the Task A4 log-book.
+    mpc:
+      # Speed to drive at, m/s, positive double. The prediction assumes it.
+      target_speed_m_per_s: 1.0
+      # Number of predicted steps: INTEGER >= 1. More steps cost more calculation
+      # time (Task A6). Keep target_speed_m_per_s * step_s * horizon_steps within
+      # the camera range (shared default 4 m); the default predicts 1.2 m ahead.
+      horizon_steps: 12
+      # Duration of one predicted step, seconds, positive double.
+      step_s: 0.1
+      # Largest curvature (1 / turning radius) in either direction, 1/m, positive
+      # double. Default tan(45 deg) / 0.335 m approximate wheelbase, likely larger
+      # than the real car; replace it with Car Control's measured value.
+      max_curvature_per_m: 3.0
+      # Cost weights, finite doubles; only their ratios matter.
+      # Distance from the lane centre, per m^2 at each predicted step, >= 0.
+      lateral_error_weight: 10.0
+      # Heading error relative to the lane, per rad^2 at each predicted step, >= 0.
+      heading_error_weight: 1.0
+      # Curvature beyond the lane's own curvature, per (1/m)^2, > 0.
+      curvature_weight: 0.1
+      # Curvature change between steps, per (1/m)^2, >= 0. Larger is smoother.
+      curvature_change_weight: 1.0
+      # Lane width, metres, positive double (shared default 1.0). Used to find the
+      # centre when only one cone row is visible.
+      lane_width_m: 1.0
