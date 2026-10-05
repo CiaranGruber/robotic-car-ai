@@ -5,6 +5,11 @@
         "when_to_use": "always"
     },
     {
+        "name": "0.01_basic_codebase_rules",
+        "description": "Basic conventions for dependencies, tests, and files not uploaded to the car.",
+        "when_to_use": "always"
+    },
+    {
         "name": "1.00_creating_rules",
         "description": "Formatting, numbering and indexing rules, and creating or changing them.",
         "when_to_use": "when_applicable"
