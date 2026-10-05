@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Iterable
@@ -46,13 +48,13 @@ class SensorAge(float):
     A missing age (no accepted sample exists) is stored as 0.0, so 0.0 alone does not prove that
     a sample is fresh.
     """
-    stamp_ns: float | None
+    stamp_ns: int | None
     """ROS stamp of the sample in nanoseconds.
 
     None for wheel speed, which has no header, and when no accepted sample exists.
     """
 
-    def __new__(cls, age_s: float | None, stamp_ns: float | None):
+    def __new__(cls, age_s: float | None, stamp_ns: int | None):
         """
         :param age_s: Age in seconds of the sensor's last accepted sample, or None if none exists.
         :param stamp_ns: ROS stamp of that sample in nanoseconds, or None if it has no stamp.
@@ -81,6 +83,143 @@ class ConeDetection:
     """Classification confidence, from 0.0 to 1.0."""
 
 
+class Detections[T](list[T]):
+    """A list of detections from one sensor message, with that message's sensor age attached.
+
+    It behaves as a normal list of detections.
+    """
+    __sensor_age: SensorAge
+
+    def __init__(self, detections: Iterable[T], sensor_age: SensorAge):
+        """
+        :param detections: The detections from one sensor message.
+        :param sensor_age: Age of that sensor message.
+        """
+        super().__init__(detections)
+        self.__sensor_age = sensor_age
+
+    @property
+    def sensor_age(self) -> SensorAge:
+        """
+        :return: Age of the sensor message these detections came from.
+        """
+        return self.__sensor_age
+
+
+class ConeBatch(Detections[ConeDetection]):
+    """Cone detections from one accepted batch, with measured publication latency.
+
+    A valid empty frame is an empty list with cone data still available. It is None on
+    CarObservations only when cone detections are optional and no fresh batch exists.
+    """
+    __acquisition_to_publish_latency_s: float
+
+    def __init__(
+        self,
+        detections: Iterable[ConeDetection],
+        sensor_age: SensorAge,
+        acquisition_to_publish_latency_s: float,
+    ):
+        """
+        :param detections: The cones from one detection batch.
+        :param sensor_age: Age of that batch, including transport and time spent waiting for this
+            policy step. It uses the same end-of-exposure reference for OAK-D as the latency.
+        :param acquisition_to_publish_latency_s: Fixed time from camera acquisition (end-of-exposure
+            for OAK-D) to immediately before the detector called publish(). Exposure duration is
+            excluded. Do not add this to sensor_age.
+        """
+        super().__init__(detections, sensor_age)
+        self.__acquisition_to_publish_latency_s = acquisition_to_publish_latency_s
+
+    @property
+    def acquisition_to_publish_latency_s(self) -> float:
+        """
+        :return: Acquisition-to-publication latency in seconds for this batch.
+        """
+        return self.__acquisition_to_publish_latency_s
+
+
+@dataclass(frozen=True)
+class ImagePoint:
+    """A pixel location in a camera image."""
+    u: float
+    """Horizontal pixel coordinate."""
+    v: float
+    """Vertical pixel coordinate."""
+
+
+@dataclass(frozen=True)
+class Quaternion:
+    """A unit quaternion orientation in (x, y, z, w) order.
+
+    This matches the ROS quaternion convention used by policy_node (identity is 0, 0, 0, 1).
+    """
+    x: float
+    """X component of the quaternion."""
+    y: float
+    """Y component of the quaternion."""
+    z: float
+    """Z component of the quaternion."""
+    w: float
+    """W (scalar) component of the quaternion."""
+
+
+@dataclass(frozen=True)
+class FiducialPose:
+    """A fiducial marker pose in policy_frame_id.
+
+    policy_node only supplies this when the detector's pose solve succeeded. A valid pose is a
+    successful geometric solve, not proof that the marker is real or safe to drive toward. Position
+    and orientation are transformed into policy_frame_id at image acquisition time.
+    """
+    position: Position
+    """Marker position in metres in policy_frame_id (normally base_link)."""
+    orientation: Quaternion
+    """Marker orientation in policy_frame_id."""
+
+
+@dataclass(frozen=True)
+class FiducialDetection:
+    """One ArUco / fiducial marker from an accepted detection batch.
+
+    Repeated IDs remain separate records in their received order.
+    """
+    id: int
+    """Marker ID scoped by the batch dictionary name."""
+    marker_size_m: float
+    """Physical marker side length in metres."""
+    corners: tuple[ImagePoint, ImagePoint, ImagePoint, ImagePoint]
+    """Four canonical-order corners as source-image pixels.
+
+    Corners remain source-image pixels after poses are transformed. The batch's source_frame_id is
+    the camera optical frame these pixels belong to.
+    
+    TODO: The node documents the order only as canonical; it does not name the roles of each index. The actual order
+          should be found out and this datatype can be turned into a better-structured dataclass instead (e.g. with top-right, etc) 
+    """
+    pose: FiducialPose | None
+    """Marker pose in policy_frame_id, or None when the detector did not supply a usable pose."""
+    reprojection_error_px: float
+    """Reprojection error in pixels. NaN means unavailable."""
+
+
+@dataclass(frozen=True)
+class FiducialBatch:
+    """One fiducial-detection batch, with dictionary/source-frame metadata.
+
+    An accepted empty batch has detections == [] and is still fresh data. Marker absence has no
+    automatic timeout or remembered pose.
+    """
+    detections: list[FiducialDetection]
+    """Marker records in received order."""
+    sensor_age: SensorAge
+    """Age of the fiducial batch."""
+    dictionary_name: str
+    """ArUco dictionary name that scopes every marker ID in this batch."""
+    source_frame_id: str
+    """Camera optical frame for the corners."""
+
+
 @dataclass(frozen=True)
 class LidarDetection:
     """One ray from a lidar scan.
@@ -102,6 +241,68 @@ class LidarDetection:
 
     None when the scan has no intensities, which is valid for a lidar scan.
     """
+
+
+@dataclass(frozen=True)
+class LidarScan:
+    """One lidar scan, with its rays in scan order and the scan's details.
+
+    policy_node checks each scan before accepting it: it has at least one ray, a valid frame,
+    finite details, a positive angle_increment, range_max greater than range_min, and either no
+    intensities or one per ray. The scan stamp is the first ray's acquisition time.
+    """
+    detections: list[LidarDetection]
+    """The rays of the scan in scan order; ray i is at angle_min + i * angle_increment."""
+    sensor_age: SensorAge
+    """Age of the lidar scan."""
+    frame_id: str
+    """The lidar's own frame, which the rays are measured in."""
+    angle_min: float
+    """Angle of the first ray in radians."""
+    angle_max: float
+    """Angle of the last ray in radians."""
+    angle_increment: float
+    """Angle between consecutive rays in radians."""
+    time_increment: float
+    """Time between consecutive rays in seconds."""
+    scan_time: float
+    """Time between scans in seconds."""
+    range_min: float
+    """Minimum valid range in metres. Shorter ranges are not real hits."""
+    range_max: float
+    """Maximum valid range in metres. Longer ranges are not real hits."""
+
+
+@dataclass(frozen=True)
+class LidarCartesianPoint:
+    """One usable lidar return converted into policy_frame_id.
+
+    Only finite returns within the scan's inclusive range limits are included. There are no
+    placeholders. One mounting transform is used for the whole scan; points have no per-ray motion
+    correction or IMU levelling.
+    """
+    pos: Position
+    """Point in metres in policy_frame_id (normally body x forward, y left, z up)."""
+    scan_index: int
+    """Original ray index in the matching LidarScan, so the raw range is
+    lidar_scan.detections[scan_index].ld_range.
+    """
+
+
+@dataclass(frozen=True)
+class LidarCartesian:
+    """Body-frame Cartesian lidar points prepared alongside the raw scan.
+
+    Cartesian points always match the latest accepted raw scan. If transform/conversion fails, the
+    raw scan remains available and the previous Cartesian result is discarded. A fresh empty point
+    list is valid. This observation expires at either representation's timeout.
+    """
+    points: list[LidarCartesianPoint]
+    """Usable points in policy_frame_id, with their original scan indices."""
+    sensor_age: SensorAge
+    """Age of the Cartesian conversion sample."""
+    frame_id: str
+    """Frame of the points; normally policy_frame_id (base_link)."""
 
 
 @dataclass(frozen=True)
@@ -223,75 +424,34 @@ class PolicyState:
     """
 
 
-class Detections[T](list[T]):
-    """A list of detections from one sensor message, with that message's sensor age attached.
-
-    It behaves as a normal list of detections.
-    """
-    __sensor_age: SensorAge
-
-    def __init__(self, detections: Iterable[T], sensor_age: SensorAge):
-        """
-        :param detections: The detections from one sensor message.
-        :param sensor_age: Age of that sensor message.
-        """
-        super().__init__(detections)
-        self.__sensor_age = sensor_age
-
-    @property
-    def sensor_age(self):
-        """
-        :return: Age of the sensor message these detections came from.
-        """
-        return self.__sensor_age
-
-
-@dataclass(frozen=True)
-class LidarScan:
-    """One lidar scan, with its rays in scan order and the scan's details.
-
-    policy_node checks each scan before accepting it: it has at least one ray, a valid frame,
-    finite details, a positive angle_increment, range_max greater than range_min, and either no
-    intensities or one per ray.
-    """
-    detections: list[LidarDetection]
-    """The rays of the scan in scan order; ray i is at angle_min + i * angle_increment."""
-    sensor_age: SensorAge
-    """Age of the lidar scan."""
-    frame_id: str
-    """The lidar's own frame, which the rays are measured in."""
-    angle_min: float
-    """Angle of the first ray in radians."""
-    angle_max: float
-    """Angle of the last ray in radians."""
-    angle_increment: float
-    """Angle between consecutive rays in radians."""
-    time_increment: float
-    """Time between consecutive rays in seconds."""
-    scan_time: float
-    """Time between scans in seconds."""
-    range_min: float
-    """Minimum valid range in metres. Shorter ranges are not real hits."""
-    range_max: float
-    """Maximum valid range in metres. Longer ranges are not real hits."""
-
-
 @dataclass(frozen=True)
 class CarObservations:
     """All observations available to the policy for one policy step.
 
     All lengths and angles use metres and radians.
     """
-    cones: Detections[ConeDetection] | None
+    cones: ConeBatch | None
     """Cones from the most recent fresh detection batch, or None.
 
     It is None when cone detections are optional for policy_node and no fresh batch is available.
     A valid empty frame gives an empty list rather than None, so always handle having no cones.
     """
-    lidar_obs: LidarScan | None
-    """The most recent fresh lidar scan, or None.
+    fiducials: FiducialBatch | None
+    """Fiducial markers from the most recent fresh batch, or None.
 
-    It is None when lidar is optional for policy_node and no fresh scan is available.
+    It is None when fiducials are optional for policy_node and no fresh batch is available.
+    A valid empty batch gives detections == [] rather than None.
+    """
+    lidar_scan: LidarScan | None
+    """The most recent fresh raw lidar scan, or None.
+
+    It is None when lidar_scan is optional for policy_node and no fresh scan is available.
+    """
+    lidar_cartesian: LidarCartesian | None
+    """Body-frame Cartesian points from the matching scan, or None.
+
+    It is None when conversion is unavailable/stale, including when the raw scan is present but
+    its transform failed. A fresh empty point list is valid and is not None.
     """
     car: ObservedCarState
     """The measured state of the car."""
@@ -347,8 +507,14 @@ def convert_observations(
     z_coords: list[float],
     cone_colour: list[ConeColour],
     cone_confidence: list[float],
+    cone_acquisition_to_publish_latency_s: float | None,
+    fiducials_available: bool,
+    fiducial_dictionary_name: str | None,
+    fiducial_source_frame_id: str | None,
+    fiducials: list[dict],
     wheel_speed_in_meters_per_second: float | None,
-    lidar: dict | None,
+    lidar_scan: dict | None,
+    lidar_cartesian: dict | None,
     roll_angle_in_radians: float | None,
     pitch_angle_in_radians: float | None,
     heading_angle_in_radians: float | None,
@@ -375,10 +541,21 @@ def convert_observations(
         NOT the cones' total heights.
     :param cone_colour: Cone colours, already converted from the message ids to ConeColour.
     :param cone_confidence: Cone classification confidences, from 0.0 to 1.0.
+    :param cone_acquisition_to_publish_latency_s: Acquisition-to-publication latency in seconds, or
+        None when no fresh cone batch is available.
+    :param fiducials_available: True when a fresh fiducial batch exists. A valid empty batch gives
+        True with an empty fiducials list.
+    :param fiducial_dictionary_name: ArUco dictionary name for the batch, or None when unavailable.
+    :param fiducial_source_frame_id: Camera optical frame for corners, or None when unavailable.
+    :param fiducials: Marker dictionaries from policy_node. Each has id, marker_size_m, corners,
+        pose_valid, position_xyz, orientation_xyzw and reprojection_error_px. When pose_valid is
+        false, position_xyz and orientation_xyzw are None and become pose=None on FiducialDetection.
     :param wheel_speed_in_meters_per_second: Unsigned wheel speed in m/s, or None.
-    :param lidar: Full lidar scan dict, or None when unavailable. It contains ranges, intensities
-        (empty or one per range), frame_id, angle_min/max/increment, time_increment, scan_time and
-        range_min/max.
+    :param lidar_scan: Full raw lidar scan dict, or None when unavailable. It contains ranges,
+        intensities (empty or one per range), frame_id, angle_min/max/increment, time_increment,
+        scan_time and range_min/max.
+    :param lidar_cartesian: Cartesian conversion dict, or None when unavailable. It contains
+        points_xyz, scan_indices and frame_id.
     :param roll_angle_in_radians: Roll about +x, or None.
     :param pitch_angle_in_radians: Pitch about +y, or None.
     :param heading_angle_in_radians: Heading relative to policy entry, wrapped to [-pi, pi], or
@@ -403,33 +580,91 @@ def convert_observations(
         return SensorAge(sensor_age_s[sensor], sensor_stamp_ns[sensor])
 
     # Set up cone detections
-    cones = Detections([
-        ConeDetection(
-            pos=Position(x_coords[i], y_coords[i], z_coords[i]),
-            colour=cone_colour[i],
-            confidence=cone_confidence[i]
-        )
-        for i in range(num_cones)
-    ], sensor_age=get_sensor_age("cone_detections"))
-    # Set up lidar detections
-    lidar_detections = None
-    if lidar is not None:
-        intensities = lidar["intensities"] or [None] * len(lidar["ranges"])
-        lidar_detections = LidarScan(
-            detections=[
-                LidarDetection(lidar["angle_min"] + i * lidar["angle_increment"], ld_range, intensity)
-                for i, (ld_range, intensity) in enumerate(zip(lidar["ranges"], intensities))
+    cones = None
+    if cone_data_available:
+        assert cone_acquisition_to_publish_latency_s is not None
+        cones = ConeBatch(
+            [
+                ConeDetection(
+                    pos=Position(x_coords[i], y_coords[i], z_coords[i]),
+                    colour=cone_colour[i],
+                    confidence=cone_confidence[i],
+                )
+                for i in range(num_cones)
             ],
-            sensor_age=get_sensor_age("lidar"),
-            frame_id=lidar["frame_id"],
-            angle_min=lidar["angle_min"],
-            angle_max=lidar["angle_max"],
-            angle_increment=lidar["angle_increment"],
-            time_increment=lidar["time_increment"],
-            scan_time=lidar["scan_time"],
-            range_min=lidar["range_min"],
-            range_max=lidar["range_max"],
+            sensor_age=get_sensor_age("cone_detections"),
+            acquisition_to_publish_latency_s=cone_acquisition_to_publish_latency_s,
         )
+
+    # Set up fiducial detections
+    fiducial_batch = None
+    if fiducials_available:
+        assert fiducial_dictionary_name is not None
+        assert fiducial_source_frame_id is not None
+        converted_fiducials = []
+        for marker in fiducials:
+            corner_uvs = marker["corners"]
+            corners = (
+                ImagePoint(corner_uvs[0][0], corner_uvs[0][1]),
+                ImagePoint(corner_uvs[1][0], corner_uvs[1][1]),
+                ImagePoint(corner_uvs[2][0], corner_uvs[2][1]),
+                ImagePoint(corner_uvs[3][0], corner_uvs[3][1]),
+            )
+            pose = None
+            if marker["pose_valid"]:
+                orientation = marker["orientation_xyzw"]
+                pose = FiducialPose(
+                    position=Position(*marker["position_xyz"]),
+                    orientation=Quaternion(
+                        orientation[0], orientation[1], orientation[2], orientation[3],
+                    ),
+                )
+            converted_fiducials.append(FiducialDetection(
+                id=marker["id"],
+                marker_size_m=marker["marker_size_m"],
+                corners=corners,
+                pose=pose,
+                reprojection_error_px=marker["reprojection_error_px"],
+            ))
+        fiducial_batch = FiducialBatch(
+            detections=converted_fiducials,
+            sensor_age=get_sensor_age("fiducial_detections"),
+            dictionary_name=fiducial_dictionary_name,
+            source_frame_id=fiducial_source_frame_id,
+        )
+
+    # Set up raw lidar scan
+    lidar_scan_obs = None
+    if lidar_scan is not None:
+        intensities = lidar_scan["intensities"] or [None] * len(lidar_scan["ranges"])
+        lidar_scan_obs = LidarScan(
+            detections=[
+                LidarDetection(lidar_scan["angle_min"] + i * lidar_scan["angle_increment"], ld_range, intensity)
+                for i, (ld_range, intensity) in enumerate(zip(lidar_scan["ranges"], intensities))
+            ],
+            sensor_age=get_sensor_age("lidar_scan"),
+            frame_id=lidar_scan["frame_id"],
+            angle_min=lidar_scan["angle_min"],
+            angle_max=lidar_scan["angle_max"],
+            angle_increment=lidar_scan["angle_increment"],
+            time_increment=lidar_scan["time_increment"],
+            scan_time=lidar_scan["scan_time"],
+            range_min=lidar_scan["range_min"],
+            range_max=lidar_scan["range_max"],
+        )
+
+    # Set up Cartesian lidar points
+    lidar_cartesian_obs = None
+    if lidar_cartesian is not None:
+        lidar_cartesian_obs = LidarCartesian(
+            points=[
+                LidarCartesianPoint(pos=Position(*point), scan_index=index)
+                for point, index in zip(lidar_cartesian["points_xyz"], lidar_cartesian["scan_indices"])
+            ],
+            sensor_age=get_sensor_age("lidar_cartesian"),
+            frame_id=lidar_cartesian["frame_id"],
+        )
+
     # Detect car orientation
     orientation = None
     if roll_angle_in_radians is not None and pitch_angle_in_radians is not None and heading_angle_in_radians is not None:
@@ -462,8 +697,10 @@ def convert_observations(
         wheel_speed = WheelSpeed(wheel_speed_in_meters_per_second, get_sensor_age("wheel_speed"))
     # Return a filled car observations object
     return CarObservations(
-        cones=cones if cone_data_available else None,
-        lidar_obs=lidar_detections,
+        cones=cones,
+        fiducials=fiducial_batch,
+        lidar_scan=lidar_scan_obs,
+        lidar_cartesian=lidar_cartesian_obs,
         car=ObservedCarState(
             orientation=orientation,
             ang_velocity=angular_velocity,
@@ -474,11 +711,13 @@ def convert_observations(
             dt=dt,
             policy_elapsed_s=policy_elapsed_s,
             is_first_policy_step=is_first_policy_step,
-        )
+        ),
     )
 
 
-def convert_actions(output: CarActions) -> tuple[float, float, float | None, float | None, float | None]:
+def convert_actions(
+    output: CarActions,
+) -> tuple[float, float, float | None, float | None, float | None]:
     """Convert the policy's actions into the tuple returned to policy_node.
 
     A warning is printed for each action that is not strictly inside (-1, 1), but the value is
@@ -493,4 +732,10 @@ def convert_actions(output: CarActions) -> tuple[float, float, float | None, flo
         print(f"Steering action `{output.steering_action}` is out of range")
     if output.camera_pan_action is not None and not -1 < output.camera_pan_action < 1:
         print(f"Camera pan action `{output.camera_pan_action}` is out of range")
-    return output.drive_action, output.steering_action, output.camera_pan_action, output.debug1, output.debug2
+    return (
+        output.drive_action,
+        output.steering_action,
+        output.camera_pan_action,
+        output.debug1,
+        output.debug2,
+    )
