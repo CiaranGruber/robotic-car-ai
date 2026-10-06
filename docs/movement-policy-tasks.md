@@ -38,8 +38,8 @@ Starting values from dream-gym's cone-following example
 | --- | --- | --- |
 | Car model | 1/10 Traxxas Slash parameters from that example | Chris |
 | Maximum steering angle | 45 degrees (likely larger than the real car) | Chris |
-| Lane width | 1.0 m (also 0.8 m and 1.2 m test lanes) | Task 2.2: drawn in `docs/stage1-test-cases.md`; lab fit still to check |
-| Cone spacing | 0.5 m (also 0.75 m test lane) | Task 2.2: drawn in `docs/stage1-test-cases.md`; lab fit still to check |
+| Lane width | 1.0 m | Task 2.2 |
+| Cone spacing | 0.5 m | Task 2.2 |
 | Which colour is on which side | No default; dream-gym treats colours as labels per road | Long |
 | Camera view | 80 degrees wide, 4 m range, 0.01 m position noise | Task A1 |
 | Target speed | 1.0 m/s | Chris |
