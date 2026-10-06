@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 850">
+<rect width="100%" height="100%" fill="#f8fafc"/>
+<text x="36" y="42" font-size="25" font-family="sans-serif" font-weight="bold">Filtered cones — base_link top view</text>
+<text x="36" y="69" font-size="15" font-family="sans-serif" fill="#475569">9 kept from 15; grey crosses were removed</text>
+<line x1="100.0" y1="100" x2="100.0" y2="740" stroke="#cbd5e1" stroke-dasharray="4 5"/>
+<text x="88.0" y="762" font-size="13" font-family="sans-serif">+3</text>
+<line x1="200.0" y1="100" x2="200.0" y2="740" stroke="#cbd5e1" stroke-dasharray="4 5"/>
+<text x="188.0" y="762" font-size="13" font-family="sans-serif">+2</text>
+<line x1="300.0" y1="100" x2="300.0" y2="740" stroke="#cbd5e1" stroke-dasharray="4 5"/>
+<text x="288.0" y="762" font-size="13" font-family="sans-serif">+1</text>
+<line x1="400.0" y1="100" x2="400.0" y2="740" stroke="#cbd5e1" stroke-dasharray="4 5"/>
+<text x="388.0" y="762" font-size="13" font-family="sans-serif">+0</text>
+<line x1="500.0" y1="100" x2="500.0" y2="740" stroke="#cbd5e1" stroke-dasharray="4 5"/>
+<text x="488.0" y="762" font-size="13" font-family="sans-serif">-1</text>
+<line x1="600.0" y1="100" x2="600.0" y2="740" stroke="#cbd5e1" stroke-dasharray="4 5"/>
+<text x="588.0" y="762" font-size="13" font-family="sans-serif">-2</text>
+<line x1="700.0" y1="100" x2="700.0" y2="740" stroke="#cbd5e1" stroke-dasharray="4 5"/>
+<text x="688.0" y="762" font-size="13" font-family="sans-serif">-3</text>
+<line x1="80" y1="740.0" x2="730" y2="740.0" stroke="#cbd5e1" stroke-dasharray="4 5"/>
+<text x="44" y="745.0" font-size="13" font-family="sans-serif">0</text>
+<line x1="80" y1="640.0" x2="730" y2="640.0" stroke="#cbd5e1" stroke-dasharray="4 5"/>
+<text x="44" y="645.0" font-size="13" font-family="sans-serif">1</text>
+<line x1="80" y1="540.0" x2="730" y2="540.0" stroke="#cbd5e1" stroke-dasharray="4 5"/>
+<text x="44" y="545.0" font-size="13" font-family="sans-serif">2</text>
+<line x1="80" y1="440.0" x2="730" y2="440.0" stroke="#cbd5e1" stroke-dasharray="4 5"/>
+<text x="44" y="445.0" font-size="13" font-family="sans-serif">3</text>
+<line x1="80" y1="340.0" x2="730" y2="340.0" stroke="#cbd5e1" stroke-dasharray="4 5"/>
+<text x="44" y="345.0" font-size="13" font-family="sans-serif">4</text>
+<line x1="80" y1="240.0" x2="730" y2="240.0" stroke="#cbd5e1" stroke-dasharray="4 5"/>
+<text x="44" y="245.0" font-size="13" font-family="sans-serif">5</text>
+<line x1="80" y1="140.0" x2="730" y2="140.0" stroke="#cbd5e1" stroke-dasharray="4 5"/>
+<text x="44" y="145.0" font-size="13" font-family="sans-serif">6</text>
+<line x1="400" y1="120" x2="400" y2="740" stroke="#64748b" stroke-width="2"/>
+<text x="414" y="126" font-size="15" font-family="sans-serif">+x forward</text>
+<text x="58" y="786" font-size="15" font-family="sans-serif">+y left ←</text>
+<text x="658" y="786" font-size="15" font-family="sans-serif">right →</text>
+<path d="M400 726 L387 747 L413 747 Z" fill="#334155"/>
+<text x="418" y="737" font-size="14" font-family="sans-serif">car (0, 0)</text>
+<g><title>#1: blue, x=0.72 m, y=0.41 m, z=0.01 m, confidence=0.953, kept</title>
+<circle cx="358.6" cy="667.5" r="8" fill="#2563eb" stroke="#1e293b" stroke-width="1.5"/>
+<text x="369.6" y="660.5" font-size="12" font-family="sans-serif" fill="#334155">1</text></g>
+<g><title>#2: yellow, x=0.91 m, y=0.34 m, z=0.03 m, confidence=0.951, removed: 0.71 m off its colour row</title>
+<path d="M359.1 642.2 L373.1 656.2 M373.1 642.2 L359.1 656.2" stroke="#94a3b8" stroke-width="2.5"/>
+<text x="377.1" y="642.2" font-size="12" font-family="sans-serif" fill="#334155">2</text></g>
+<g><title>#3: blue, x=0.55 m, y=0.41 m, z=0.01 m, confidence=0.949, kept</title>
+<circle cx="359.3" cy="685.4" r="8" fill="#2563eb" stroke="#1e293b" stroke-width="1.5"/>
+<text x="370.3" y="678.4" font-size="12" font-family="sans-serif" fill="#334155">3</text></g>
+<g><title>#4: yellow, x=1.34 m, y=-0.26 m, z=0.06 m, confidence=0.949, kept</title>
+<circle cx="425.7" cy="606.1" r="8" fill="#eab308" stroke="#1e293b" stroke-width="1.5"/>
+<text x="436.7" y="599.1" font-size="12" font-family="sans-serif" fill="#334155">4</text></g>
+<g><title>#5: yellow, x=0.76 m, y=-0.42 m, z=0.03 m, confidence=0.947, kept</title>
+<circle cx="441.7" cy="664.1" r="8" fill="#eab308" stroke="#1e293b" stroke-width="1.5"/>
+<text x="452.7" y="657.1" font-size="12" font-family="sans-serif" fill="#334155">5</text></g>
+<g><title>#6: yellow, x=0.58 m, y=-0.47 m, z=0.02 m, confidence=0.945, kept</title>
+<circle cx="446.9" cy="681.6" r="8" fill="#eab308" stroke="#1e293b" stroke-width="1.5"/>
+<text x="457.9" y="674.6" font-size="12" font-family="sans-serif" fill="#334155">6</text></g>
+<g><title>#7: blue, x=0.88 m, y=-0.33 m, z=0.04 m, confidence=0.935, removed: 0.71 m off its colour row</title>
+<path d="M425.8 645.2 L439.8 659.2 M439.8 645.2 L425.8 659.2" stroke="#94a3b8" stroke-width="2.5"/>
+<text x="443.8" y="645.2" font-size="12" font-family="sans-serif" fill="#334155">7</text></g>
+<g><title>#8: blue, x=1.38 m, y=0.35 m, z=0.05 m, confidence=0.929, kept</title>
+<circle cx="365.0" cy="602.3" r="8" fill="#2563eb" stroke="#1e293b" stroke-width="1.5"/>
+<text x="376.0" y="595.3" font-size="12" font-family="sans-serif" fill="#334155">8</text></g>
+<g><title>#9: blue, x=1.23 m, y=0.38 m, z=0.05 m, confidence=0.892, kept</title>
+<circle cx="362.1" cy="616.8" r="8" fill="#2563eb" stroke="#1e293b" stroke-width="1.5"/>
+<text x="373.1" y="609.8" font-size="12" font-family="sans-serif" fill="#334155">9</text></g>
+<g><title>#10: yellow, x=1.09 m, y=-0.34 m, z=0.05 m, confidence=0.888, kept</title>
+<circle cx="434.1" cy="631.1" r="8" fill="#eab308" stroke="#1e293b" stroke-width="1.5"/>
+<text x="445.1" y="624.1" font-size="12" font-family="sans-serif" fill="#334155">10</text></g>
+<g><title>#11: yellow, x=3.09 m, y=-1.06 m, z=0.11 m, confidence=0.759, removed: 0.60 m off its colour row</title>
+<path d="M499.1 424.2 L513.1 438.2 M513.1 424.2 L499.1 438.2" stroke="#94a3b8" stroke-width="2.5"/>
+<text x="517.1" y="424.2" font-size="12" font-family="sans-serif" fill="#334155">11</text></g>
+<g><title>#12: yellow, x=4.99 m, y=-3.11 m, z=0.01 m, confidence=0.664, removed: outside range or below confidence</title>
+<path d="M703.9 233.7 L717.9 247.7 M717.9 233.7 L703.9 247.7" stroke="#94a3b8" stroke-width="2.5"/>
+<text x="721.9" y="233.7" font-size="12" font-family="sans-serif" fill="#334155">12</text></g>
+<g><title>#13: blue, x=1.06 m, y=0.35 m, z=0.04 m, confidence=0.606, kept</title>
+<circle cx="364.7" cy="633.7" r="8" fill="#2563eb" stroke="#1e293b" stroke-width="1.5"/>
+<text x="375.7" y="626.7" font-size="12" font-family="sans-serif" fill="#334155">13</text></g>
+<g><title>#14: blue, x=3.36 m, y=-2.11 m, z=0.20 m, confidence=0.595, removed: outside range or below confidence</title>
+<path d="M604.3 396.6 L618.3 410.6 M618.3 396.6 L604.3 410.6" stroke="#94a3b8" stroke-width="2.5"/>
+<text x="622.3" y="396.6" font-size="12" font-family="sans-serif" fill="#334155">14</text></g>
+<g><title>#15: blue, x=3.16 m, y=-1.02 m, z=0.11 m, confidence=0.547, removed: 1.31 m off its colour row</title>
+<path d="M495.0 417.5 L509.0 431.5 M509.0 417.5 L495.0 431.5" stroke="#94a3b8" stroke-width="2.5"/>
+<text x="513.0" y="417.5" font-size="12" font-family="sans-serif" fill="#334155">15</text></g>
+<circle cx="110" cy="818" r="7" fill="#eab308" stroke="#1e293b"/>
+<text x="125" y="823" font-size="15" font-family="sans-serif">yellow (color 1)</text>
+<circle cx="305" cy="818" r="7" fill="#2563eb" stroke="#1e293b"/>
+<text x="320" y="823" font-size="15" font-family="sans-serif">blue (color 2)</text>
+<text x="512" y="823" font-size="13" font-family="sans-serif" fill="#475569">Hover for position and confidence</text>
+</svg>
