@@ -21,7 +21,7 @@ and checked against `Thresholds` there; keep the two in step with this table.
 | R5 | Stop at lane end | Car centre's stop position past the last cone pair | 0.0 to 0.5 m | `stop_past_last_cone_m` |
 | R6a | Real time | 99th-percentile calculation time per policy step, on the car computer | at most 20 ms (1.5) | `p99_calc_time_s` |
 | R6b | Always a usable command | Policy steps where the solver did not converge (fallbacks) | 0 | `fallback_count` |
-| R7 | Safe stop when the lane is lost | Time from the camera losing the lane mid-lane to the policy's stop request | at most 0.6 s, and R1a and R2 still hold | `lane_lost_to_stop_request_s` (Task A7) |
+| R7 | Safe stop when the lane is lost | Time from the camera losing the lane mid-lane to the policy's stop request | at most 0.8 s, and R1a and R2 still hold | `lane_lost_to_stop_request_s` (Task A7) |
 
 **dream-gym's built-in metrics.** dream-gym 0.2.2 has none for cones, stopping or calculation time, so every
 metric above is computed by the harness. Three built-in metrics are close and can be used as cross-checks: R1b against
@@ -39,7 +39,8 @@ R1a cannot see.
 counts contacts, which R1a misses when the car stays between the rows but clips a cone with a corner. R5 is about the
 planned lane end, R7 about an unexpected loss mid-lane. R7 is a time rather than a distance because the distance
 the car then rolls depends on Car Control's braking (in simulation about 0.6 m from 1 m/s), which the policy
-cannot change; 0.6 s is the 0.5 s lane-loss timeout (Task A7) plus one detection gap to notice the loss. R6a is time and R6b convergence: a solver can be fast and
+cannot change. 0.8 s is the 0.2 s age of the detections (1.5), one 0.1 s detection gap to notice the loss and at
+most 0.5 s driving on the last plan in case the lane comes back (Task A7). R6a is time and R6b convergence: a solver can be fast and
 still fail, or converge and be too slow.
 
 **Still to do.** R7 needs a case where the lane disappears mid-run (the camera covered) and its metric in
