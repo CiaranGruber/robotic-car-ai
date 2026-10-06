@@ -21,3 +21,4 @@ requirements.txt
 *.md
 ci/
 .gitlab/
+tests/

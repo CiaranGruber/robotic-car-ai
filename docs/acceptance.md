@@ -13,6 +13,47 @@ not actual sensor/vehicle response.
 Keep revision, command, result and limitations here; retain detailed logs in
 CI artifacts or merge requests rather than a tracked evidence directory.
 
+## MPC kinematic screening, 2026-10-06
+
+Final-pair endpoint prototype, also uncommitted: the owner chose the final cone
+pair as finish cue. The explicitly selected offline EndpointMpcPolicy completed
+20/20 finish-visible cases in a 70-run baseline/prototype experiment. Hidden
+final cones and persistent occlusion each caused 5/5 false early endpoint
+declarations; these are retained failures, not accepted behavior. Missing-stream
+cases latched zero. 96 policy tests pass; the ROS fast gate remains blocked by
+the absent pinned interfaces checkout. Results, source hashes and settings are
+in `build/mpc-endpoint-evaluation/`, explained in the
+[iteration report](mpc-simulation-evaluation.md). The endpoint extension is not
+selected by MovementPolicy or the ROS node. No hardware acceptance is claimed.
+
+Subsequent uncommitted algorithm iteration on `codex/mpc-simulation-evaluation`:
+MPC uses available wheel speed for prediction, solver failure latches zero until
+an explicit new run, and lane-loss fallback stops at cached-plan exhaustion.
+The [iteration report](mpc-simulation-evaluation.md) records 30 speed-sensitivity
+runs with zero solver failures and 1.2–3.5% lower spatial lateral RMS using
+measured speed. Completion still fails; no physical or dynamic-model acceptance
+is claimed. `.venv/bin/python -m pytest tests/policy -q` passes 83 tests. The fast
+gate was reattempted and is still blocked by the absent pinned interfaces
+checkout. Source hashes, metrics and plots are in local
+`build/mpc-speed-evaluation/`. Human diff review remains required before merge.
+
+Initial screening evidence (before those runtime changes):
+
+On the local macOS host, starting from `0e48627`, an offline evaluator compared
+three unchanged-runtime MPC configurations in 60 tuning runs and ran 10
+validation cases of the lowest-error Pareto candidate. All stopped before the
+6 m finish; none passed the provisional completion gate. Solver fallbacks were
+zero. The [evaluation report](mpc-simulation-evaluation.md) records assumptions,
+metrics, reproduction and limitations. Local `build/mpc-evaluation/summary.json`
+records exact source hashes and dependency versions.
+
+`.venv/bin/python -m pytest tests/policy -q` passed 66 tests. The CONTRIBUTING
+fast command was attempted but could not run: the pinned interfaces checkout
+at `.verification/dependencies/dream_interfaces` is absent. This is ideal
+speed/curvature kinematic screening, not a DREAMGym dynamics run, ROS gate,
+car-computer timing qualification, or physical vehicle acceptance. Runtime
+policy and car parameters were not changed.
+
 ## Student-facing review, 2026-09-28
 
 The owner reviewed `scripts/policy_node.py`, `config/ai4r_policy.yaml` and

@@ -8,10 +8,11 @@ from pathlib import Path
 import sys
 
 import pytest
+import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from policy.action_policy.mpc import MpcConfig  # noqa: E402
+from policy.action_policy.mpc import MpcConfig, MpcController, MpcSolution, PathTrackingState  # noqa: E402
 from policy.action_policy.policy import MpcPolicy  # noqa: E402
 from policy.action_policy.reference import reference_from_cones  # noqa: E402
 from policy.control.actions import DriveCommand  # noqa: E402
@@ -184,3 +185,110 @@ def test_waits_stopped_until_the_first_usable_lane():
 def test_invalid_settings_are_rejected(change):
     with pytest.raises(ValueError):
         dataclasses.replace(MpcConfig(), **change)
+
+
+def test_measured_speed_matches_an_equivalent_nominal_speed_model():
+    state = PathTrackingState(0.2, 0.1, 0.05)
+    controller = MpcController(MpcConfig())
+    for speed in (0.2, 0.7, 1.5):
+        actual = controller.solve(state, -0.1, 0.2, speed_m_per_s=speed)
+        equivalent = MpcController(MpcConfig(target_speed_m_per_s=speed)).solve(state, -0.1, 0.2)
+        assert actual.converged and equivalent.converged
+        np.testing.assert_allclose(actual.curvatures_per_m, equivalent.curvatures_per_m)
+
+
+def test_stationary_car_does_not_predict_lateral_motion_during_delay():
+    controller = MpcController(MpcConfig())
+    state = PathTrackingState(0.3, 0.2, 0.0)
+    stationary = controller.solve(state, 0.0, 0.5, speed_m_per_s=0.0)
+    moving = controller.solve(state, 0.0, 0.5, speed_m_per_s=1.0)
+    assert stationary.converged
+    np.testing.assert_allclose(stationary.curvatures_per_m, 0.0, atol=1e-12)
+    assert moving.curvatures_per_m[0] < 0
+
+
+@pytest.mark.parametrize("speed,delay", [(math.nan, 0), (math.inf, 0), (-1, 0), (1, -0.1), (1, math.nan)])
+def test_invalid_motion_inputs_do_not_reach_solver(speed, delay):
+    with pytest.raises(ValueError):
+        MpcController(MpcConfig()).solve(PathTrackingState(0, 0, 0), 0, delay, speed)
+
+
+def test_solver_failure_stops_and_requires_explicit_new_run(monkeypatch):
+    policy = MpcPolicy(MpcConfig())
+    cones = lane_cones(0.2, 0.0)
+    assert command(policy, cones).speed_m_per_s > 0
+    original_solve = policy.controller.solve
+    monkeypatch.setattr(policy.controller, "solve", lambda *args, **kwargs:
+                        MpcSolution(np.ones(12), False, 0.001))
+    assert command(policy, cones, first_step=False) == DriveCommand(0, 0)
+    assert policy.stopped_for_solver_failure and policy.fallback_count == 1
+    monkeypatch.setattr(policy.controller, "solve", original_solve)
+    assert command(policy, cones, first_step=False) == DriveCommand(0, 0)
+    assert command(policy, cones, first_step=True).speed_m_per_s > 0
+    assert policy.fallback_count == 0
+
+
+@pytest.mark.parametrize("bad_plan", [np.full(12, math.nan), np.full(12, 4.0), np.zeros(2)])
+def test_invalid_solver_result_is_rejected(monkeypatch, bad_plan):
+    from types import SimpleNamespace
+    monkeypatch.setattr("policy.action_policy.mpc.lsq_linear",
+                        lambda *args, **kwargs: SimpleNamespace(status=1, x=bad_plan))
+    result = MpcController(MpcConfig()).solve(PathTrackingState(0, 0, 0), 0, 0)
+    assert not result.converged
+    np.testing.assert_array_equal(result.curvatures_per_m, np.zeros(12))
+
+
+def test_exhausted_plan_stops_even_before_lane_loss_timeout():
+    policy = MpcPolicy(MpcConfig(horizon_steps=1, lane_loss_timeout_s=5.0))
+    command(policy, lane_cones(0.2, 0.0))
+    assert command(policy, [], first_step=False) == DriveCommand(0, 0)
+    assert policy.stopped_for_lane_loss
+
+
+def test_measured_speed_controls_plan_progress():
+    policy = MpcPolicy(MpcConfig())
+    observations = observe(lane_cones(0.2, 0.0), first_step=True)
+    observations = dataclasses.replace(observations, car=dataclasses.replace(observations.car, wheel_speed=0.5))
+    policy.run_policy(observations, None)
+    assert policy.plan_step_distance_m == pytest.approx(0.05)
+    plan = policy.plan_curvatures_per_m.copy()
+    lost = dataclasses.replace(observations, cones=None, policy=PolicyState(0.1, 0.1, False))
+    result = policy.run_policy(lost, None)[0]
+    assert policy.distance_since_plan_m == pytest.approx(0.05)
+    assert result.curvature_per_m == pytest.approx(plan[1])
+
+
+def test_linalg_failure_returns_a_failed_plan(monkeypatch):
+    def fail(*args, **kwargs):
+        raise np.linalg.LinAlgError("synthetic failure")
+    monkeypatch.setattr("policy.action_policy.mpc.lsq_linear", fail)
+    result = MpcController(MpcConfig()).solve(PathTrackingState(0, 0, 0), 0, 0)
+    assert not result.converged
+
+
+def test_solution_minimises_independently_rolled_out_tracking_cost():
+    config = MpcConfig(horizon_steps=5)
+    state = PathTrackingState(0.08, -0.02, 0.03)
+    speed, previous = 0.6, 0.02
+    solution = MpcController(config).solve(state, previous, 0.0, speed)
+    assert solution.converged
+
+    def cost(plan):
+        lateral, heading, last, total = state.lateral_error_m, state.heading_error_rad, previous, 0.0
+        distance = speed * config.step_s
+        for curvature in plan:
+            turn = curvature - state.path_curvature_per_m
+            lateral += distance * heading + 0.5 * distance ** 2 * turn
+            heading += distance * turn
+            total += (config.lateral_error_weight * lateral ** 2 + config.heading_error_weight * heading ** 2
+                      + config.curvature_weight * turn ** 2 + config.curvature_change_weight * (curvature-last) ** 2)
+            last = curvature
+        return total
+
+    # This mild case has an interior optimum: perturbing any action either way must increase cost.
+    optimal = cost(solution.curvatures_per_m)
+    for index in range(config.horizon_steps):
+        for delta in (-0.001, 0.001):
+            perturbed = solution.curvatures_per_m.copy()
+            perturbed[index] += delta
+            assert cost(perturbed) > optimal

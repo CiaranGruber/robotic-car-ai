@@ -5,3 +5,4 @@
 numpy
 scipy
 pytest
+matplotlib  # Offline MPC evaluation plots; not required on the car.
