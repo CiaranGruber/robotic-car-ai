@@ -37,6 +37,120 @@ Control (wheel angle = atan(wheelbase x curvature), drag feed-forward plus propo
 | Wheel speed | True speed, no noise | Encoder estimate at 44 Hz, gaps up to 0.32 s | Already measured on car 20 |
 | Camera range | 4 m | Unknown; the lab lane's cones were seen to 1.7 m | Task A1 |
 
+## A3 First baseline: pure pursuit on the cones
+
+dream-gym's cone detection notebook is not part of the installed package, and its own baselines (PID and the
+built-in lane keeper) steer from the simulator's ground-truth road, so they cannot be used. The baseline is
+therefore a cone-only **pure pursuit** (`PurePursuitController` in `tests/policy/stage1_design.py`): it fits the lane
+centre from the cones exactly as the MPC does, and steers along the arc through the centre-line point a lookahead
+distance L ahead, curvature = k x 2y / (L^2 + y^2). It runs inside `MpcPolicy`, so it shares the cone filter, the
+lane-loss and lane-end rule (A7) and the speed; only the steering differs. It ignores the 0.2 s detection age.
+
+Lookahead 0.5 to 1.5 m and gain 0.5 to 1.5 on the twelve tuning cases, without detector noise and with 0.03 m on
+every cone (`python3 tests/policy/stage1_design.py baseline`):
+
+| Lookahead, gain | No noise: passed | Tracking RMS [mm] | Curv. rate RMS mean / worst | 0.03 m noise: passed | Tracking RMS [mm] | Curv. rate RMS mean / worst |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0.5 m, 0.5 | 10/12 (T5 R4, T11 R1b) | 6.7 | 0.34 / 1.05 | 1/12 (R4 on 10 cases) | 25.2 | 1.21 / 1.68 |
+| 0.5 m, 1.0 | 5/12 | 156.9 | 2.50 / 5.46 | 0/12 | 297.0 | 4.28 / 5.96 |
+| 0.75 m, 0.5 | 12/12 | 9.3 | 0.16 / 0.52 | 12/12 | 13.6 | 0.43 / 0.65 |
+| **1.0 m, 1.0** | **12/12** | **5.8** | **0.21 / 0.71** | **12/12** | **10.4** | **0.45 / 0.85** |
+| 1.5 m, 1.5 | 12/12 | 11.9 | 0.17 / 0.61 | 12/12 | 15.7 | 0.30 / 0.67 |
+
+The other grid points are in the script's output. Short lookaheads oscillate with the 0.2 s detection age and
+noise (0.5 m with gain 1.0 leaves the lane on seven cases); 1.0 m or more is stable. **The baseline is plain
+geometric pure pursuit with a 1.0 m lookahead (gain 1.0)**: it passes every tuning case with and without noise, and
+has the best tracking of the designs that do. MPC and RL must beat it: 9.0 mm tracking RMS and 0.37 / 0.85 1/(m s)
+curvature rate, over the cases' own noise and 0.03 m together (A4 table). It even passes T11, which the first MPC
+did not.
+
+## A4 MPC design (log-book)
+
+**Starting values** (the MPC from the first car run, `policy/action_policy/mpc.py`): a kinematic path-tracking MPC
+on lateral and heading error, linearised for small heading errors, solved as bounded least squares.
+
+| Setting | Start | Reason |
+| --- | --- | --- |
+| Horizon | 12 steps of 0.1 s (1.2 m at 1 m/s) | Well inside the 4 m camera range |
+| Lateral / heading error weight | 10 / 1 | Favour the lane centre (R1) |
+| Curvature / curvature-change weight | 0.1 / 1 | A little smoothing (R4); the curvature weight keeps the solution unique |
+| Curvature limit | 3.0 1/m | tan(45 degrees) / 0.335 m, the shared steering default |
+| Delay compensation | Predict forwards by the detection age | 0.2 s measured (1.5) |
+
+**Iteration 1: the starting values.** They pass every tuning case at the nominal noise except T11 (0.25 m off
+centre at the end, R1b), and with 0.03 m noise T5 also fails R4 (1.02 against 1.0 1/(m s)). The A3 baseline passes
+both, so the MPC was retuned.
+
+**Iteration 2: a grid over every setting.** 324 options: horizon 12, 20 or 30 steps (1.2 to 3 m at 1 m/s, within the
+camera range; at most 1.6 ms on the car, A6), lateral weight 3, 10 or 30, heading weight 0.3, 1 or 3,
+curvature-change weight 0.3, 1, 3 or 10 and curvature limit 3, 1 or 0.5 1/m, each on the twelve tuning cases with
+their own noise and with 0.03 m (24 runs each; `python3 tests/policy/stage1_design.py mpc`). 73 options pass all 24
+runs. What was observed:
+
+- A lateral weight of 30 never passes all runs: it steers hard, which amplifies the detector noise (R4) and drives
+  the simulated tyres into the sideslip of T11 (A2). A weight of 3 relative to the other terms works best.
+- A 12-step horizon can touch cones on T11 (R1a, R2) with low weights; 20 and 30 steps behave the same, so the
+  plan only needs to look about 2 s ahead.
+- More curvature-change weight trades a little tracking for much smoother steering, the trade-off on the front.
+- The curvature limit hardly matters here: the chosen design never asks for more than 0.51 1/m on these cases.
+  It will matter on the real car if its steering is much weaker than 45 degrees, so it stays a setting for Chris's
+  measured value.
+
+**Pareto front** of the options that pass every run (tracking against smoothness; R3 is left out because every
+design holds the speed within 0.01 m/s, since steering does not change it):
+
+![Pareto front of the MPC options and the A3 baseline](figures/stage1_mpc_pareto.png)
+
+| Design | Passed | Failed | Tracking RMS [m] | Worst lat. err. at end [m] | Outside lane [m] | Touched | Curv. rate RMS mean / worst [1/(m s)] | Fallbacks |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PP L=1.0 k=1.0 (A3 baseline) | 24/24 | - | 0.0090 | 0.023 | 0.000 | 0 | 0.37 / 0.85 | 0 |
+| MPC N12 q3/0.3 r0.3 k3 | 24/24 | - | 0.0093 | 0.078 | 0.000 | 0 | 0.37 / 0.90 | 0 |
+| MPC N12 q3/0.3 r1 k3 | 24/24 | - | 0.0098 | 0.073 | 0.000 | 0 | 0.23 / 0.61 | 0 |
+| MPC N12 q3/1 r1 k3 | 24/24 | - | 0.0120 | 0.047 | 0.000 | 0 | 0.21 / 0.58 | 0 |
+| MPC N20 q10/3 r10 k3 | 24/24 | - | 0.0122 | 0.052 | 0.000 | 0 | 0.17 / 0.46 | 0 |
+| MPC N20 q3/1 r3 k3 | 24/24 | - | 0.0124 | 0.043 | 0.000 | 0 | 0.16 / 0.45 | 0 |
+| MPC N12 q10/1 r1 k3 | 21/24 | T11 (R1b), T5 (R4), T11 (R1b) | 0.0080 | 0.055 | 0.000 | 0 | 0.41 / 1.02 | 0 |
+
+`N` is the horizon, `q` the lateral/heading weights, `r` the curvature-change weight and `k` the curvature limit
+(1/m); options that differ only in an inactive curvature limit share a point. The last row, the starting values, is
+not on the front. The baseline (H) has the best tracking, and the MPC options trade 1 to 3 mm of it, against a 375 mm
+margin to the cones, for steering up to 2.3 times smoother.
+
+**Choice: horizon 20, weights 3 / 1 / 0.1 / 3 (point A), curvature limit 3.0 1/m until measured.** It is the
+smoothest design on the front (0.16 mean, 0.45 worst against the 1.0 limit, half the baseline's), has the largest
+margin on the end-of-lane centring (0.043 m against 0.10 m) of the MPC options, passes every run including T11, and
+needs no fallback. These are now the `MpcConfig` defaults and the `mpc` weights in `config/ai4r_policy.yaml`; the
+car keeps 30 steps there (1.5 m at its 0.5 m/s), which performs the same as 20.
+
+**Final metrics** on the tuning cases (the cases' own noise and the nominal 0.2 s detection age; trajectories in
+`docs/figures/stage1_T*.png`):
+
+| Case | Lane | Touched | Outside lane [m] | Lat. err. at end [m] | Speed err. [m/s] | Curv. rate RMS [1/(m s)] | Stop past last cone [m] | Lane lost to stop [s] | Fallbacks | p99 calc [ms] | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T1 | 6x1m_0.5 | 0 | 0.000 | 0.002 | 0.003 | 0.03 | 0.22 |  | 0 | 9.3 | PASS |
+| T2 | 6x1m_0.5 | 0 | 0.000 | 0.003 | 0.003 | 0.17 | 0.22 |  | 0 | 6.7 | PASS |
+| T3 | 6x1m_0.5 | 0 | 0.000 | 0.006 | 0.003 | 0.26 | 0.22 |  | 0 | 4.3 | PASS |
+| T4 | 6x1m_0.5 | 0 | 0.000 | 0.003 | 0.003 | 0.10 | 0.22 |  | 0 | 0.7 | PASS |
+| T5 | 6x1m_0.5 | 0 | 0.000 | 0.006 | 0.003 | 0.43 | 0.21 |  | 0 | 2.1 | PASS |
+| T6 | 6x1m_0.5 | 0 | 0.000 | 0.002 | 0.006 | 0.03 | 0.24 |  | 0 | 0.7 | PASS |
+| T7 | 6x0.8m_0.5 | 0 | 0.000 | 0.001 | 0.003 | 0.11 | 0.22 |  | 0 | 13.6 | PASS |
+| T8 | 6x1.2m_0.75 | 0 | 0.000 | 0.011 | 0.003 | 0.17 | 0.22 |  | 0 | 0.3 | PASS |
+| T9 | 8x1m_0.5 | 0 | 0.000 | 0.010 | 0.002 | 0.13 | 0.22 |  | 0 | 4.6 | PASS |
+| T10 | 6x1m_0.5 | 0 | 0.000 | 0.014 | 0.003 | 0.05 | 0.22 |  | 0 | 0.8 | PASS |
+| T11 | 6x1m_0.5 | 0 | 0.000 | 0.042 | 0.008 | 0.17 | 0.32 |  | 0 | 5.6 | PASS |
+| T12 | 6x1m_0.5 | 0 | 0.000 | 0.002 | 0.033 | 0.03 | -2.09 | 0.60 | 0 | 0.7 | PASS |
+
+![T11 with the chosen MPC](figures/stage1_T11.png)
+
+**Unexpected results.** The first MPC lost to the simple baseline on T11 and on noisy steering; lowering the
+lateral weight and raising the curvature-change weight fixed both, which suggests the starting weights were tuned
+for a full-size car's assignment rather than a 1:10 car with noisy, delayed cones. The calculation times printed in
+simulation (up to 43 ms) come from running many cases in parallel on a laptop; the car computer takes at most 2.3
+ms (A6).
+
+**Still open.** RL (A5) and the comparison on the unseen cases (M1). The design was tuned in simulation only:
+the steering angle, roll-out and camera range still need measuring on the car (A2).
+
 ## A6 Calculation time on the car computer
 
 `MpcController.solve` (the MPC in `policy/action_policy/mpc.py`) on car 20's computer (aarch64, Python 3.12.3,

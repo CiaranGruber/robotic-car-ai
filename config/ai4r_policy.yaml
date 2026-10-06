@@ -136,7 +136,8 @@
       # time (Task A6). Keep target_speed_m_per_s * step_s * horizon_steps within
       # the camera range (shared default 4 m); the default predicts 1.2 m ahead.
       # 30 predicts 1.5 m at 0.5 m/s: the test cones on 2026-10-05 were seen up
-      # to about 1.6 m ahead. Scale it with target_speed_m_per_s.
+      # to about 1.6 m ahead. Scale it with target_speed_m_per_s. Task A4: keep
+      # at least 20 steps (2 s); 12 failed a tuning case, 30 matched 20.
       horizon_steps: 30
       # Duration of one predicted step, seconds, positive double.
       step_s: 0.1
@@ -144,15 +145,16 @@
       # double. Default tan(45 deg) / 0.335 m approximate wheelbase, likely larger
       # than the real car; replace it with Car Control's measured value.
       max_curvature_per_m: 3.0
-      # Cost weights, finite doubles; only their ratios matter.
+      # Cost weights, finite doubles; only their ratios matter. Task A4 chose
+      # 3 / 1 / 0.1 / 3 (docs/stage1-design.md).
       # Distance from the lane centre, per m^2 at each predicted step, >= 0.
-      lateral_error_weight: 10.0
+      lateral_error_weight: 3.0
       # Heading error relative to the lane, per rad^2 at each predicted step, >= 0.
       heading_error_weight: 1.0
       # Curvature beyond the lane's own curvature, per (1/m)^2, > 0.
       curvature_weight: 0.1
       # Curvature change between steps, per (1/m)^2, >= 0. Larger is smoother.
-      curvature_change_weight: 1.0
+      curvature_change_weight: 3.0
       # Lane width, metres, positive double (shared default 1.0). Used to find the
       # centre when only one cone row is visible. 0.75 was measured from the
       # test cones on 2026-10-05; confirm it with a tape measure.

@@ -73,34 +73,34 @@ passes only if every row holds.
 | R4 Smooth | RMS rate of change of the requested curvature | at most 1.0 1/(m s) |
 | R5 Stop at lane end | Car centre's stop position past the last cone pair | 0.0 to 0.5 m |
 | R6 Real time | Solver fallback count | 0 |
-| R6 Real time | 99th-percentile calculation time per policy step | at most 20 ms (only meaningful on the car computer) |
+| R6 Real time | 99th-percentile calculation time per policy step | at most 20 ms, checked on the car computer (Task A6); recorded but not scored in simulation |
 | R7 Safe stop when the lane is lost | Time from the camera losing the lane mid-lane to the stop request (T12; replaces R5 there) | at most 0.8 s |
 
 The curvature-rate limit is about a fifth of the simulated steering servo's rate limit (90 degrees per second
 at the 0.33 m wheelbase). The stop zone follows the card's example rule.
 
-### Current result: MPC with the Task A7 lane-end rule on the tuning cases
+### Current result: the Task A4 MPC with the A7 lane-end rule on the tuning cases
 
-Shipped `ConeFilterConfig` defaults, then shipped `MpcConfig` defaults with the case's speed and lane width, in
-simulation with the nominal 0.2 s detection age (6 October 2026). The calculation times are on a laptop, so R6a is
+Shipped `ConeFilterConfig` defaults, then shipped `MpcConfig` defaults (the Task A4 choice) with the case's speed
+and lane width, in simulation with the nominal 0.2 s detection age (6 October 2026). Every tuning case passes. The calculation times are on a laptop, so R6a is
 informational here.
 
 | Case | Lane | Touched | Outside lane [m] | Lat. err. at end [m] | Speed err. [m/s] | Curv. rate RMS [1/(m s)] | Stop past last cone [m] | Lane lost to stop [s] | Fallbacks | p99 calc [ms] | Result |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | 6x1m_0.5 | 0 | 0.000 | 0.006 | 0.003 | 0.11 | 0.22 |  | 0 | 12.6 | PASS |
-| T2 | 6x1m_0.5 | 0 | 0.000 | 0.010 | 0.003 | 0.43 | 0.22 |  | 0 | 8.2 | PASS |
-| T3 | 6x1m_0.5 | 0 | 0.000 | 0.018 | 0.003 | 0.47 | 0.22 |  | 0 | 1.2 | PASS |
-| T4 | 6x1m_0.5 | 0 | 0.000 | 0.003 | 0.003 | 0.36 | 0.22 |  | 0 | 11.5 | PASS |
-| T5 | 6x1m_0.5 | 0 | 0.000 | 0.010 | 0.003 | 0.91 | 0.21 |  | 0 | 7.7 | PASS |
-| T6 | 6x1m_0.5 | 0 | 0.000 | 0.001 | 0.006 | 0.15 | 0.24 |  | 0 | 6.6 | PASS |
-| T7 | 6x0.8m_0.5 | 0 | 0.000 | 0.005 | 0.003 | 0.28 | 0.22 |  | 0 | 9.1 | PASS |
-| T8 | 6x1.2m_0.75 | 0 | 0.000 | 0.007 | 0.003 | 0.43 | 0.22 |  | 0 | 1.1 | PASS |
-| T9 | 8x1m_0.5 | 0 | 0.000 | 0.001 | 0.002 | 0.24 | 0.22 |  | 0 | 1.7 | PASS |
-| T10 | 6x1m_0.5 | 0 | 0.000 | 0.015 | 0.003 | 0.14 | 0.22 |  | 0 | 0.4 | PASS |
-| T11 | 6x1m_0.5 | 0 | 0.000 | 0.250 | 0.006 | 0.62 | 0.30 |  | 0 | 8.3 | FAIL: lateral_error_at_lane_end_m = 0.25 > 0.1 |
-| T12 | 6x1m_0.5 | 0 | 0.000 | 0.007 | 0.033 | 0.11 | -2.09 | 0.60 | 0 | 4.5 | PASS |
+| T1 | 6x1m_0.5 | 0 | 0.000 | 0.002 | 0.003 | 0.03 | 0.22 |  | 0 | 9.3 | PASS |
+| T2 | 6x1m_0.5 | 0 | 0.000 | 0.003 | 0.003 | 0.17 | 0.22 |  | 0 | 6.7 | PASS |
+| T3 | 6x1m_0.5 | 0 | 0.000 | 0.006 | 0.003 | 0.26 | 0.22 |  | 0 | 4.3 | PASS |
+| T4 | 6x1m_0.5 | 0 | 0.000 | 0.003 | 0.003 | 0.10 | 0.22 |  | 0 | 0.7 | PASS |
+| T5 | 6x1m_0.5 | 0 | 0.000 | 0.006 | 0.003 | 0.43 | 0.21 |  | 0 | 2.1 | PASS |
+| T6 | 6x1m_0.5 | 0 | 0.000 | 0.002 | 0.006 | 0.03 | 0.24 |  | 0 | 0.7 | PASS |
+| T7 | 6x0.8m_0.5 | 0 | 0.000 | 0.001 | 0.003 | 0.11 | 0.22 |  | 0 | 13.6 | PASS |
+| T8 | 6x1.2m_0.75 | 0 | 0.000 | 0.011 | 0.003 | 0.17 | 0.22 |  | 0 | 0.3 | PASS |
+| T9 | 8x1m_0.5 | 0 | 0.000 | 0.010 | 0.002 | 0.13 | 0.22 |  | 0 | 4.6 | PASS |
+| T10 | 6x1m_0.5 | 0 | 0.000 | 0.014 | 0.003 | 0.05 | 0.22 |  | 0 | 0.8 | PASS |
+| T11 | 6x1m_0.5 | 0 | 0.000 | 0.042 | 0.008 | 0.17 | 0.32 |  | 0 | 5.6 | PASS |
+| T12 | 6x1m_0.5 | 0 | 0.000 | 0.002 | 0.033 | 0.03 | -2.09 | 0.60 | 0 | 0.7 | PASS |
 
-- **Lane end (R5).** Passes on every case except T11, stopping 0.21 to 0.24 m past the last cone pair. Before
+- **Lane end (R5).** Passes on every case, stopping 0.21 to 0.32 m past the last cone pair. Before
   Task A7 the MPC stopped 0.4 to 0.9 m **before** it: each row needs two cones at least 0.25 m apart, and the 80
   degree camera cannot see a cone beside the lane closer than about 0.6 m ahead, so the lane was "lost" before the
   end. The A7 rule in [stage1-design.md](stage1-design.md) now drives on to the stop point when the lost cones were
@@ -112,9 +112,10 @@ informational here.
 - **Wet floor (T11).** On dream-gym's dynamic tyre model the car settles into a steady sideslip: it travels
   straight along the lane with its body turned 6 degrees left (2.5 degrees on a dry floor) and the wheels steered
   about 14 degrees right. The MPC's kinematic model takes the body heading as the direction of travel, so it keeps
-  steering right and ends 0.25 m off centre. Driving straight without steering shows no drift, and a 3 kg car at 1
-  m/s should not need such slip, so the tyre presets are probably not scaled for a 1:10 car (Task A2 in
-  [stage1-design.md](stage1-design.md)). Its tests stay `xfail` until the real car is checked.
+  steering right; the first MPC ended 0.25 m off centre. Driving straight without steering shows no drift, and a 3
+  kg car at 1 m/s should not need such slip, so the tyre presets are probably not scaled for a 1:10 car (Task A2 in
+  [stage1-design.md](stage1-design.md)). The gentler Task A4 MPC passes it (0.04 m off centre), so its tests are no
+  longer `xfail`; still check on the floor whether the real car slips like this.
 
 ## 2.2 Physical cone layout
 

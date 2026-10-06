@@ -29,8 +29,12 @@ class MpcConfig:
     """
     target_speed_m_per_s: float = 1.0
     """Speed to drive at in m/s, which the prediction also assumes. Must be positive."""
-    horizon_steps: int = 12
-    """Number of predicted steps. Must be an integer of at least 1."""
+    horizon_steps: int = 20
+    """Number of predicted steps. Must be an integer of at least 1.
+
+    Task A4 chose 20 (2 s ahead): 12 steps left the car off centre and touching cones on T11, and 30 performed the
+    same as 20 (docs/stage1-design.md).
+    """
     step_s: float = 0.1
     """Duration of one predicted step in seconds. Must be positive.
 
@@ -43,8 +47,12 @@ class MpcConfig:
     The default is tan(45 degrees) / 0.335 m, the shared steering default with an approximate wheelbase. It is
     likely larger than the real car's; replace it with the control module's measured value.
     """
-    lateral_error_weight: float = 10.0
-    """Cost per m^2 of distance from the path at each predicted step. Must be at least 0."""
+    lateral_error_weight: float = 3.0
+    """Cost per m^2 of distance from the path at each predicted step. Must be at least 0.
+
+    The cost weights are the Task A4 choice: the smoothest option on the Pareto front of the tuning cases that meets
+    every Stage 1 threshold (docs/stage1-design.md). Only their ratios matter.
+    """
     heading_error_weight: float = 1.0
     """Cost per rad^2 of heading error relative to the path at each predicted step. Must be at least 0."""
     curvature_weight: float = 0.1
@@ -52,7 +60,7 @@ class MpcConfig:
 
     Must be positive, which keeps the best curvatures unique.
     """
-    curvature_change_weight: float = 1.0
+    curvature_change_weight: float = 3.0
     """Cost per (1/m)^2 of curvature change between consecutive steps, for smooth steering. Must be at least 0."""
     lane_width_m: float = 1.0
     """Distance between the lane boundaries in metres, used when only one boundary is visible. Must be positive."""

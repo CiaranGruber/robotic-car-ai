@@ -231,6 +231,9 @@ class Thresholds:
     """R6 real time: steps where the solver did not converge."""
     max_p99_calc_time_s: float = TIME_BUDGET_S
     """R6 real time: 99th-percentile calculation time per policy step. Only meaningful on the car computer."""
+    check_calc_time: bool = False
+    """Whether max_p99_calc_time_s fails a run. Off in simulation, where the time depends on the host and its load
+    (parallel runs exceed 20 ms); R6a is checked on the car computer instead (Task A6)."""
     max_lane_lost_to_stop_request_s: float = 0.8
     """R7 safe stop when the lane is lost: time from a camera blackout to the policy's stop request, including the
     0.2 s detection age and one detection gap. The car must still stay in the lane and touch no cone (R1a, R2);
@@ -629,8 +632,9 @@ def check_thresholds(metrics: dict[str, float], thresholds: Thresholds) -> list[
                 + at_most("lateral_error_at_lane_end_m", thresholds.max_lateral_error_at_lane_end_m)
                 + at_most("mean_speed_error_m_per_s", thresholds.max_mean_speed_error_m_per_s)
                 + at_most("rms_curvature_rate_per_m_s", thresholds.max_rms_curvature_rate_per_m_s)
-                + at_most("fallback_count", thresholds.max_fallback_count)
-                + at_most("p99_calc_time_s", thresholds.max_p99_calc_time_s))
+                + at_most("fallback_count", thresholds.max_fallback_count))
+    if thresholds.check_calc_time:
+        failures += at_most("p99_calc_time_s", thresholds.max_p99_calc_time_s)
     if not math.isnan(metrics["lane_lost_to_stop_request_s"]):
         # Lane lost mid-lane: R7 instead of the stop zone
         failures += at_most("lane_lost_to_stop_request_s", thresholds.max_lane_lost_to_stop_request_s)
