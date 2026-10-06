@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Iterable
+from typing import Any, Iterable, Self
+
+from policy.data_logging.data_logging import LoggingParameters, log_input, log_output
+from policy.serialisation import Serialisable, deserialise_float, serialise_float
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class Position:
+class Position(Serialisable):
     """A point in the car's body frame (base_link), in metres.
 
     These are CAR coordinates; they are NOT world positions. The origin is on the nominal ground
@@ -24,7 +30,7 @@ class Position:
     """
 
 
-class ConeColour(Enum):
+class ConeColour(Serialisable, Enum):
     """The colour of a detected cone.
 
     The ROS message uses ConeDetection.COLOR_YELLOW / COLOR_BLUE (1/2). policy_node converts those
@@ -34,6 +40,22 @@ class ConeColour(Enum):
     """A yellow cone."""
     BLUE = 1
     """A blue cone."""
+
+    def serialise(self) -> str:
+        """
+        :return: The enum member name.
+        """
+        return self.name
+
+    @classmethod
+    def deserialise(cls, data: Any) -> Self:
+        """
+        :param data: Enum member name, or the underlying integer value.
+        :return: The matching cone colour.
+        """
+        if isinstance(data, str):
+            return cls[data]
+        return cls(data)
 
 
 class SensorAge(float):
@@ -63,9 +85,23 @@ class SensorAge(float):
         age.stamp_ns = stamp_ns
         return age
 
+    def serialise(self) -> dict[str, Any]:
+        """
+        :return: Age in seconds and optional ROS stamp.
+        """
+        return {"age_s": serialise_float(float(self)), "stamp_ns": self.stamp_ns}
+
+    @classmethod
+    def deserialise(cls, data: dict[str, Any]) -> Self:
+        """
+        :param data: Mapping with age_s and stamp_ns.
+        :return: The reconstructed sensor age.
+        """
+        return cls(deserialise_float(data["age_s"]), data["stamp_ns"])
+
 
 @dataclass(frozen=True)
-class ConeDetection:
+class ConeDetection(Serialisable):
     """One cone from the cone detector.
 
     policy_node checks every cone in a batch before accepting it: the position must be finite,
@@ -83,35 +119,14 @@ class ConeDetection:
     """Classification confidence, from 0.0 to 1.0."""
 
 
-class Detections[T](list[T]):
-    """A list of detections from one sensor message, with that message's sensor age attached.
-
-    It behaves as a normal list of detections.
-    """
-    __sensor_age: SensorAge
-
-    def __init__(self, detections: Iterable[T], sensor_age: SensorAge):
-        """
-        :param detections: The detections from one sensor message.
-        :param sensor_age: Age of that sensor message.
-        """
-        super().__init__(detections)
-        self.__sensor_age = sensor_age
-
-    @property
-    def sensor_age(self) -> SensorAge:
-        """
-        :return: Age of the sensor message these detections came from.
-        """
-        return self.__sensor_age
-
-
-class ConeBatch(Detections[ConeDetection]):
+class ConeBatch(list[ConeDetection]):
     """Cone detections from one accepted batch, with measured publication latency.
 
-    A valid empty frame is an empty list with cone data still available. It is None on
-    CarObservations only when cone detections are optional and no fresh batch exists.
+    It behaves as a normal list of cones. A valid empty frame is an empty list with cone data still
+    available. It is None on CarObservations only when cone detections are optional and no fresh
+    batch exists.
     """
+    __sensor_age: SensorAge
     __acquisition_to_publish_latency_s: float
 
     def __init__(
@@ -128,8 +143,16 @@ class ConeBatch(Detections[ConeDetection]):
             for OAK-D) to immediately before the detector called publish(). Exposure duration is
             excluded. Do not add this to sensor_age.
         """
-        super().__init__(detections, sensor_age)
+        super().__init__(detections)
+        self.__sensor_age = sensor_age
         self.__acquisition_to_publish_latency_s = acquisition_to_publish_latency_s
+
+    @property
+    def sensor_age(self) -> SensorAge:
+        """
+        :return: Age of the sensor message these detections came from.
+        """
+        return self.__sensor_age
 
     @property
     def acquisition_to_publish_latency_s(self) -> float:
@@ -138,9 +161,35 @@ class ConeBatch(Detections[ConeDetection]):
         """
         return self.__acquisition_to_publish_latency_s
 
+    def serialise(self) -> dict[str, Any]:
+        """
+        :return: The cones, sensor age and acquisition-to-publication latency.
+        """
+        return {
+            "detections": [detection.serialise() for detection in self],
+            "sensor_age": self.sensor_age.serialise(),
+            "acquisition_to_publish_latency_s": serialise_float(
+                self.acquisition_to_publish_latency_s
+            ),
+        }
+
+    @classmethod
+    def deserialise(cls, data: dict[str, Any]) -> Self:
+        """
+        :param data: Mapping with detections, sensor_age and acquisition_to_publish_latency_s.
+        :return: The reconstructed cone batch.
+        """
+        return cls(
+            detections=[ConeDetection.deserialise(detection) for detection in data["detections"]],
+            sensor_age=SensorAge.deserialise(data["sensor_age"]),
+            acquisition_to_publish_latency_s=deserialise_float(
+                data["acquisition_to_publish_latency_s"]
+            ),
+        )
+
 
 @dataclass(frozen=True)
-class ImagePoint:
+class ImagePoint(Serialisable):
     """A pixel location in a camera image."""
     u: float
     """Horizontal pixel coordinate."""
@@ -149,7 +198,7 @@ class ImagePoint:
 
 
 @dataclass(frozen=True)
-class Quaternion:
+class Quaternion(Serialisable):
     """A unit quaternion orientation in (x, y, z, w) order.
 
     This matches the ROS quaternion convention used by policy_node (identity is 0, 0, 0, 1).
@@ -165,7 +214,7 @@ class Quaternion:
 
 
 @dataclass(frozen=True)
-class FiducialPose:
+class FiducialPose(Serialisable):
     """A fiducial marker pose in policy_frame_id.
 
     policy_node only supplies this when the detector's pose solve succeeded. A valid pose is a
@@ -179,7 +228,7 @@ class FiducialPose:
 
 
 @dataclass(frozen=True)
-class FiducialDetection:
+class FiducialDetection(Serialisable):
     """One ArUco / fiducial marker from an accepted detection batch.
 
     Repeated IDs remain separate records in their received order.
@@ -204,7 +253,7 @@ class FiducialDetection:
 
 
 @dataclass(frozen=True)
-class FiducialBatch:
+class FiducialBatch(Serialisable):
     """One fiducial-detection batch, with dictionary/source-frame metadata.
 
     An accepted empty batch has detections == [] and is still fresh data. Marker absence has no
@@ -221,7 +270,7 @@ class FiducialBatch:
 
 
 @dataclass(frozen=True)
-class LidarDetection:
+class LidarDetection(Serialisable):
     """One ray from a lidar scan.
 
     The ray is in the lidar's own frame (LidarScan.frame_id). The scan is NOT rotated into
@@ -244,7 +293,7 @@ class LidarDetection:
 
 
 @dataclass(frozen=True)
-class LidarScan:
+class LidarScan(Serialisable):
     """One lidar scan, with its rays in scan order and the scan's details.
 
     policy_node checks each scan before accepting it: it has at least one ray, a valid frame,
@@ -274,7 +323,7 @@ class LidarScan:
 
 
 @dataclass(frozen=True)
-class LidarCartesianPoint:
+class LidarCartesianPoint(Serialisable):
     """One usable lidar return converted into policy_frame_id.
 
     Only finite returns within the scan's inclusive range limits are included. There are no
@@ -290,7 +339,7 @@ class LidarCartesianPoint:
 
 
 @dataclass(frozen=True)
-class LidarCartesian:
+class LidarCartesian(Serialisable):
     """Body-frame Cartesian lidar points prepared alongside the raw scan.
 
     Cartesian points always match the latest accepted raw scan. If transform/conversion fails, the
@@ -306,7 +355,7 @@ class LidarCartesian:
 
 
 @dataclass(frozen=True)
-class CarOrientation:
+class CarOrientation(Serialisable):
     """The car's orientation from the IMU, in the car's body frame after the mounting TF is applied.
 
     This is only created when roll, pitch and relative heading are all available. Relative heading
@@ -328,7 +377,7 @@ class CarOrientation:
 
 
 @dataclass(frozen=True)
-class AngularVelocity:
+class AngularVelocity(Serialisable):
     """The car's rate of rotation from the IMU gyroscope, in the car's body frame.
 
     Values are in rad/s after the mounting TF is applied. This is independent of the other IMU
@@ -345,7 +394,7 @@ class AngularVelocity:
 
 
 @dataclass(frozen=True)
-class SpecificForce:
+class SpecificForce(Serialisable):
     """Specific force from the IMU accelerometer, in the car's body frame.
 
     Values are in m/s^2 after the mounting TF is applied. Specific force INCLUDES GRAVITY; it is
@@ -388,9 +437,29 @@ class WheelSpeed(float):
         speed.sensor_age = sensor_age
         return speed
 
+    def serialise(self) -> dict[str, Any]:
+        """
+        :return: Wheel speed in m/s and its sensor age.
+        """
+        return {
+            "wheel_speed_m_per_s": serialise_float(float(self)),
+            "sensor_age": self.sensor_age.serialise(),
+        }
+
+    @classmethod
+    def deserialise(cls, data: dict[str, Any]) -> Self:
+        """
+        :param data: Mapping with wheel_speed_m_per_s and sensor_age.
+        :return: The reconstructed wheel speed.
+        """
+        return cls(
+            deserialise_float(data["wheel_speed_m_per_s"]),
+            SensorAge.deserialise(data["sensor_age"]),
+        )
+
 
 @dataclass(frozen=True)
-class ObservedCarState:
+class ObservedCarState(Serialisable):
     """The measured state of the car.
 
     Each field is None when that observation is optional and missing or expired. Partial IMU
@@ -407,7 +476,7 @@ class ObservedCarState:
 
 
 @dataclass(frozen=True)
-class PolicyState:
+class PolicyState(Serialisable):
     """Timing information about the current policy step and run."""
     dt: float
     """ACTUAL monotonic seconds since the previous policy step.
@@ -425,7 +494,7 @@ class PolicyState:
 
 
 @dataclass(frozen=True)
-class CarObservations:
+class CarObservations(Serialisable):
     """All observations available to the policy for one policy step.
 
     All lengths and angles use metres and radians.
@@ -460,7 +529,7 @@ class CarObservations:
 
 
 @dataclass
-class CarActions:
+class CarActions(Serialisable):
     """The actions requested by the policy for one step.
 
     All actions are NORMALISED values in [-1, 1]. policy_node clips values outside [-1, 1], and
@@ -525,6 +594,7 @@ def convert_observations(
     dt: float,
     policy_elapsed_s: float,
     is_first_policy_step: bool,
+    logging_params: LoggingParameters,
 ) -> CarObservations:
     """Convert the raw observations from policy_node into a CarObservations object.
 
@@ -570,6 +640,7 @@ def convert_observations(
     :param dt: Actual monotonic seconds since the previous policy step; 0.0 on the first step.
     :param policy_elapsed_s: Seconds since entering the publishing-policy state.
     :param is_first_policy_step: True on the first step after entering the publishing-policy state.
+    :param logging_params: The parameters for logging.
     :return: The observations for this policy step.
     """
     def get_sensor_age(sensor: str) -> SensorAge:
@@ -696,7 +767,7 @@ def convert_observations(
     if wheel_speed_in_meters_per_second is not None:
         wheel_speed = WheelSpeed(wheel_speed_in_meters_per_second, get_sensor_age("wheel_speed"))
     # Return a filled car observations object
-    return CarObservations(
+    observations = CarObservations(
         cones=cones,
         fiducials=fiducial_batch,
         lidar_scan=lidar_scan_obs,
@@ -713,25 +784,30 @@ def convert_observations(
             is_first_policy_step=is_first_policy_step,
         ),
     )
+    log_input(observations, logging_params)
+    return observations
 
 
 def convert_actions(
     output: CarActions,
+    logging_params: LoggingParameters,
 ) -> tuple[float, float, float | None, float | None, float | None]:
     """Convert the policy's actions into the tuple returned to policy_node.
 
-    A warning is printed for each action that is not strictly inside (-1, 1), but the value is
+    A warning is logged for each action that is not strictly inside (-1, 1), but the value is
     not changed. policy_node clips drive, steering and camera pan to [-1, 1] afterwards.
 
     :param output: The actions chosen by the policy.
+    :param logging_params: The parameters for logging.
     :return: The drive, steering, camera pan, debug1 and debug2 actions, in that order.
     """
     if not -1 < output.drive_action < 1:
-        print(f"Drive action `{output.drive_action}` is out of range")
+        _LOGGER.warning("Drive action `%s` is out of range", output.drive_action)
     if not -1 < output.steering_action < 1:
-        print(f"Steering action `{output.steering_action}` is out of range")
+        _LOGGER.warning("Steering action `%s` is out of range", output.steering_action)
     if output.camera_pan_action is not None and not -1 < output.camera_pan_action < 1:
-        print(f"Camera pan action `{output.camera_pan_action}` is out of range")
+        _LOGGER.warning("Camera pan action `%s` is out of range", output.camera_pan_action)
+    log_output(output, logging_params)
     return (
         output.drive_action,
         output.steering_action,

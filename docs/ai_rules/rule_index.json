@@ -5,13 +5,18 @@
         "when_to_use": "always"
     },
     {
-        "name": "0.01_basic_codebase_rules",
-        "description": "Basic conventions for dependencies, tests, and files not uploaded to the car.",
+        "name": "0.01_coding_standards",
+        "description": "Coding standards for dependencies, tests, upload exclusions, docstrings and logging.",
         "when_to_use": "always"
     },
     {
         "name": "1.00_creating_rules",
         "description": "Formatting, numbering and indexing rules, and creating or changing them.",
+        "when_to_use": "when_applicable"
+    },
+    {
+        "name": "1.01_merging_conflicting_rules",
+        "description": "Comparing and merging rules when guidance overlaps or conflicts.",
         "when_to_use": "when_applicable"
     },
     {
@@ -30,8 +35,23 @@
         "when_to_use": "when_applicable"
     },
     {
+        "name": "2.03_adding_and_using_test_data",
+        "description": "Adding and using scenario schemas and test data under tests/scenarios/.",
+        "when_to_use": "when_applicable"
+    },
+    {
+        "name": "2.04_managing_wheel_files",
+        "description": "Vendoring, installing and upload exclusions for custom Python wheels.",
+        "when_to_use": "when_applicable"
+    },
+    {
         "name": "3.00_codebase_structure",
         "description": "Codebase layout, focusing on the policy package, node student section and config.",
+        "when_to_use": "when_applicable"
+    },
+    {
+        "name": "3.01_using_car_management_script",
+        "description": "Using scripts/car_management.sh to upload, build and restart the car.",
         "when_to_use": "when_applicable"
     }
 ]

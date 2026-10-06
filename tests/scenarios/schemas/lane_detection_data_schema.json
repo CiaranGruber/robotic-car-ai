@@ -1,0 +1,391 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lane_detection_data_schema.json",
+  "title": "Lane detection scenario",
+  "description": "A named test case whose test_data entries match the parameters of convert_observations in policy/input_output.py. All observation fields are optional.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "test_data"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name for the test case.",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional description of the test case."
+    },
+    "test_data": {
+      "type": "array",
+      "description": "Ordered observation snapshots for the scenario, one convert_observations argument set each.",
+      "items": {
+        "$ref": "#/$defs/observations_data"
+      }
+    }
+  },
+  "$defs": {
+    "nullable_number": {
+      "type": ["number", "null"]
+    },
+    "nullable_integer": {
+      "type": ["integer", "null"]
+    },
+    "vec3": {
+      "type": "array",
+      "description": "Body-frame (x, y, z) triple.",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "number"
+      }
+    },
+    "cone_colour": {
+      "description": "ConeColour enum name or value (YELLOW=0, BLUE=1).",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["YELLOW", "BLUE"]
+        },
+        {
+          "type": "integer",
+          "enum": [0, 1]
+        }
+      ]
+    },
+    "sensor_name": {
+      "type": "string",
+      "enum": [
+        "cone_detections",
+        "fiducial_detections",
+        "lidar_scan",
+        "lidar_cartesian",
+        "wheel_speed",
+        "imu_orientation",
+        "imu_angular_velocity",
+        "imu_specific_force"
+      ],
+      "description": "Sensor key used in sensor_age_s / sensor_stamp_ns."
+    },
+    "lidar_scan": {
+      "type": "object",
+      "description": "Full raw lidar scan dict passed to convert_observations, or omit / use null when unavailable.",
+      "additionalProperties": false,
+      "properties": {
+        "ranges": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "intensities": {
+          "type": "array",
+          "description": "Empty, or one value per range. Null entries are allowed when intensities are absent.",
+          "items": {
+            "type": ["number", "null"]
+          }
+        },
+        "frame_id": {
+          "type": "string"
+        },
+        "angle_min": {
+          "type": "number"
+        },
+        "angle_max": {
+          "type": "number"
+        },
+        "angle_increment": {
+          "type": "number"
+        },
+        "time_increment": {
+          "type": "number"
+        },
+        "scan_time": {
+          "type": "number"
+        },
+        "range_min": {
+          "type": "number"
+        },
+        "range_max": {
+          "type": "number"
+        }
+      }
+    },
+    "lidar_cartesian": {
+      "type": "object",
+      "description": "Cartesian conversion dict passed to convert_observations, or omit / use null when unavailable. It contains points_xyz, scan_indices and frame_id.",
+      "additionalProperties": false,
+      "properties": {
+        "points_xyz": {
+          "type": "array",
+          "description": "Usable (x, y, z) points in metres in policy_frame_id.",
+          "items": {
+            "$ref": "#/$defs/vec3"
+          }
+        },
+        "scan_indices": {
+          "type": "array",
+          "description": "Original ray index for each point in points_xyz.",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "frame_id": {
+          "type": "string"
+        }
+      }
+    },
+    "xyzw": {
+      "type": "array",
+      "description": "Quaternion (x, y, z, w).",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "number"
+      }
+    },
+    "pixel": {
+      "type": "array",
+      "description": "Image pixel (u, v).",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "number"
+      }
+    },
+    "fiducial": {
+      "type": "object",
+      "description": "One marker dictionary passed in the fiducials list.",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "marker_size_m": {
+          "type": "number"
+        },
+        "corners": {
+          "type": "array",
+          "description": "Four canonical-order (u, v) pixel pairs.",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/pixel"
+          }
+        },
+        "pose_valid": {
+          "type": "boolean"
+        },
+        "position_xyz": {
+          "description": "Position in policy_frame_id, or null when pose_valid is false.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/vec3"
+            }
+          ]
+        },
+        "orientation_xyzw": {
+          "description": "Orientation in policy_frame_id, or null when pose_valid is false.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/xyzw"
+            }
+          ]
+        },
+        "reprojection_error_px": {
+          "type": "number",
+          "description": "Reprojection error in pixels. NaN means unavailable."
+        }
+      }
+    },
+    "observations_data": {
+      "type": "object",
+      "description": "Arguments for convert_observations. Every property is optional.",
+      "additionalProperties": false,
+      "properties": {
+        "cone_data_available": {
+          "type": "boolean",
+          "description": "True when a fresh cone-detection batch exists. A valid empty frame is True with num_cones == 0."
+        },
+        "num_cones": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of cones in the current detection batch."
+        },
+        "x_coords": {
+          "type": "array",
+          "description": "Forward cone positions in metres (base_link).",
+          "items": {
+            "type": "number"
+          }
+        },
+        "y_coords": {
+          "type": "array",
+          "description": "Leftward cone positions in metres (base_link).",
+          "items": {
+            "type": "number"
+          }
+        },
+        "z_coords": {
+          "type": "array",
+          "description": "Nominal heights of detected points above the ground in metres.",
+          "items": {
+            "type": "number"
+          }
+        },
+        "cone_colour": {
+          "type": "array",
+          "description": "Cone colours as ConeColour names or values.",
+          "items": {
+            "$ref": "#/$defs/cone_colour"
+          }
+        },
+        "cone_confidence": {
+          "type": "array",
+          "description": "Cone classification confidences from 0.0 to 1.0.",
+          "items": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          }
+        },
+        "cone_acquisition_to_publish_latency_s": {
+          "description": "Acquisition-to-publication latency in seconds, or null when no fresh cone batch is available.",
+          "$ref": "#/$defs/nullable_number"
+        },
+        "fiducials_available": {
+          "type": "boolean",
+          "description": "True when a fresh fiducial batch exists. A valid empty batch is True with an empty fiducials list."
+        },
+        "fiducial_dictionary_name": {
+          "description": "ArUco dictionary name for the batch, or null when unavailable.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "fiducial_source_frame_id": {
+          "description": "Camera optical frame for corners, or null when unavailable.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "fiducials": {
+          "type": "array",
+          "description": "Marker dictionaries. Each has id, marker_size_m, corners, pose_valid, position_xyz, orientation_xyzw and reprojection_error_px.",
+          "items": {
+            "$ref": "#/$defs/fiducial"
+          }
+        },
+        "wheel_speed_in_meters_per_second": {
+          "description": "Unsigned wheel speed in m/s, or null.",
+          "$ref": "#/$defs/nullable_number"
+        },
+        "lidar_scan": {
+          "description": "Full raw lidar scan dict, or null when unavailable.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/lidar_scan"
+            }
+          ]
+        },
+        "lidar_cartesian": {
+          "description": "Cartesian conversion dict, or null when unavailable.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/lidar_cartesian"
+            }
+          ]
+        },
+        "roll_angle_in_radians": {
+          "description": "Roll about +x, or null.",
+          "$ref": "#/$defs/nullable_number"
+        },
+        "pitch_angle_in_radians": {
+          "description": "Pitch about +y, or null.",
+          "$ref": "#/$defs/nullable_number"
+        },
+        "heading_angle_in_radians": {
+          "description": "Heading relative to policy entry, wrapped to [-pi, pi], or null.",
+          "$ref": "#/$defs/nullable_number"
+        },
+        "angular_velocity_rad_per_sec": {
+          "description": "Body rotation rates about (x, y, z) in rad/s, or null.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/vec3"
+            }
+          ]
+        },
+        "specific_force_m_per_sec_squared": {
+          "description": "Body specific force along (x, y, z) in m/s^2 including gravity, or null.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/vec3"
+            }
+          ]
+        },
+        "sensor_age_s": {
+          "type": "object",
+          "description": "Age in seconds of each sensor's last accepted sample, or null if none exists.",
+          "additionalProperties": {
+            "$ref": "#/$defs/nullable_number"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/sensor_name"
+          }
+        },
+        "sensor_stamp_ns": {
+          "type": "object",
+          "description": "ROS stamp in nanoseconds of each sensor's last accepted sample, or null.",
+          "additionalProperties": {
+            "$ref": "#/$defs/nullable_integer"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/sensor_name"
+          }
+        },
+        "dt": {
+          "type": "number",
+          "description": "Actual monotonic seconds since the previous policy step; 0.0 on the first step."
+        },
+        "policy_elapsed_s": {
+          "type": "number",
+          "description": "Seconds since entering the publishing-policy state."
+        },
+        "is_first_policy_step": {
+          "type": "boolean",
+          "description": "True on the first step after entering the publishing-policy state."
+        }
+      }
+    }
+  }
+}
