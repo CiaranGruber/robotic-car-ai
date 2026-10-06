@@ -170,6 +170,11 @@
       # Fraction of target_speed_m_per_s while the lane is lost, double in
       # [0.0, 1.0].
       lane_loss_speed_fraction: 0.5
+      # Seconds after requesting state 3 before the car STOPS for the rest of
+      # the run, finite double >= 0; 0.0 drives until the lane ends. 8.0 for the
+      # 5-10 s demo runs: about 4 m at 0.5 m/s, so lay out a cone lane at least
+      # that long, or the car stops at its end instead.
+      run_duration_s: 8.0
 
     # TEMPORARY CONTROL SETTINGS (ControlConfig in policy/control/control.py,
     # which checks them) until Car Control's conversion is ready. These are

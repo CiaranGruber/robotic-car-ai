@@ -37,19 +37,19 @@ def lane_cones(offset_m, heading_rad, colours=(ConeColour.YELLOW, ConeColour.BLU
     return cones
 
 
-def observe(cones, first_step=False, cone_age_s=0.0):
+def observe(cones, first_step=False, cone_age_s=0.0, elapsed_s=0.0):
     return CarObservations(
         cones=(None if cones is None else ConeBatch(cones, SensorAge(cone_age_s, None), acquisition_to_publish_latency_s=0.0)),
         fiducials=None,
         lidar_scan=None,
         lidar_cartesian=None,
         car=ObservedCarState(None, None, None, None),
-        policy=PolicyState(dt=0.0 if first_step else 0.1, policy_elapsed_s=0.0, is_first_policy_step=first_step),
+        policy=PolicyState(dt=0.0 if first_step else 0.1, policy_elapsed_s=elapsed_s, is_first_policy_step=first_step),
     )
 
 
-def command(policy, cones, first_step=True, cone_age_s=0.0):
-    instructions = policy.run_policy(observe(cones, first_step, cone_age_s), None)
+def command(policy, cones, first_step=True, cone_age_s=0.0, elapsed_s=0.0):
+    instructions = policy.run_policy(observe(cones, first_step, cone_age_s, elapsed_s), None)
     assert len(instructions) == 1 and isinstance(instructions[0], DriveCommand)
     return instructions[0]
 
@@ -168,6 +168,20 @@ def test_stops_for_the_rest_of_the_run_after_the_lane_loss_timeout(timeout_s, dr
     assert command(policy, lane_cones(0.0, 0.0), first_step=True).speed_m_per_s == config.target_speed_m_per_s
 
 
+def test_stops_for_the_rest_of_the_run_after_the_run_duration():
+    config = MpcConfig(run_duration_s=5.0)
+    policy = MpcPolicy(config)
+    assert command(policy, lane_cones(0.0, 0.0), elapsed_s=0.0).speed_m_per_s == config.target_speed_m_per_s
+    assert command(policy, lane_cones(0.0, 0.0), first_step=False, elapsed_s=4.9).speed_m_per_s > 0.0
+    assert command(policy, lane_cones(0.0, 0.0), first_step=False, elapsed_s=5.0) == DriveCommand(0.0, 0.0)
+    # A new run starts the time again
+    assert command(policy, lane_cones(0.0, 0.0), first_step=True, elapsed_s=0.0).speed_m_per_s > 0.0
+
+
+def test_zero_run_duration_drives_until_the_lane_ends():
+    assert command(MpcPolicy(MpcConfig()), lane_cones(0.0, 0.0), elapsed_s=1e6).speed_m_per_s > 0.0
+
+
 def test_waits_stopped_until_the_first_usable_lane():
     policy = MpcPolicy(MpcConfig())
     # Longer than the lane loss timeout, which only applies after the first usable lane
@@ -179,7 +193,7 @@ def test_waits_stopped_until_the_first_usable_lane():
 @pytest.mark.parametrize("change", [
     {"horizon_steps": 0}, {"horizon_steps": 2.0}, {"step_s": 0.0}, {"curvature_weight": 0.0},
     {"lateral_error_weight": -1.0}, {"target_speed_m_per_s": math.nan}, {"max_curvature_per_m": math.inf},
-    {"lane_loss_timeout_s": -0.1}, {"lane_loss_timeout_s": math.inf}, {"lane_loss_speed_fraction": 1.5},
+    {"run_duration_s": -1.0}, {"lane_loss_timeout_s": -0.1}, {"lane_loss_timeout_s": math.inf}, {"lane_loss_speed_fraction": 1.5},
 ])
 def test_invalid_settings_are_rejected(change):
     with pytest.raises(ValueError):
