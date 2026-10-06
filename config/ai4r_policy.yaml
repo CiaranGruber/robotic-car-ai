@@ -157,6 +157,19 @@
       # centre when only one cone row is visible. 0.75 was measured from the
       # test cones on 2026-10-05; confirm it with a tape measure.
       lane_width_m: 0.75
+      # LANE LOSS: what happens when no lane can be found (no cone row can be
+      # fitted, or both rows are on one side of the car). Before the first
+      # usable lane of a run, the car waits stopped. After it, the car follows
+      # the last plan at reduced speed for up to lane_loss_timeout_s, then
+      # STOPS for the rest of the run, even if cones reappear. To drive again,
+      # request zero state, then state 3 (a repeated state-3 request is ignored).
+      # Seconds, finite double >= 0; 0.0 stops at once. Cones arrive at about
+      # 10 Hz (measured 2026-10-06), so 0.5 tolerates about 4 missed batches.
+      # Starting value for Task A7; keep it short, the plan only covers the horizon.
+      lane_loss_timeout_s: 0.5
+      # Fraction of target_speed_m_per_s while the lane is lost, double in
+      # [0.0, 1.0].
+      lane_loss_speed_fraction: 0.5
 
     # TEMPORARY CONTROL SETTINGS (ControlConfig in policy/control/control.py,
     # which checks them) until Car Control's conversion is ready. These are
