@@ -44,6 +44,9 @@ class MpcPolicy:
         """Seconds since the last usable lane; 0.0 while the lane is usable."""
         self.stopped_for_lane_loss = False
         """True once the lane was lost for lane_loss_timeout_s. The car then stays stopped for the rest of the run."""
+        self.lane_state = None
+        """Where the car was relative to the lane centre in this step's observation, or None when this step had no
+        usable lane. It is found even while stopped, so the lane estimate can be checked with the car held still."""
         self.solve_count = 0
         """Number of times the MPC problem was solved in this run."""
         self.fallback_count = 0
@@ -68,12 +71,13 @@ class MpcPolicy:
             self.distance_since_plan_m += distance_m
             if self.farthest_cone_ahead_m is not None:
                 self.farthest_cone_ahead_m -= distance_m
+        cones = observations.cones
+        state = reference_from_cones(cones, self.config.lane_width_m)
+        self.lane_state = state
         run_duration_s = self.config.run_duration_s
         if self.stopped_for_lane_loss or 0.0 < run_duration_s <= observations.policy.policy_elapsed_s:
             # Stopped for the rest of the run
             return [self._command(0.0, 0.0)]
-        cones = observations.cones
-        state = reference_from_cones(cones, self.config.lane_width_m)
         if cones is None or state is None:
             # No lane or a doubtful lane
             return [self._command_without_lane(observations)]

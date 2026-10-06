@@ -42,5 +42,12 @@ class MovementPolicy:
         instructions = self.action_policy.run_policy(observations, road_map)
         # The car actions to determine
         car_actions = self.control.determine_car_actions(observations, instructions)
+        # Where the car is relative to the lane centre, to plot in Foxglove: debug1 is the lateral error in metres
+        # (positive left of the centre) and debug2 the heading error in radians (positive pointing left of the lane).
+        # Nothing is published on them when this step has no usable lane.
+        lane_state = self.action_policy.lane_state
+        if lane_state is not None:
+            car_actions = dataclasses.replace(
+                car_actions, debug1=lane_state.lateral_error_m, debug2=lane_state.heading_error_rad)
         # Return final car actions
         return car_actions

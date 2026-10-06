@@ -103,6 +103,13 @@ def test_movement_policy_turns_back_to_the_lane_centre_within_the_effort_limit()
     assert actions.camera_pan_action is None
 
 
+def test_movement_policy_publishes_the_lane_state_on_debug1_and_debug2():
+    """debug1 is the lateral error in metres and debug2 the heading error in radians, for Foxglove."""
+    actions = MovementPolicy(MpcConfig(), ConeFilterConfig(), ControlConfig()).step(
+        observe(0.3, first_step=True, cones=lane_cones(0.3, 0.1)))
+    assert actions.debug1 == pytest.approx(0.3) and actions.debug2 == pytest.approx(0.1)
+
+
 def test_movement_policy_stops_without_a_lane():
     actions = MovementPolicy(MpcConfig(), ConeFilterConfig(), ControlConfig()).step(observe(0.5, first_step=True, cones=[]))
     assert actions == default_actions()
