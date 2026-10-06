@@ -407,6 +407,26 @@ class ObservedCarState:
 
 
 @dataclass(frozen=True)
+class RcInput:
+    """The operator's remote control (RC) sticks, as read by the vehicle interface.
+
+    While the vehicle is Enabled, the policy drives the car and the RC sticks do not move it, so the policy can
+    use them as the operator's request. Independently of the policy, holding the RC drive below the vehicle's stop
+    threshold (rc_stop_threshold_us in config/traxxas_vehicle_interface.yaml, -0.2 by default) disables the vehicle.
+    The vehicle interface only publishes the sticks while both RC channels are GOOD.
+    """
+    drive: float
+    """Normalised RC drive in [-1, 1]: positive forwards, zero neutral."""
+    steer: float
+    """Normalised RC steering in [-1, 1], zero centre.
+
+    It should turn the wheels the same way as the same steering_action; check the direction on a stand.
+    """
+    sensor_age: SensorAge
+    """Age of the RC sample. Its stamp_ns is always None because RC messages have no header."""
+
+
+@dataclass(frozen=True)
 class PolicyState:
     """Timing information about the current policy step and run."""
     dt: float
@@ -457,6 +477,9 @@ class CarObservations:
     """The measured state of the car."""
     policy: PolicyState
     """Timing information about the current policy step and run."""
+    rc: RcInput | None = None
+    """The operator's RC sticks, or None when they are missing or expired, for example while an RC channel is
+    not GOOD."""
 
 
 @dataclass
@@ -520,6 +543,7 @@ def convert_observations(
     heading_angle_in_radians: float | None,
     angular_velocity_rad_per_sec: tuple[float, float, float] | None,
     specific_force_m_per_sec_squared: tuple[float, float, float] | None,
+    rc_drive_and_steer: tuple[float, float] | None,
     sensor_age_s: dict[str, float | None],
     sensor_stamp_ns: dict[str, int | None],
     dt: float,
@@ -563,6 +587,7 @@ def convert_observations(
     :param angular_velocity_rad_per_sec: Body rotation rates about (x, y, z) in rad/s, or None.
     :param specific_force_m_per_sec_squared: Body specific force along (x, y, z) in m/s^2
         including gravity, or None.
+    :param rc_drive_and_steer: Normalised RC (drive, steer) in [-1, 1], positive drive forwards, or None.
     :param sensor_age_s: Age in seconds of each sensor's last accepted sample, keyed by sensor
         name, or None if none exists.
     :param sensor_stamp_ns: ROS stamp in nanoseconds of each sensor's last accepted sample, keyed
@@ -695,6 +720,10 @@ def convert_observations(
     wheel_speed = None
     if wheel_speed_in_meters_per_second is not None:
         wheel_speed = WheelSpeed(wheel_speed_in_meters_per_second, get_sensor_age("wheel_speed"))
+    rc = None
+    if rc_drive_and_steer is not None:
+        rc = RcInput(drive=rc_drive_and_steer[0], steer=rc_drive_and_steer[1],
+                     sensor_age=get_sensor_age("rc_drive_and_steer"))
     # Return a filled car observations object
     return CarObservations(
         cones=cones,
@@ -712,6 +741,7 @@ def convert_observations(
             policy_elapsed_s=policy_elapsed_s,
             is_first_policy_step=is_first_policy_step,
         ),
+        rc=rc,
     )
 
 

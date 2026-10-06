@@ -66,6 +66,11 @@ class MpcConfig:
     """
     lane_loss_speed_fraction: float = 0.5
     """Fraction of target_speed_m_per_s to drive at while the lane is lost. Must be in [0, 1]."""
+    run_duration_s: float = 0.0
+    """Seconds after entering the publishing-policy state before the car stops for the rest of the run.
+
+    Must be finite and at least 0. 0.0 drives until the lane ends.
+    """
 
     def __post_init__(self):
         if isinstance(self.horizon_steps, bool) or not isinstance(self.horizon_steps, int) or self.horizon_steps < 1:
@@ -74,7 +79,8 @@ class MpcConfig:
             value = getattr(self, name)
             if not (math.isfinite(value) and value > 0.0):
                 raise ValueError(f"mpc.{name} must be positive and finite, not {value}")
-        for name in ("lateral_error_weight", "heading_error_weight", "curvature_change_weight", "lane_loss_timeout_s"):
+        for name in ("lateral_error_weight", "heading_error_weight", "curvature_change_weight", "lane_loss_timeout_s",
+                     "run_duration_s"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value >= 0.0):
                 raise ValueError(f"mpc.{name} must be finite and at least 0, not {value}")

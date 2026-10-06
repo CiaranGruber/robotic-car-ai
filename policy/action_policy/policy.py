@@ -62,7 +62,9 @@ class MpcPolicy:
             self.reset()
         else:
             self.distance_since_plan_m += self.previous_speed_m_per_s * observations.policy.dt
-        if self.stopped_for_lane_loss:
+        run_duration_s = self.config.run_duration_s
+        if self.stopped_for_lane_loss or 0.0 < run_duration_s <= observations.policy.policy_elapsed_s:
+            # Stopped for the rest of the run
             return [self._command(0.0, 0.0)]
         cones = observations.cones
         state = reference_from_cones(cones, self.config.lane_width_m)

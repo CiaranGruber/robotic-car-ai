@@ -64,6 +64,7 @@ from dream_interfaces.msg import (ConeDetection, ConeDetections, DriveAndSteer,
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from policy.action_policy.mpc import MpcConfig
+from policy.action_policy.open_space import OpenSpaceConfig
 from policy.cone_filter.cone_filter import ConeFilterConfig
 from policy.control.control import ControlConfig
 from policy.input_output import ConeColour, convert_observations, convert_actions
@@ -76,8 +77,8 @@ FSM_STATE_PUBLISHING_POLICY_ACTION = 3
 STATE_NAMES = {1: "Not publishing any actions", 2: "Publishing zero actions",
                3: "Publishing policy actions"}
 SENSORS = ("cone_detections", "fiducial_detections", "lidar_scan", "lidar_cartesian", "wheel_speed", "imu_orientation",
-           "imu_angular_velocity", "imu_specific_force")
-STAMPED_SENSORS = tuple(name for name in SENSORS if name != "wheel_speed")
+           "imu_angular_velocity", "imu_specific_force", "rc_drive_and_steer")
+STAMPED_SENSORS = tuple(name for name in SENSORS if name not in ("wheel_speed", "rc_drive_and_steer"))
 FIDUCIAL_DICTIONARY_SIZES = {
     **{f"DICT_{bits}X{bits}_{count}": count
        for bits in (4, 5, 6, 7) for count in (50, 100, 250, 1000)},
@@ -211,19 +212,24 @@ class PolicyNode(Node):
         # YAML alone does not declare a parameter. A value such as 0.2 is a
         # floating-point number; 0 is an integer, which is a different ROS type.
 
-        # MPC, cone filter and control settings: see mpc, cone_filter and control
-        # in ai4r_policy.yaml. MpcConfig (policy/action_policy/mpc.py),
-        # ConeFilterConfig (policy/cone_filter/cone_filter.py) and ControlConfig
+        # Movement policy settings: see action_policy, mpc, open_space, cone_filter
+        # and control in ai4r_policy.yaml. MovementPolicy (policy/policy_runner.py)
+        # checks action_policy. MpcConfig (policy/action_policy/mpc.py),
+        # OpenSpaceConfig (policy/action_policy/open_space.py), ConeFilterConfig
+        # (policy/cone_filter/cone_filter.py) and ControlConfig
         # (policy/control/control.py) hold their defaults and check them.
+        self.declare_parameter("action_policy", "mpc", ParameterDescriptor(read_only=True))
         settings = {}
         for prefix, config_type in (
-                ("mpc", MpcConfig), ("cone_filter", ConeFilterConfig), ("control", ControlConfig)):
+                ("mpc", MpcConfig), ("open_space", OpenSpaceConfig), ("cone_filter", ConeFilterConfig),
+                ("control", ControlConfig)):
             defaults = asdict(config_type())
             for name, default in defaults.items():
                 self.declare_parameter(f"{prefix}.{name}", default, ParameterDescriptor(read_only=True))
             settings[prefix] = config_type(**{
                 name: self.get_parameter(f"{prefix}.{name}").value for name in defaults})
-        self.movement_policy = MovementPolicy(settings["mpc"], settings["cone_filter"], settings["control"])
+        self.movement_policy = MovementPolicy(settings["mpc"], settings["cone_filter"], settings["control"],
+                                              settings["open_space"], self.get_parameter("action_policy").value)
 
         self.fsm_state = FSM_STATE_PUBLISHING_ZERO_ACTIONS
         self.state_reason = "Startup: waiting for an explicit policy request"
@@ -257,6 +263,8 @@ class PolicyNode(Node):
         self.create_subscription(Float32, "wheel_speed_m_per_sec",
                                  self.wheel_speed_callback, reliable_one)
         self.create_subscription(Imu, "imu/data", self.imu_callback, imu_qos)
+        self.create_subscription(DriveAndSteer, "rc_drive_and_steer_normalized",
+                                 self.rc_callback, reliable_one)
         self.create_subscription(UInt16, "policy_fsm_transition_request",
                                  self.fsm_transition_request_callback, 10)
 
@@ -597,6 +605,17 @@ class PolicyNode(Node):
         else:
             self._warn("wheel_invalid", "Ignoring invalid unsigned wheel-speed measurement")
 
+    def rc_callback(self, msg):
+        now, ros_now = self._times()
+        # The vehicle interface only publishes the sticks while both RC channels
+        # are GOOD, so a missing sample means no usable RC, never centred sticks.
+        values = (msg.drive, msg.steer)
+        if (msg.units == DriveAndSteer.UNITS_NORMALIZED
+                and all(finite_number(v) and -1.0 <= v <= 1.0 for v in values)):
+            self._store("rc_drive_and_steer", values, None, now, ros_now)
+        else:
+            self._warn("rc_invalid", "Ignoring RC sticks that are not finite normalized values")
+
     def imu_callback(self, msg):
         now, ros_now = self._times()
         if not valid_frame(msg.header.frame_id):
@@ -755,6 +774,12 @@ class PolicyNode(Node):
         angular_velocity_rad_per_sec = observations["imu_angular_velocity"]
         specific_force_m_per_sec_squared = observations["imu_specific_force"]
 
+        # RC STICK OBSERVATIONS: EXTRACT INTO LOCAL VARIABLES
+        rc_drive_and_steer = observations["rc_drive_and_steer"]
+        rc_available = rc_drive_and_steer is not None
+        rc_drive_normalized = None if rc_drive_and_steer is None else rc_drive_and_steer[0]
+        rc_steer_normalized = None if rc_drive_and_steer is None else rc_drive_and_steer[1]
+
         # ===============================
         # EXPLANATION OF THE OBSERVATIONS
         # ===============================
@@ -908,6 +933,21 @@ class PolicyNode(Node):
         #   - Absolute orientation uses magnetic ENU (east/north/up).
         #   - Partial messages are normal and each IMU field may independently be None.
         #
+        # RC STICK OBSERVATIONS
+        # - LOCAL VARIABLE NAMES: rc_drive_normalized, rc_steer_normalized
+        #   - These are the operator's remote control sticks, normalized to [-1, 1]
+        #     with zero at neutral/centre, as read by the vehicle interface.
+        #   - Positive drive is forwards. Steering should turn the wheels the same
+        #     way as the same steering_action; check the direction on a stand.
+        #   - While the vehicle is Enabled, the POLICY drives the car: the sticks do
+        #     NOT move it, so your policy can use them as the operator's request.
+        #   - Independently of this policy, holding the RC drive below the vehicle's
+        #     stop threshold (rc_stop_threshold_us in traxxas_vehicle_interface.yaml,
+        #     -0.2 by default) disables the vehicle. That is the operator's stop.
+        #   - The sticks are only published while both RC channels are GOOD, so
+        #     rc_available False (both values None) means no usable RC, NOT centred
+        #     sticks.
+        #
         # OTHER RELEVANT INFORMATION:
         # - LOCAL VARIABLE NAME: sensor_age_s[name]
         #   - This is the age in seconds of the last accepted sample of that "name"
@@ -1028,6 +1068,7 @@ class PolicyNode(Node):
             heading_angle_in_radians=heading_angle_in_radians,
             angular_velocity_rad_per_sec=angular_velocity_rad_per_sec,
             specific_force_m_per_sec_squared=specific_force_m_per_sec_squared,
+            rc_drive_and_steer=rc_drive_and_steer,
             sensor_age_s=sensor_age_s,
             sensor_stamp_ns=sensor_stamp_ns,
             dt=dt,
