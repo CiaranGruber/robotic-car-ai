@@ -217,7 +217,9 @@
       # Effort per metre of accumulated speed error.
       speed_ki: 0.1
       # Largest drive effort ever requested, double in (0, 1]. Keep it small.
-      max_drive_effort: 0.2
+      # 0.2 (about 1542 us applied) did not turn the wheels of car 20 on a stand
+      # on 2026-10-06, inside the ESC's deadband; 0.3 is the next step.
+      max_drive_effort: 0.3
 
     # CONE OUTLIER FILTER SETTINGS (ConeFilterConfig in
     # policy/cone_filter/cone_filter.py, which checks them; invalid values stop
