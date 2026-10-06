@@ -59,7 +59,7 @@ skips them unless run with `--run-unseen`, which is only for milestone M1.
 
 ### Pass thresholds
 
-**Provisional** until the Card 1.1 requirement and metric table is agreed; `Thresholds` in
+From the Card 1.1 requirement and metric table in [stage1-approach.md](stage1-approach.md); `Thresholds` in
 `stage1_scenarios.py` holds the values, and both must be kept the same. Every case uses the same thresholds, and
 passes only if every row holds.
 
@@ -146,7 +146,7 @@ construction notebook. A pytest check confirms every simulated lane matches its 
 | --- | --- | --- |
 | Car | Kinematic bicycle, 0.33 m wheelbase, 3 kg, 45 degree steering | dream-gym cone-following example |
 | Cone detector | 80 degree view, 4 m range, 0.01 m position noise | Shared defaults |
-| Policy rate | 10 Hz (one detection batch per step); simulation step 0.05 s | Placeholder until Task 1.5 |
+| Policy rate | 10 Hz (one detection batch per step); simulation step 0.05 s | Task 1.5, measured on car 20 |
 | Speed and steering conversion | Stand-in for Car Control: wheel angle = atan(wheelbase x curvature), drag feed-forward plus proportional speed control | Replace with Car Control's conversion (Task 1.4) |
 | Wheel speed | True forwards speed, no noise | |
 
@@ -175,9 +175,11 @@ Import it into the team's shared sheet and replace this sentence with the sheet'
 
 ## Open items
 
-- Card 1.1: agree the requirements and metrics, then update `Thresholds` and the table above.
+- Card 1.1: done in [stage1-approach.md](stage1-approach.md). R7 (safe stop when the lane is lost) still needs a
+  case and its metric, with Task A7.
 - Task 1.4: which colour is on which side (yellow left is assumed here) and Car Control's conversion.
-- Task 1.5: the real detection rate and calculation budget (`POLICY_PERIOD_S`, `TIME_BUDGET_S`).
+- Task 1.5: done (10 Hz, 20 ms). The detections are about 0.2 s old on the car, against 0.0 s in most cases here;
+  Task A2 decides whether that becomes the nominal delay.
 - Task A1: measured camera view, range and noise; the lab cones' base size (`CONE_RADIUS_M`).
 - Task A2: check dream-gym's dynamic tyre model against the 1:10 car (T11).
 - Task A7: lane-end behaviour, so the stop-zone test can pass.

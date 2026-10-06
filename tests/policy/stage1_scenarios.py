@@ -118,9 +118,9 @@ DETECTOR_NOISE_M = 0.01
 ENV_STEP_S = 0.05
 """Simulation step in seconds."""
 POLICY_PERIOD_S = 0.1
-"""Time between policy steps in seconds, i.e. one cone detection batch per step. Replace with Task 1.5's rate."""
-TIME_BUDGET_S = 0.05
-"""Calculation time allowed per policy step in seconds (shared default, Task 1.5)."""
+"""Time between policy steps in seconds, i.e. one cone detection batch per step (10 Hz on car 20, Task 1.5)."""
+TIME_BUDGET_S = 0.02
+"""Calculation time allowed per policy step in seconds (99th percentile, Task 1.5): a fifth of the detection gap."""
 MAX_DURATION_S = 20.0
 """A run ends after this long even if the car has not stopped."""
 STOPPED_SPEED_M_PER_S = 0.02
@@ -200,7 +200,7 @@ class Stage1Case:
 class Thresholds:
     """Pass thresholds on the Stage 1 metrics (Card 2.1). Every one must hold for a case to pass.
 
-    PROVISIONAL until the Card 1.1 requirement and metric table is agreed; keep the two in step.
+    These are the Card 1.1 requirements and metrics in docs/stage1-approach.md; keep the two in step.
     """
     max_cones_touched: int = 0
     """R2 no cone touched."""
