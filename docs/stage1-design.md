@@ -1,9 +1,9 @@
 # Stage 1 design: simulation, baseline, MPC and RL
 
-The algorithm tasks of Card 3 in [movement-policy-tasks.md](movement-policy-tasks.md). The requirements and
+The algorithm tasks of Card 3 and milestone M1 in [movement-policy-tasks.md](movement-policy-tasks.md). The requirements and
 metrics (R1a-R7) are in [stage1-approach.md](stage1-approach.md), and the test cases, thresholds and harness in
 [stage1-test-cases.md](stage1-test-cases.md). Everything here was run with the harness in
-`tests/policy/stage1_scenarios.py` on the **tuning cases only**; the unseen cases are kept for milestone M1.
+`tests/policy/stage1_scenarios.py` on the **tuning cases only**, except M1, the only place the unseen cases were used.
 
 ## A2 A simulation that behaves like our car
 
@@ -280,3 +280,57 @@ the stop at the roll-out distance fixed it.
 **To measure on the car.** The roll-out after a stop request (`stop_distance_per_speed_s`): the temporary Car
 Control only coasts, so it is likely longer than the 0.6 s of the simulation. The camera's reliable range (Task
 A1), which `lane_end_distance_m` must stay below.
+
+## M1 Choose MPC or RL
+
+Run once the A4 and A5 designs were fixed and committed; the unseen cases (`tests/policy/unseen/`) were opened for
+the first time here. Both designs and the A3 baseline (for reference) ran on the three unseen cases with their own
+disturbances and the nominal 0.2 s detection age (`python3 tests/policy/stage1_design.py m1 --models
+tests/policy/rl_models/balanced_1M.zip --figures docs/figures`):
+
+- U1: 0.2 m right, 5 degrees off to the right, 0.7 m/s, 0.03 m noise, 0.1 s extra delay.
+- U2: 0.1 m left, 15 degrees off to the left, two missed blue cones and a yellow cone seen as blue.
+- U3: a 7 m x 0.9 m lane, 0.1 m right, 0.8 m/s, 0.02 m noise, 0.2 s extra delay, a missed cone near the end.
+
+The extra delays add to the nominal 0.2 s since A2, so U1 and U3 have 0.3 and 0.4 s in all, harder than when the
+cases were written.
+
+| Design | Every unseen case passes | Failed | Worst R1b [m] | Worst R3 [m/s] | Worst R4 [1/(m s)] | Cones touched | Worst outside lane [m] | Pareto front |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PP L=1.0 k=1.0 (A3 baseline) | yes | - | 0.023 | 0.003 | 0.80 | 0 | 0.000 | yes |
+| MPC N20 q3/1 r3 k3 (A4 choice) | yes | - | 0.028 | 0.003 | 0.51 | 0 | 0.000 | yes |
+| RL balanced_1M (A5 choice) | no | U1 (R4), U2 (R4) | 0.040 | 0.003 | 1.59 | 0 | 0.000 |  |
+
+**Baseline: PP L=1.0 k=1.0 (A3 baseline)**
+
+| Case | Lane | Touched | Outside lane [m] | Lat. err. at end [m] | Speed err. [m/s] | Curv. rate RMS [1/(m s)] | Stop past last cone [m] | Lane lost to stop [s] | Fallbacks | p99 calc [ms] | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| U1 | 6x1m_0.5 | 0 | 0.000 | 0.002 | 0.001 | 0.65 | 0.31 |  | 0 | 1.6 | PASS |
+| U2 | 6x1m_0.5 | 0 | 0.000 | 0.016 | 0.003 | 0.80 | 0.21 |  | 0 | 7.3 | PASS |
+| U3 | 7x0.9m_0.5 | 0 | 0.000 | 0.023 | 0.002 | 0.35 | 0.23 |  | 0 | 6.8 | PASS |
+
+**MPC: N20 q3/1 r3 k3 (A4 choice)**
+
+| Case | Lane | Touched | Outside lane [m] | Lat. err. at end [m] | Speed err. [m/s] | Curv. rate RMS [1/(m s)] | Stop past last cone [m] | Lane lost to stop [s] | Fallbacks | p99 calc [ms] | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| U1 | 6x1m_0.5 | 0 | 0.000 | 0.028 | 0.001 | 0.32 | 0.17 |  | 0 | 5.6 | PASS |
+| U2 | 6x1m_0.5 | 0 | 0.000 | 0.010 | 0.003 | 0.51 | 0.21 |  | 0 | 6.3 | PASS |
+| U3 | 7x0.9m_0.5 | 0 | 0.000 | 0.012 | 0.002 | 0.12 | 0.23 |  | 0 | 4.2 | PASS |
+
+**RL: balanced_1M (A5 choice)**
+
+| Case | Lane | Touched | Outside lane [m] | Lat. err. at end [m] | Speed err. [m/s] | Curv. rate RMS [1/(m s)] | Stop past last cone [m] | Lane lost to stop [s] | Fallbacks | p99 calc [ms] | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| U1 | 6x1m_0.5 | 0 | 0.000 | 0.020 | 0.001 | 1.51 | 0.25 |  | 0 | 4.0 | FAIL: rms_curvature_rate_per_m_s = 1.51 > 1 |
+| U2 | 6x1m_0.5 | 0 | 0.000 | 0.013 | 0.003 | 1.59 | 0.21 |  | 0 | 2.5 | FAIL: rms_curvature_rate_per_m_s = 1.59 > 1 |
+| U3 | 7x0.9m_0.5 | 0 | 0.000 | 0.040 | 0.002 | 0.50 | 0.23 |  | 0 | 16.3 | PASS |
+
+**Decision (Card 1.3 rule).** A design is eligible only if every unseen case passes: the MPC is, the RL policy is
+not (its steering fails R4 on U1 and U2, 1.51 and 1.59 against 1.0). The MPC is on the Pareto front of the worst
+cases of R1b, R3 and R4, so **the MPC is chosen for Stage 1** and goes to milestone M2 on the car. For reference,
+the A3 baseline also passes every unseen case and is on the front too: it ends 5 mm closer to the centre but steers
+less smoothly (0.80 against 0.51), as on the tuning cases.
+
+![The chosen MPC on U2 (missed cones and a wrong colour)](figures/stage1_M1_MPC_U2.png)
+
+The other trajectories are `docs/figures/stage1_M1_<design>_<case>.png`.
