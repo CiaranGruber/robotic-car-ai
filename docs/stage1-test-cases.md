@@ -50,6 +50,7 @@ already at the case speed (a rolling start). Lane sizes are length x width, then
 | T9 | Tuning | **8** x 1.0 m, 0.5 m | 5 degrees off to the left | 1.0 m/s | None |
 | T10 | Tuning | 6 x 1.0 m, 0.5 m | Centred, straight | 1.0 m/s | Extra object beside the lane; glare limits the camera to 3 m |
 | T11 | Tuning | 6 x 1.0 m, 0.5 m | 0.1 m to the left | 1.0 m/s | Wet floor (dynamic car model), car 20% heavier |
+| T12 | Tuning | 6 x 1.0 m, 0.5 m | Centred, straight | 1.0 m/s | Camera covered from 3 m: the lane is lost mid-lane (R7) |
 | U1-U3 | Unseen | Kept in `tests/policy/unseen/` | | | |
 
 T1-T4 are the card's starting cases. T5 checks right turns as well as left, and T6 isolates delay. T7-T9 are the
@@ -72,34 +73,39 @@ passes only if every row holds.
 | R4 Smooth | RMS rate of change of the requested curvature | at most 1.0 1/(m s) |
 | R5 Stop at lane end | Car centre's stop position past the last cone pair | 0.0 to 0.5 m |
 | R6 Real time | Solver fallback count | 0 |
-| R6 Real time | 99th-percentile calculation time per policy step | at most 50 ms (only meaningful on the car computer) |
+| R6 Real time | 99th-percentile calculation time per policy step | at most 20 ms (only meaningful on the car computer) |
+| R7 Safe stop when the lane is lost | Time from the camera losing the lane mid-lane to the stop request (T12; replaces R5 there) | at most 0.6 s |
 
 The curvature-rate limit is about a fifth of the simulated steering servo's rate limit (90 degrees per second
 at the 0.33 m wheelbase). The stop zone follows the card's example rule.
 
-### Current result: shipped MPC on the tuning cases
+### Current result: MPC with the Task A7 lane-end rule on the tuning cases
 
 Shipped `ConeFilterConfig` defaults, then shipped `MpcConfig` defaults with the case's speed and lane width, in
-simulation (6 October 2026):
+simulation (6 October 2026). The calculation times are on a laptop, so R6a is informational here.
 
-| Case | Lane | Touched | Outside lane [m] | Lat. err. at end [m] | Speed err. [m/s] | Curv. rate RMS [1/(m s)] | Stop past last cone [m] | Fallbacks | Result |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | 6x1m_0.5 | 0 | 0.000 | 0.002 | 0.000 | 0.14 | -0.50 | 0 | Fail (R5) |
-| T2 | 6x1m_0.5 | 0 | 0.000 | 0.003 | 0.000 | 0.35 | -0.51 | 0 | Fail (R5) |
-| T3 | 6x1m_0.5 | 0 | 0.000 | 0.001 | 0.000 | 0.32 | -0.50 | 0 | Fail (R5) |
-| T4 | 6x1m_0.5 | 0 | 0.000 | 0.007 | 0.000 | 0.38 | -0.50 | 0 | Fail (R5) |
-| T5 | 6x1m_0.5 | 0 | 0.000 | 0.000 | 0.000 | 0.62 | -0.51 | 0 | Fail (R5) |
-| T6 | 6x1m_0.5 | 0 | 0.000 | 0.005 | 0.003 | 0.12 | -0.38 | 0 | Fail (R5) |
-| T7 | 6x0.8m_0.5 | 0 | 0.000 | 0.000 | 0.000 | 0.25 | -0.40 | 0 | Fail (R5) |
-| T8 | 6x1.2m_0.75 | 0 | 0.000 | 0.000 | 0.000 | 0.38 | -0.91 | 0 | Fail (R5) |
-| T9 | 8x1m_0.5 | 0 | 0.000 | 0.005 | 0.000 | 0.15 | -0.50 | 0 | Fail (R5) |
-| T10 | 6x1m_0.5 | 0 | 0.000 | 0.008 | 0.000 | 0.17 | -0.50 | 0 | Fail (R5) |
-| T11 | 6x1m_0.5 | 0 | 0.000 | 0.153 | 0.001 | 0.89 | -0.20 | 0 | Fail (R1, R5) |
+| Case | Lane | Touched | Outside lane [m] | Lat. err. at end [m] | Speed err. [m/s] | Curv. rate RMS [1/(m s)] | Stop past last cone [m] | Lane lost to stop [s] | Fallbacks | p99 calc [ms] | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T1 | 6x1m_0.5 | 0 | 0.000 | 0.011 | 0.000 | 0.14 | 0.20 |  | 0 | 0.9 | PASS |
+| T2 | 6x1m_0.5 | 0 | 0.000 | 0.000 | 0.000 | 0.34 | 0.19 |  | 0 | 1.1 | PASS |
+| T3 | 6x1m_0.5 | 0 | 0.000 | 0.006 | 0.000 | 0.31 | 0.20 |  | 0 | 1.0 | PASS |
+| T4 | 6x1m_0.5 | 0 | 0.000 | 0.024 | 0.000 | 0.37 | 0.30 |  | 0 | 0.6 | PASS |
+| T5 | 6x1m_0.5 | 0 | 0.000 | 0.005 | 0.000 | 0.59 | 0.19 |  | 0 | 0.7 | PASS |
+| T6 | 6x1m_0.5 | 0 | 0.000 | 0.006 | 0.003 | 0.11 | 0.22 |  | 0 | 0.7 | PASS |
+| T7 | 6x0.8m_0.5 | 0 | 0.000 | 0.003 | 0.000 | 0.25 | 0.20 |  | 0 | 0.8 | PASS |
+| T8 | 6x1.2m_0.75 | 0 | 0.000 | 0.010 | 0.000 | 0.36 | 0.19 |  | 0 | 0.3 | PASS |
+| T9 | 8x1m_0.5 | 0 | 0.000 | 0.003 | 0.000 | 0.14 | 0.20 |  | 0 | 0.8 | PASS |
+| T10 | 6x1m_0.5 | 0 | 0.000 | 0.012 | 0.000 | 0.17 | 0.20 |  | 0 | 0.4 | PASS |
+| T11 | 6x1m_0.5 | 0 | 0.000 | 0.168 | 0.001 | 0.44 | 0.38 |  | 0 | 0.8 | FAIL: lateral_error_at_lane_end_m = 0.168 > 0.1 |
+| T12 | 6x1m_0.5 | 0 | 0.000 | 0.000 | 0.031 | 0.11 | -2.21 | 0.45 | 0 | 0.8 | PASS |
 
-- **Lane end (R5, all cases).** The MPC follows the lane well but stops 0.4 to 0.9 m **before** the last cone
-  pair. Each row needs two cones at least 0.25 m apart, and the 80 degree camera cannot see a cone beside the lane
-  closer than about 0.6 m ahead (more on wider lanes), so the lane is "lost" before the end. This is the lane-end
-  rule for Task A7. The stop-zone test is marked `xfail` until then; remove the mark when A7 is done.
+- **Lane end (R5).** Passes on every case except T11, stopping 0.19 to 0.30 m past the last cone pair. Before
+  Task A7 the MPC stopped 0.4 to 0.9 m **before** it: each row needs two cones at least 0.25 m apart, and the 80
+  degree camera cannot see a cone beside the lane closer than about 0.6 m ahead, so the lane was "lost" before the
+  end. The A7 rule in [stage1-design.md](stage1-design.md) now drives on to the stop point when the lost cones were
+  close ahead.
+- **Lane lost mid-lane (T12, R7).** The policy requests the stop 0.45 s after the camera is covered, then rolls
+  0.8 m to a stop in the lane.
 - **Extra object (T10).** The cone filter removes the object beside the lane (it is off the yellow row), so the
   steering is smoother than without the filter (curvature-rate RMS 0.17 against 0.37 1/(m s)).
 - **Wet floor (T11).** On dream-gym's dynamic tyre model the car holds a steady heading error (about 3 degrees on a
@@ -163,6 +169,7 @@ Each is a field of `Disturbances` in `stage1_scenarios.py`.
 | Glare | Light shining along the lane, or towards the camera | `detector_range_m` (shorter view), or `missed_cones` for part of one row | T10 |
 | Detector noise | Uneven lighting, cones at the edge of the view | `noise_m` (0.01 m nominal, 0.03 m as a disturbance) | T4 |
 | Detection delay | Heavy computer load (also present normally) | `delay_s` (multiples of 0.1 s) | T6 |
+| Camera covered | Cover the camera with a card mid-lane | `camera_blackout_from_m` (every batch empty from there) | T12 |
 | Car mass | Tape a weight to the car | `car_mass_kg` (3.0 kg nominal) | T11 |
 | Floor grip | Run on a different floor, or a dusty or damp patch | `floor` = `"dry"`, `"wet"`, `"snow"` or `"ice"` (dream-gym tyre presets, dynamic model) | T11 |
 
@@ -175,13 +182,13 @@ Import it into the team's shared sheet and replace this sentence with the sheet'
 
 ## Open items
 
-- Card 1.1: done in [stage1-approach.md](stage1-approach.md). R7 (safe stop when the lane is lost) still needs a
-  case and its metric, with Task A7.
+- Card 1.1: done in [stage1-approach.md](stage1-approach.md), including R7 (T12).
 - Task 1.4: which colour is on which side (yellow left is assumed here) and Car Control's conversion.
 - Task 1.5: done (10 Hz, 20 ms). The detections are about 0.2 s old on the car, against 0.0 s in most cases here;
   Task A2 decides whether that becomes the nominal delay.
 - Task A1: measured camera view, range and noise; the lab cones' base size (`CONE_RADIUS_M`).
 - Task A2: check dream-gym's dynamic tyre model against the 1:10 car (T11).
-- Task A7: lane-end behaviour, so the stop-zone test can pass.
+- Task A7: done ([stage1-design.md](stage1-design.md)); measure the car's roll-out after a stop request
+  (`mpc.stop_distance_per_speed_s`) on the floor.
 - Lab: check the floor areas above fit, count the cones available, create the shared record sheet and log a real
   dry run.

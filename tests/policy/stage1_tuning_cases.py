@@ -34,4 +34,7 @@ TUNING_CASES = (
                Disturbances(extra_objects=((3.0, 0.85, ConeColour.YELLOW),), detector_range_m=3.0)),
     Stage1Case("T11", "tuning", "Wet floor (dynamic car), 20% heavier car, 0.1 m to the left", 0.1, 0.0, 1.0,
                Disturbances(floor="wet", car_mass_kg=3.6)),
+    # Losing the lane mid-lane (R7, Task A7)
+    Stage1Case("T12", "tuning", "Centred, camera covered from 3 m (lane lost mid-lane)", 0.0, 0.0, 1.0,
+               Disturbances(camera_blackout_from_m=3.0)),
 )

@@ -36,7 +36,10 @@ class MpcPolicy:
         """Curvatures in 1/m planned by the latest converged solve, followed while the lane is lost. None before
         the first one in this run."""
         self.distance_since_plan_m = 0.0
-        """Distance in metres the car was asked to drive since the plan was made, which gives its step of the plan."""
+        """Distance in metres the car drove since the plan was made, which gives its step of the plan."""
+        self.farthest_cone_ahead_m = None
+        """Distance in metres from the car to the farthest cone seen at the latest usable lane, less the distance
+        driven since. None before the first usable lane in this run."""
         self.lane_lost_s = 0.0
         """Seconds since the last usable lane; 0.0 while the lane is usable."""
         self.stopped_for_lane_loss = False
@@ -61,7 +64,10 @@ class MpcPolicy:
         if observations.policy.is_first_policy_step:
             self.reset()
         else:
-            self.distance_since_plan_m += self.previous_speed_m_per_s * observations.policy.dt
+            distance_m = self._speed_estimate(observations) * observations.policy.dt
+            self.distance_since_plan_m += distance_m
+            if self.farthest_cone_ahead_m is not None:
+                self.farthest_cone_ahead_m -= distance_m
         run_duration_s = self.config.run_duration_s
         if self.stopped_for_lane_loss or 0.0 < run_duration_s <= observations.policy.policy_elapsed_s:
             # Stopped for the rest of the run
@@ -70,8 +76,11 @@ class MpcPolicy:
         state = reference_from_cones(cones, self.config.lane_width_m)
         if cones is None or state is None:
             # No lane or a doubtful lane
-            return [self._command_without_lane(observations.policy.dt)]
+            return [self._command_without_lane(observations)]
         self.lane_lost_s = 0.0
+        # The cones were seen sensor_age ago, so the car has driven on since
+        self.farthest_cone_ahead_m = (max(cone.pos.x for cone in cones)
+                                      - self._speed_estimate(observations) * cones.sensor_age)
         solution = self.controller.solve(state, self.previous_curvature_per_m, cones.sensor_age)
         self.solve_count += 1
         self.last_solve_time_s = solution.solve_time_s
@@ -85,29 +94,51 @@ class MpcPolicy:
             curvature = self.previous_curvature_per_m
         return [self._command(self.config.target_speed_m_per_s, curvature)]
 
-    def _command_without_lane(self, dt: float) -> DriveCommand:
-        """Chooses the command when the lane is missing or doubtful.
+    def _command_without_lane(self, observations: CarObservations) -> DriveCommand:
+        """Chooses the command when the lane is missing or doubtful (the Task A7 rule).
 
-        Before the first usable lane of the run, the car waits stopped. After it, the car follows the latest plan at a
-        reduced speed for up to lane_loss_timeout_s, then stops for the rest of the run: the lane has ended, or it was
-        lost for too long to trust the plan.
+        Before the first usable lane of the run, the car waits stopped. After it, the car follows the latest plan:
+        - If the farthest cone last seen is within lane_end_distance_m, the cone rows have ended. The car keeps its
+          speed and requests the stop stop_distance_per_speed_s * speed before lane_end_stop_past_m past that cone,
+          so it rolls to a stop there.
+        - Otherwise the lane was lost unexpectedly. The car drives at lane_loss_speed_fraction of the target speed for
+          up to lane_loss_timeout_s, in case the lane comes back.
+        Either way it then stops for the rest of the run.
 
-        :param dt: Seconds since the previous policy step.
+        :param observations: The observations at this step.
         :return: The command for this step.
         """
         config = self.config
         if self.solve_count == 0:
             # No usable lane yet in this run
             return self._command(0.0, 0.0)
-        self.lane_lost_s += dt
-        if self.plan_curvatures_per_m is None or self.lane_lost_s >= config.lane_loss_timeout_s:
+        self.lane_lost_s += observations.policy.dt
+        lane_ended = (self.farthest_cone_ahead_m is not None
+                      and self.farthest_cone_ahead_m <= config.lane_end_distance_m)
+        if lane_ended:
+            to_go_m = self.farthest_cone_ahead_m + config.lane_end_stop_past_m
+            stop = to_go_m <= config.stop_distance_per_speed_s * self._speed_estimate(observations)
+            speed = config.target_speed_m_per_s
+        else:
+            stop = self.lane_lost_s >= config.lane_loss_timeout_s
+            speed = config.lane_loss_speed_fraction * config.target_speed_m_per_s
+        if stop or self.plan_curvatures_per_m is None:
             self.stopped_for_lane_loss = True
             return self._command(0.0, 0.0)
         self.lane_lost_step_count += 1
         step_distance = config.target_speed_m_per_s * config.step_s
         step = min(int(self.distance_since_plan_m / step_distance), config.horizon_steps - 1)
-        return self._command(config.lane_loss_speed_fraction * config.target_speed_m_per_s,
-                             float(self.plan_curvatures_per_m[step]))
+        return self._command(speed, float(self.plan_curvatures_per_m[step]))
+
+    def _speed_estimate(self, observations: CarObservations) -> float:
+        """
+        :param observations: The observations at this step.
+        :return: The car's speed in m/s for dead reckoning: the larger of the measured wheel speed and the speed
+            requested at the previous step. A missing or stuck wheel speed then overestimates the distance driven,
+            so the car stops early rather than late.
+        """
+        wheel_speed = observations.car.wheel_speed
+        return max(self.previous_speed_m_per_s, 0.0 if wheel_speed is None else float(wheel_speed))
 
     def _command(self, speed_m_per_s: float, curvature_per_m: float) -> DriveCommand:
         """Remembers the command for the next step.

@@ -41,7 +41,7 @@ def test_tuning_cases_cover_roads_of_different_sizes():
 
 @pytest.mark.parametrize("change", [
     {"noise_m": -0.01}, {"noise_m": math.nan}, {"delay_s": 0.15}, {"delay_s": -0.1},
-    {"detector_range_m": 0.0}, {"car_mass_kg": -1.0}, {"floor": "mud"},
+    {"detector_range_m": 0.0}, {"car_mass_kg": -1.0}, {"floor": "mud"}, {"camera_blackout_from_m": -1.0},
 ])
 def test_invalid_disturbances_are_rejected(change):
     with pytest.raises(ValueError):
@@ -116,6 +116,13 @@ def test_extra_objects_are_detected_only_inside_the_camera_view():
     assert result == pytest.approx([(2.0, 0.8, ConeColour.YELLOW)])
 
 
+def test_camera_blackout_empties_every_batch_from_its_distance():
+    case = s1.Stage1Case("d", "tuning", "", disturbances=s1.Disturbances(camera_blackout_from_m=3.0))
+    batch = detector_batch([(1.0, 0.5, ConeColour.YELLOW)])
+    assert len(s1.disturbed_detections(batch, (2.9, 0.0, 0.0), case)) == 1
+    assert s1.disturbed_detections(batch, (3.0, 0.0, 0.0), case) == []
+
+
 def test_floor_and_mass_disturbances_reach_the_car_model():
     pytest.importorskip("dreamgym")
     case = s1.Stage1Case("d", "tuning", "", disturbances=s1.Disturbances(floor="wet", car_mass_kg=3.6))
@@ -176,6 +183,22 @@ def test_metrics_pass_a_centred_run_that_stops_in_the_zone():
     assert s1.check_thresholds(metrics, s1.Thresholds()) == []
 
 
+@pytest.mark.parametrize("stop_request_s, passes", [(2.5, True), (2.8, False)])
+def test_a_lane_lost_mid_lane_is_scored_on_the_time_to_the_stop_request(stop_request_s, passes):
+    # Camera covered from 2.0 m, reached at 2.0 s; the car stops at 3.0 m, far before the lane end
+    case = s1.Stage1Case("synthetic", "tuning", "", disturbances=s1.Disturbances(camera_blackout_from_m=2.0))
+    x = np.arange(0.0, 3.0 + 1e-9, 0.05)
+    speeds = np.ones_like(x)
+    speeds[-1] = 0.0
+    commands = [(t, DriveCommand(1.0 if t < stop_request_s else 0.0, 0.0)) for t in np.arange(0.0, 3.0, 0.1)]
+    run = s1.Stage1Result(case, x, x, np.zeros_like(x), np.zeros_like(x), speeds, commands=commands,
+                          calc_times_s=[0.001] * 10)
+    metrics = s1.compute_metrics(run, fallback_count=0)
+    assert metrics["lane_lost_to_stop_request_s"] == pytest.approx(stop_request_s - 2.0, abs=0.06)
+    # Not scored on the stop zone, which the car cannot reach
+    assert (s1.check_thresholds(metrics, s1.Thresholds()) == []) == passes
+
+
 def test_metrics_count_touched_cones_and_leaving_the_lane():
     # Centre 0.45 m left: the body reaches 0.575 m, through the yellow row at 0.5 m
     metrics = s1.compute_metrics(straight_run(0.45, s1.STAGE1_LANE.length_m + 0.3), fallback_count=0)
@@ -219,9 +242,8 @@ def test_mpc_drives_the_lane_on_tuning_cases(case):
     assert driving_failures(result) == [], s1.format_table([result])
 
 
-@pytest.mark.xfail(reason="Known gap: the MPC stops when the last cones leave the camera view, 0.4 to 0.9 m before "
-                          "the last cone pair. Task A7 decides how to keep going to the stop zone.", strict=False)
-@pytest.mark.parametrize("case", TUNING_CASES, ids=lambda case: case.name)
+@pytest.mark.parametrize("case", [pytest.param(case, marks=DYNAMIC_MODEL_XFAIL) if case.disturbances.floor
+                                  else case for case in TUNING_CASES], ids=lambda case: case.name)
 def test_mpc_stops_in_the_stop_zone_on_tuning_cases(case):
     result = mpc_result(case)
     assert result.passed, s1.format_table([result])

@@ -170,6 +170,22 @@
       # Fraction of target_speed_m_per_s while the lane is lost, double in
       # [0.0, 1.0].
       lane_loss_speed_fraction: 0.5
+      # LANE END (Task A7): if the lane is lost while the farthest cone last seen
+      # is at most lane_end_distance_m ahead, the rows have ended there (the
+      # camera loses the last pair before the car reaches it). The car keeps its
+      # speed and requests the stop so that it rolls to a stop
+      # lane_end_stop_past_m past that cone (Stage 1 stop zone: 0.0 to 0.5 m).
+      # Otherwise the loss is unexpected and the timeout above applies.
+      # Metres, finite double >= 0. Keep it below how far the camera reliably
+      # sees cones (Task A1), so a loss mid-lane is still unexpected.
+      lane_end_distance_m: 1.5
+      # Metres past the farthest cone seen to stop at, finite double >= 0.
+      lane_end_stop_past_m: 0.25
+      # How far the car rolls after a stop request, in metres per m/s of speed
+      # (seconds), finite double >= 0. 0.6 matches the simulation. MEASURE IT:
+      # drive at a known speed, request a stop, divide the roll-out by the
+      # speed. The temporary control only coasts, so expect more on the car.
+      stop_distance_per_speed_s: 0.6
       # Seconds after requesting state 3 before the car STOPS for the rest of
       # the run, finite double >= 0; 0.0 drives until the lane ends. 8.0 for the
       # 5-10 s demo runs: about 4 m at 0.5 m/s, so lay out a cone lane at least

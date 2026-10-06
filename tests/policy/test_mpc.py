@@ -16,7 +16,8 @@ from policy.action_policy.policy import MpcPolicy  # noqa: E402
 from policy.action_policy.reference import reference_from_cones  # noqa: E402
 from policy.control.actions import DriveCommand  # noqa: E402
 from policy.input_output import (  # noqa: E402
-    CarObservations, ConeBatch, ConeColour, ConeDetection, ObservedCarState, PolicyState, Position, SensorAge)
+    CarObservations, ConeBatch, ConeColour, ConeDetection, ObservedCarState, PolicyState, Position, SensorAge,
+    WheelSpeed)
 
 LANE_WIDTH_M = 1.0
 
@@ -182,6 +183,39 @@ def test_zero_run_duration_drives_until_the_lane_ends():
     assert command(MpcPolicy(MpcConfig()), lane_cones(0.0, 0.0), elapsed_s=1e6).speed_m_per_s > 0.0
 
 
+def test_rolls_to_a_stop_just_past_the_lane_end():
+    """The last cone pair is 1.0 m ahead when the lane is lost, so the rows have ended there."""
+    config = MpcConfig()
+    policy = MpcPolicy(config)
+    ending_lane = [cone for cone in lane_cones(0.0, 0.0) if cone.pos.x <= 1.0]
+    command(policy, ending_lane)
+    speeds = [command(policy, [], first_step=False).speed_m_per_s for _ in range(8)]
+    # 1.25 m to the stop point at 1 m/s and 0.1 m per step: the stop is requested at the first step within 0.6 m
+    # of it (the car's roll-out at 1 m/s), after 0.7 m, and kept
+    assert speeds == [config.target_speed_m_per_s] * 6 + [0.0] * 2
+    assert command(policy, ending_lane, first_step=False) == DriveCommand(0.0, 0.0)
+
+
+def test_a_loss_far_from_the_lane_end_is_unexpected():
+    """The cones were seen 4 m ahead, so losing them is not the lane end: reduced speed and the timeout apply."""
+    config = MpcConfig()
+    policy = MpcPolicy(config)
+    command(policy, lane_cones(0.0, 0.0))
+    speeds = [command(policy, [], first_step=False).speed_m_per_s for _ in range(6)]
+    reduced = config.lane_loss_speed_fraction * config.target_speed_m_per_s
+    assert speeds == pytest.approx([reduced] * 4 + [0.0] * 2)
+
+
+def test_a_missing_wheel_speed_counts_the_requested_speed():
+    """Dead reckoning never uses less than the requested speed, so a stuck wheel speed stops the car early."""
+    policy = MpcPolicy(MpcConfig())
+    observations = observe(lane_cones(0.0, 0.0), first_step=True)
+    stuck_wheel = WheelSpeed(0.0, SensorAge(0.0, None))
+    stuck = dataclasses.replace(observations, car=dataclasses.replace(observations.car, wheel_speed=stuck_wheel))
+    policy.run_policy(stuck, None)
+    assert policy._speed_estimate(stuck) == MpcConfig().target_speed_m_per_s
+
+
 def test_waits_stopped_until_the_first_usable_lane():
     policy = MpcPolicy(MpcConfig())
     # Longer than the lane loss timeout, which only applies after the first usable lane
@@ -193,7 +227,9 @@ def test_waits_stopped_until_the_first_usable_lane():
 @pytest.mark.parametrize("change", [
     {"horizon_steps": 0}, {"horizon_steps": 2.0}, {"step_s": 0.0}, {"curvature_weight": 0.0},
     {"lateral_error_weight": -1.0}, {"target_speed_m_per_s": math.nan}, {"max_curvature_per_m": math.inf},
-    {"run_duration_s": -1.0}, {"lane_loss_timeout_s": -0.1}, {"lane_loss_timeout_s": math.inf}, {"lane_loss_speed_fraction": 1.5},
+    {"run_duration_s": -1.0}, {"lane_end_distance_m": -0.1}, {"lane_end_stop_past_m": math.nan},
+    {"stop_distance_per_speed_s": -0.1}, {"lane_loss_timeout_s": -0.1}, {"lane_loss_timeout_s": math.inf},
+    {"lane_loss_speed_fraction": 1.5},
 ])
 def test_invalid_settings_are_rejected(change):
     with pytest.raises(ValueError):

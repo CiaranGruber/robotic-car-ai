@@ -66,6 +66,27 @@ class MpcConfig:
     """
     lane_loss_speed_fraction: float = 0.5
     """Fraction of target_speed_m_per_s to drive at while the lane is lost. Must be in [0, 1]."""
+    lane_end_distance_m: float = 1.5
+    """If the lane is lost while the farthest cone last seen is at most this far ahead in metres, the cone rows have
+    ended there, rather than the lane being lost unexpectedly. Must be finite and at least 0.
+
+    The camera loses the last cone pair before the car reaches it: a row needs two cones to be fitted, and the 80
+    degree view cannot see a cone beside the lane closer than about 0.6 m ahead (more on wider lanes). Keep this
+    below the distance the camera reliably sees cones at (Task A1), so a loss mid-lane is still unexpected.
+    """
+    lane_end_stop_past_m: float = 0.25
+    """At a lane end, distance in metres past the farthest cone seen to stop at. Must be finite and at least 0.
+
+    The Stage 1 stop zone is 0.0 to 0.5 m past the last cone pair (R5).
+    """
+    stop_distance_per_speed_s: float = 0.6
+    """Distance in metres the car rolls on after a stop request, per m/s of speed it had. Must be finite and at
+    least 0.
+
+    A lane-end stop is requested this far before the stop point. 0.6 s matches the stand-in Car Control in the
+    simulation. Measure it on the car: drive at a known speed, request a stop and divide the roll-out distance by the
+    speed. The temporary CarControl only coasts, so it is likely larger there.
+    """
     run_duration_s: float = 0.0
     """Seconds after entering the publishing-policy state before the car stops for the rest of the run.
 
@@ -80,7 +101,7 @@ class MpcConfig:
             if not (math.isfinite(value) and value > 0.0):
                 raise ValueError(f"mpc.{name} must be positive and finite, not {value}")
         for name in ("lateral_error_weight", "heading_error_weight", "curvature_change_weight", "lane_loss_timeout_s",
-                     "run_duration_s"):
+                     "lane_end_distance_m", "lane_end_stop_past_m", "stop_distance_per_speed_s", "run_duration_s"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value >= 0.0):
                 raise ValueError(f"mpc.{name} must be finite and at least 0, not {value}")

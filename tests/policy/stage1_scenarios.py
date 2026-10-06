@@ -153,6 +153,10 @@ class Disturbances:
     floor: str | None = None
     """Floor grip: None for the nominal kinematic car, or one of FLOOR_CONDITIONS for dream-gym's dynamic car with
     that tyre grip (it uses the dynamic model above 0.2-0.4 m/s)."""
+    camera_blackout_from_m: float | None = None
+    """From this distance past the start line in metres, every detection batch is empty, like a covered or blinded
+    camera; None for no blackout. The lane is then lost before its end, so the case is scored on R7 (stop request
+    after losing the lane) instead of the stop zone (R5)."""
 
     def __post_init__(self):
         if not (math.isfinite(self.noise_m) and self.noise_m >= 0.0):
@@ -164,6 +168,9 @@ class Disturbances:
             value = getattr(self, name)
             if not (math.isfinite(value) and value > 0.0):
                 raise ValueError(f"{name} must be positive and finite, not {value}")
+        blackout = self.camera_blackout_from_m
+        if blackout is not None and not (math.isfinite(blackout) and blackout >= 0.0):
+            raise ValueError(f"camera_blackout_from_m must be None or finite and at least 0, not {blackout}")
         if self.floor is not None and self.floor not in FLOOR_CONDITIONS:
             raise ValueError(f"floor must be None or one of {FLOOR_CONDITIONS}, not {self.floor!r}")
 
@@ -221,6 +228,9 @@ class Thresholds:
     """R6 real time: steps where the solver did not converge."""
     max_p99_calc_time_s: float = TIME_BUDGET_S
     """R6 real time: 99th-percentile calculation time per policy step. Only meaningful on the car computer."""
+    max_lane_lost_to_stop_request_s: float = 0.6
+    """R7 safe stop when the lane is lost: time from a camera blackout to the policy's stop request. The car must
+    still stay in the lane and touch no cone (R1a, R2); these cases are not scored on the stop zone (R5)."""
 
 
 @dataclass
@@ -391,6 +401,8 @@ def disturbed_detections(observation: dict, pose: tuple[float, float, float], ca
     :return: The detections the policy receives.
     """
     disturbances = case.disturbances
+    if disturbances.camera_blackout_from_m is not None and pose[0] >= disturbances.camera_blackout_from_m:
+        return []
     count = int(observation["cone_detections_count"][0])
     xs = observation["cone_detections_forward_positions_in_body_frame_m"][:count]
     ys = observation["cone_detections_left_positions_in_body_frame_m"][:count]
@@ -574,6 +586,13 @@ def compute_metrics(result: Stage1Result, fallback_count: int) -> dict[str, floa
     stopped = abs(speed[-1]) < STOPPED_SPEED_M_PER_S
     # At the last cone pair, or where the car stopped if that is before it
     end_index = int(np.flatnonzero(x <= lane.length_m)[-1])
+    # R7: time from a camera blackout to the first stop request after it (nan when the case has no blackout)
+    lost_to_stop = math.nan
+    blackout = result.case.disturbances.camera_blackout_from_m
+    if blackout is not None and (x >= blackout).any():
+        lost_s = float(result.time_s[np.flatnonzero(x >= blackout)[0]])
+        later_stops = [t for t in stop_requests if t >= lost_s]
+        lost_to_stop = later_stops[0] - lost_s if later_stops else math.inf
     return {
         "cones_touched": float(len(touched)),
         "body_outside_lane_m": max(outside, 0.0),
@@ -583,6 +602,7 @@ def compute_metrics(result: Stage1Result, fallback_count: int) -> dict[str, floa
         "rms_curvature_rate_per_m_s": float(np.sqrt(np.mean(rates ** 2))),
         "stopped": float(stopped),
         "stop_past_last_cone_m": float(x[-1] - lane.length_m) if stopped else math.nan,
+        "lane_lost_to_stop_request_s": lost_to_stop,
         "fallback_count": float(fallback_count),
         "p99_calc_time_s": float(np.percentile(result.calc_times_s, 99)),
         "duration_s": float(result.time_s[-1]),
@@ -606,7 +626,12 @@ def check_thresholds(metrics: dict[str, float], thresholds: Thresholds) -> list[
                 + at_most("rms_curvature_rate_per_m_s", thresholds.max_rms_curvature_rate_per_m_s)
                 + at_most("fallback_count", thresholds.max_fallback_count)
                 + at_most("p99_calc_time_s", thresholds.max_p99_calc_time_s))
-    if not metrics["stopped"]:
+    if not math.isnan(metrics["lane_lost_to_stop_request_s"]):
+        # Lane lost mid-lane: R7 instead of the stop zone
+        failures += at_most("lane_lost_to_stop_request_s", thresholds.max_lane_lost_to_stop_request_s)
+        if not metrics["stopped"]:
+            failures.append("did not stop")
+    elif not metrics["stopped"]:
         failures.append("did not stop")
     elif not stop_low <= stop <= stop_high:
         failures.append(f"stop_past_last_cone_m = {stop:.3g} outside [{stop_low}, {stop_high}]")
@@ -741,14 +766,17 @@ def format_table(results: list[Stage1Result]) -> str:
     :return: A Markdown table of the main metrics of each run, for the log-book.
     """
     rows = ["| Case | Lane | Touched | Outside lane [m] | Lat. err. at end [m] | Speed err. [m/s] | Curv. rate RMS "
-            "[1/(m s)] | Stop past last cone [m] | Fallbacks | p99 calc [ms] | Result |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+            "[1/(m s)] | Stop past last cone [m] | Lane lost to stop [s] | Fallbacks | p99 calc [ms] | Result |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for r in results:
         m = r.metrics
+        lost_to_stop = m["lane_lost_to_stop_request_s"]
         rows.append(f"| {r.case.name} | {r.case.lane.name} | {m['cones_touched']:.0f} | "
                     f"{m['body_outside_lane_m']:.3f} | {m['lateral_error_at_lane_end_m']:.3f} | "
                     f"{m['mean_speed_error_m_per_s']:.3f} | {m['rms_curvature_rate_per_m_s']:.2f} | "
-                    f"{m['stop_past_last_cone_m']:.2f} | {m['fallback_count']:.0f} | "
+                    f"{m['stop_past_last_cone_m']:.2f} | "
+                    f"{'' if math.isnan(lost_to_stop) else format(lost_to_stop, '.2f')} | "
+                    f"{m['fallback_count']:.0f} | "
                     f"{1000 * m['p99_calc_time_s']:.1f} | "
                     f"{'PASS' if r.passed else 'FAIL: ' + '; '.join(r.failures)} |")
     return "\n".join(rows)
