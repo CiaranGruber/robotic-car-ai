@@ -146,10 +146,11 @@ class RecordingPolicy:
 def test_detection_delay_holds_back_batches_and_reports_their_age():
     pytest.importorskip("dreamgym")
     policy = RecordingPolicy()
-    case = s1.Stage1Case("delay", "tuning", "", disturbances=s1.Disturbances(delay_s=0.2))
+    case = s1.Stage1Case("delay", "tuning", "", disturbances=s1.Disturbances(delay_s=0.1))
     s1.run_case(case, policy)
-    assert policy.cones[0] is None and policy.cones[1] is None
-    assert policy.cones[2] is not None and policy.cones[2].sensor_age == pytest.approx(0.2)
+    # The nominal 0.2 s plus 0.1 s extra: three 0.1 s policy steps without a batch
+    assert policy.cones[:3] == [None] * 3
+    assert policy.cones[3] is not None and policy.cones[3].sensor_age == pytest.approx(0.3)
 
 
 @pytest.mark.parametrize("curvature, sign", [(0.0, 0.0), (1.0, 1.0), (-1.0, -1.0)])

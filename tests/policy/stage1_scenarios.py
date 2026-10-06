@@ -119,6 +119,9 @@ ENV_STEP_S = 0.05
 """Simulation step in seconds."""
 POLICY_PERIOD_S = 0.1
 """Time between policy steps in seconds, i.e. one cone detection batch per step (10 Hz on car 20, Task 1.5)."""
+DETECTION_AGE_S = 0.2
+"""Age of every detection batch when the policy receives it, in seconds: on car 20 the detector's own
+acquisition-to-publication latency is 0.197 s (Task 1.5). A multiple of POLICY_PERIOD_S."""
 TIME_BUDGET_S = 0.02
 """Calculation time allowed per policy step in seconds (99th percentile, Task 1.5): a fifth of the detection gap."""
 MAX_DURATION_S = 20.0
@@ -139,7 +142,7 @@ class Disturbances:
     noise_m: float = DETECTOR_NOISE_M
     """Standard deviation of the detected forwards and leftwards cone positions in metres."""
     delay_s: float = 0.0
-    """How old each detection batch is when the policy receives it, in seconds. A multiple of POLICY_PERIOD_S."""
+    """Extra detection delay on top of the nominal DETECTION_AGE_S, in seconds. A multiple of POLICY_PERIOD_S."""
     missed_cones: tuple[tuple[ConeColour, int], ...] = ()
     """Cones that are never detected, like a missing or fallen cone, or glare on part of a row."""
     wrong_colour_cones: tuple[tuple[ConeColour, int], ...] = ()
@@ -228,9 +231,10 @@ class Thresholds:
     """R6 real time: steps where the solver did not converge."""
     max_p99_calc_time_s: float = TIME_BUDGET_S
     """R6 real time: 99th-percentile calculation time per policy step. Only meaningful on the car computer."""
-    max_lane_lost_to_stop_request_s: float = 0.6
-    """R7 safe stop when the lane is lost: time from a camera blackout to the policy's stop request. The car must
-    still stay in the lane and touch no cone (R1a, R2); these cases are not scored on the stop zone (R5)."""
+    max_lane_lost_to_stop_request_s: float = 0.8
+    """R7 safe stop when the lane is lost: time from a camera blackout to the policy's stop request, including the
+    0.2 s detection age and one detection gap. The car must still stay in the lane and touch no cone (R1a, R2);
+    these cases are not scored on the stop zone (R5)."""
 
 
 @dataclass
@@ -472,7 +476,8 @@ def run_case(case: Stage1Case, policy, thresholds: Thresholds = Thresholds()) ->
     rng = np.random.default_rng(case.seed)
     end_x = case.lane.length_m + SIM_RUN_OUT_M - 0.5
     steps_per_policy = round(POLICY_PERIOD_S / ENV_STEP_S)
-    delay_steps = round(case.disturbances.delay_s / POLICY_PERIOD_S)
+    detection_age_s = DETECTION_AGE_S + case.disturbances.delay_s
+    delay_steps = round(detection_age_s / POLICY_PERIOD_S)
     pending: list[list[ConeDetection]] = []
     log = {"t": [], "x": [], "y": [], "heading": [], "speed": []}
     commands, calc_times = [], []
@@ -496,7 +501,7 @@ def run_case(case: Stage1Case, policy, thresholds: Thresholds = Thresholds()) ->
             speed = scalar(observation["body_longitudinal_velocity_mps"])
             first = step == 0
             observations = CarObservations(
-                cones=None if cones is None else ConeBatch(cones, SensorAge(case.disturbances.delay_s, None),
+                cones=None if cones is None else ConeBatch(cones, SensorAge(detection_age_s, None),
                                                            acquisition_to_publish_latency_s=0.0),
                 fiducials=None,
                 lidar_scan=None,
