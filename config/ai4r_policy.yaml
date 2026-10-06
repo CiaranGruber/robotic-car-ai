@@ -188,3 +188,43 @@
       # Nearest cones of each colour used for the row fit: INTEGER from 2 to 12.
       # Bounds calculation time; farther cones are still checked against the fit.
       max_fit_cones_per_colour: 8
+
+    # LOW-LEVEL CONTROL SETTINGS (ControlConfig in policy/control/control.py,
+    # which checks them; invalid values stop the node from starting). They turn
+    # the policy's DriveCommand (speed m/s, curvature 1/m, + = left) into drive
+    # and steering actions. Values are car 20's calibration from 5 Oct; another
+    # car needs its own (docs/car-calibration.md, policy/control/README.md).
+    # Speed feedback needs wheel_speed: without a fresh wheel speed the drive is
+    # zero for targets at or above speed_feedback_min_m_per_s.
+    control:
+      # Speed map: speed = speed_ff_gain * (drive - speed_ff_offset).
+      # Breakaway drive, double in [0, 1). Rises as the motor battery drains.
+      speed_ff_offset: 0.48
+      # Speed map slope, m/s per unit drive, positive double.
+      speed_ff_gain: 9.18
+      # PI gains: drive per m/s of error, and drive per m of accumulated error.
+      # Doubles >= 0; speed_ki: 0.0 gives feedforward + P only.
+      speed_kp: 0.15
+      speed_ki: 0.04
+      # Largest integral contribution, drive units, double >= 0.
+      speed_i_max: 0.2
+      # Integrate only while |target - speed| < this, m/s, positive double.
+      speed_i_band: 0.2
+      # Feedback only for targets >= this, m/s, double >= 0 (low-speed wheel
+      # speed lags by seconds). Car 20 may not start below about 0.4 m/s.
+      speed_feedback_min_m_per_s: 0.4
+      # Drive action upper limit, double in (0, 1]. Car 20 open-loop 0.75
+      # passes 1.5 m/s in about 3 s.
+      max_drive_action: 0.75
+      # Steering map: steering = centre + slope * curvature, with a separate
+      # slope for left (curvature > 0) and right. Measured with the vehicle
+      # interface steering trim at -0.18 on car 20; the trim resets to 0.0 when
+      # the main board restarts. Positive steering turns RIGHT on car 20, so
+      # both slopes are negative (action per 1/m, same sign, non-zero).
+      steering_centre_action: 0.02
+      steering_left_action_per_curvature: -1.587
+      steering_right_action_per_curvature: -1.043
+      # Steering action magnitude limit, double in (0, 1]. Car 20's left turn
+      # saturates beyond -0.75 (radius about 2.1 m); right reaches about 1.1 m
+      # at 1.0.
+      max_steering_action: 1.0

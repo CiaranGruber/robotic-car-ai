@@ -65,6 +65,7 @@ from tf2_ros import Buffer, TransformException, TransformListener
 
 from policy.action_policy.mpc import MpcConfig
 from policy.cone_filter.cone_filter import ConeFilterConfig
+from policy.control.control import ControlConfig
 from policy.input_output import ConeColour, convert_observations, convert_actions
 from policy.policy_runner import MovementPolicy
 
@@ -224,7 +225,14 @@ class PolicyNode(Node):
             self.declare_parameter(f"cone_filter.{name}", default, ParameterDescriptor(read_only=True))
         cone_filter_config = ConeFilterConfig(**{
             name: self.get_parameter(f"cone_filter.{name}").value for name in cone_filter_defaults})
-        self.movement_policy = MovementPolicy(mpc_config, cone_filter_config)
+        # Control settings: see control in ai4r_policy.yaml. ControlConfig in
+        # policy/control/control.py holds their defaults and checks them.
+        control_defaults = asdict(ControlConfig())
+        for name, default in control_defaults.items():
+            self.declare_parameter(f"control.{name}", default, ParameterDescriptor(read_only=True))
+        control_config = ControlConfig(**{
+            name: self.get_parameter(f"control.{name}").value for name in control_defaults})
+        self.movement_policy = MovementPolicy(mpc_config, cone_filter_config, control_config)
 
         self.fsm_state = FSM_STATE_PUBLISHING_ZERO_ACTIONS
         self.state_reason = "Startup: waiting for an explicit policy request"

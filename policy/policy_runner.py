@@ -5,7 +5,7 @@ import dataclasses
 from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.policy import MpcPolicy
 from policy.cone_filter.cone_filter import ConeFilterConfig, filter_cones
-from policy.control.control import determine_car_actions
+from policy.control.control import CarController, ControlConfig
 from policy.input_output import CarActions, CarObservations
 from policy.lane_detection.lane_detection import detect_lanes
 
@@ -16,14 +16,18 @@ class MovementPolicy:
     policy_node creates one when it starts and calls step once per policy step.
     """
 
-    def __init__(self, mpc_config: MpcConfig, cone_filter_config: ConeFilterConfig):
+    def __init__(self, mpc_config: MpcConfig, cone_filter_config: ConeFilterConfig,
+                 control_config: ControlConfig = ControlConfig()):
         """
         :param mpc_config: The MPC settings, from the mpc parameters in config/ai4r_policy.yaml.
         :param cone_filter_config: The cone filter settings, from the cone_filter parameters in
             config/ai4r_policy.yaml.
+        :param control_config: The control settings, from the control parameters in
+            config/ai4r_policy.yaml.
         """
         self.cone_filter_config = cone_filter_config
         self.action_policy = MpcPolicy(mpc_config)
+        self.car_controller = CarController(control_config)
 
     def step(self, observations: CarObservations) -> CarActions:
         """Runs the movement policy for the car using the observations provided to determine the actions to take
@@ -39,6 +43,6 @@ class MovementPolicy:
         # Determine the policy to take based upon the car location
         instructions = self.action_policy.run_policy(observations, road_map)
         # The car actions to determine
-        car_actions = determine_car_actions(observations, instructions)
+        car_actions = self.car_controller.step(observations, instructions)
         # Return final car actions
         return car_actions
