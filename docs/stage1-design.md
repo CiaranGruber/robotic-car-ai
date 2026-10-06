@@ -148,8 +148,82 @@ for a full-size car's assignment rather than a 1:10 car with noisy, delayed cone
 simulation (up to 43 ms) come from running many cases in parallel on a laptop; the car computer takes at most 2.3
 ms (A6).
 
-**Still open.** RL (A5) and the comparison on the unseen cases (M1). The design was tuned in simulation only:
+**Still open.** The design was tuned in simulation only:
 the steering angle, roll-out and camera range still need measuring on the car (A2).
+
+## A5 RL design (log-book)
+
+**Set-up** (`tests/policy/stage1_rl.py`). dream-gym's own training pipeline builds a full-size car and always
+observes the simulator's ground-truth lane errors, so it cannot be used as it is. Instead a Gymnasium environment
+runs the harness's detection pipeline one policy step (0.1 s detection batch) at a time: the dream-gym car of the
+test cases, detections with the case's noise, view and 0.2 s age, the shipped cone filter and the lane reference
+fitted from the cones.
+
+- **Observation** (the 1.2 table, nothing from ground truth): lateral and heading error from the cones, whether the
+  lane is usable at this step, the last two curvature requests (which let the policy allow for the 0.2 s delay, as
+  the MPC's prediction does), the detection age and the requested speed.
+- **Action**: the curvature, up to +-1.5 1/m. The speed, the cone filter and the lane-loss and lane-end rule (A7)
+  are the MPC's: the trained policy runs as `RlController` inside `MpcPolicy`, in place of the MPC's solver, so MPC
+  and RL differ only in the steering.
+- **Reward** per step, from ground truth (training only): 1 - a P(y, 0.1 m) - b P(psi, 0.1 rad) - c P(rate of change
+  of curvature, 1.0 1/(m s)), with P(x, s) = 1 - exp(-(x/s)^2) a penalty bounded by 1, y the distance from the lane
+  centre (R1b), psi the heading relative to the lane, and the curvature rate for smoothness (R4, whose threshold is
+  1.0). a + b + c < 1, so every step in the lane earns a positive reward. Touching a cone or a body corner past a
+  cone row (R1a, R2) ends the episode with -20, reaching the last cone pair with +10. Speed (R3) is held by the speed
+  controller and stopping is impossible, so neither is rewarded. (Iteration 2; iteration 1 below.)
+
+| Reward option | a (lateral) | b (heading) | c (curvature rate) | Intent |
+| --- | --- | --- | --- | --- |
+| tracking | 0.6 | 0.2 | 0.05 | Centre the car; little smoothing |
+| balanced | 0.5 | 0.2 | 0.2 | Between the two |
+| smooth | 0.35 | 0.2 | 0.4 | Smooth steering first |
+
+- **Domain randomisation** every episode, drawn from ranges rather than the cases: lane width 0.8 to 1.2 m, cone
+  spacing 0.5 or 0.75 m, start 0.2 m either side and up to 15 degrees off, speed 0.5 to 1.2 m/s, detector noise 0
+  to 0.03 m, extra delay 0 to 0.2 s, camera range 3 to 4 m, car mass 2.5 to 3.6 kg, and the dynamic tyre model on a
+  dry or wet floor in two episodes out of five.
+- **Training**: PPO (stable-baselines3 2.9), two 64-unit hidden layers, 8 parallel environments, 512 steps each per
+  update, batch 256, learning rate 3e-4, discount 0.98, 300 000 steps per option, seed 0.
+
+**Iteration 1: unbounded penalties.** The first rewards were 1 - a (y / 0.1)^2 - b (psi / 0.1)^2 - c (curvature
+rate)^2 with a collision penalty of -50. After 300 000 steps the `balanced` policy steered out of the lane on purpose:
+episodes in training lasted 9 steps on average and none reached the end, and it failed all 24 tuning runs. This is a
+reward exploit. Away from the centre each step cost more than the single collision penalty (the curvature-rate term
+alone reached -22 a step), so ending the episode early maximised the return. The rewards were rescaled to the bounded
+form above so that every step in the lane is worth a positive amount; the other two options, still training, were
+stopped.
+
+**Iteration 2: bounded penalties, 300 000 steps each.** All three now drive the lane in training (35, 35 and 27 of 40
+random episodes reach the end), but on the tuning cases they steer much more roughly than the MPC (curvature-rate RMS
+0.9 to 2.8 against 0.16) and leave the car further from the centre.
+
+**Iteration 3: longer training.** The best option, `balanced`, was trained for 1 000 000 steps
+(`tests/policy/rl_models/balanced_1M.zip`): 18 of 24 runs pass, tracking improves from 27 to 21 mm and the steering
+from 0.86 to 0.68, but it still fails R4 on T5 and T11 and R1b on T2, T5, T7 and T11.
+
+Over the same 24 tuning runs as A4 (`python3 tests/policy/stage1_design.py rl --models ...`):
+
+| Design | Passed | Tracking RMS [m] | Worst lat. err. at end [m] | Outside lane [m] | Touched | Curv. rate RMS mean / worst [1/(m s)] | Fallbacks |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| PP L=1.0 k=1.0 (A3 baseline) | 24/24 | 0.0090 | 0.023 | 0.000 | 0 | 0.37 / 0.85 | 0 |
+| MPC N20 q3/1 r3 k3 (A4 choice) | 24/24 | 0.0124 | 0.043 | 0.000 | 0 | 0.16 / 0.45 | 0 |
+| RL balanced_1M | 18/24 | 0.0214 | 0.140 | 0.000 | 0 | 0.68 / 1.92 | 0 |
+| RL balanced | 15/24 | 0.0274 | 0.247 | 0.000 | 0 | 0.86 / 2.15 | 0 |
+| RL tracking | 11/24 | 0.0270 | 0.240 | 0.000 | 0 | 0.94 / 2.08 | 0 |
+| RL smooth | 3/24 | 0.0789 | 0.733 | 0.551 | 8 | 2.84 / 8.18 | 0 |
+
+![RL options against the A4 MPC and the A3 baseline](figures/stage1_rl_pareto.png)
+
+**Reward exploits watched for.** Stopping is impossible (the speed is fixed). Leaving the lane to end the episode
+was found and removed in iteration 1. Hugging an edge was not seen: no option touches a cone or leaves the lane
+except `smooth`, whose small lateral weight lets it drift into the cones on 8 runs. Weaving remains: every option
+changes its curvature far more than the MPC, which is why they fail R4.
+
+**Choice: `balanced` trained for 1 000 000 steps.** It is the best RL option on every metric, but it meets the
+thresholds on only 18 of 24 tuning runs and is dominated by both the MPC and the baseline, so it is not on the Pareto
+front of passing designs. It goes to milestone M1 as the RL design. Likely next steps if RL is pursued: train longer
+and with several seeds, penalise the curvature rate inside the policy (for example by acting on the curvature change
+rather than the curvature), and give it the previous lateral errors so it can estimate the drift itself.
 
 ## A6 Calculation time on the car computer
 

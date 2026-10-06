@@ -68,9 +68,9 @@ class Design:
     """One design to run: the baseline with a lookahead and gain, or the MPC with some settings changed."""
     name: str
     kind: str
-    """'pure_pursuit' or 'mpc'."""
-    settings: tuple[tuple[str, float], ...] = ()
-    """For 'mpc', MpcConfig fields to change; for 'pure_pursuit', lookahead_m and gain."""
+    """'pure_pursuit', 'mpc' or 'rl'."""
+    settings: tuple[tuple[str, float | str], ...] = ()
+    """For 'mpc', MpcConfig fields to change; for 'pure_pursuit', lookahead_m and gain; for 'rl', model (a path)."""
     noises_m: tuple[float | None, ...] = (None,)
     """Detector noise settings to run every case with: a noise for every cone, or None for each case's own. The
     design's results over all of them are summarised together."""
@@ -80,6 +80,10 @@ class Design:
         settings = dict(self.settings)
         if self.kind == "mpc":
             policy = MpcPolicy(dataclasses.replace(config, **settings))
+        elif self.kind == "rl":
+            from stage1_rl import RlController
+            policy = MpcPolicy(config)
+            policy.controller = RlController(config, settings["model"])
         else:
             policy = MpcPolicy(config)
             policy.controller = PurePursuitController(config, settings["lookahead_m"], settings["gain"])
@@ -185,7 +189,7 @@ def format_summary(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def plot_front(rows: list[dict], path: Path, title: str):
+def plot_front(rows: list[dict], path: Path, title: str, label_all: bool = False):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -200,6 +204,8 @@ def plot_front(rows: list[dict], path: Path, title: str):
     front = sorted((r for r in rows if r.get("on_front")), key=lambda r: r["smoothness"])
     ax.plot([r["smoothness"] for r in front], [1000 * r["tracking_m"] for r in front], "o-", color="C3",
             markersize=6, label="Pareto front of the passing designs")
+    if label_all:
+        front = front + [r for r in rows if not r.get("on_front")]
     # Label each distinct front point with a letter; designs that differ only in an inactive setting share one
     points: dict[tuple[float, float], list[str]] = {}
     for r in front:
@@ -211,10 +217,14 @@ def plot_front(rows: list[dict], path: Path, title: str):
         key.append(f"{letter}: " + " / ".join(names))
     ax.text(0.98, 0.02, "\n".join(key), transform=ax.transAxes, ha="right", va="bottom", fontsize=7,
             family="monospace", bbox=dict(facecolor="white", edgecolor="0.8"))
-    ax.set_xlim(0.0, 1.1)
-    ax.set_ylim(5.0, 20.0)
-    ax.legend(loc="upper right", fontsize=8)
-    ax.set_xlabel("Mean RMS curvature rate [1/(m s)] (R4, smaller is smoother; designs beyond 1.1 not shown)")
+    if label_all:
+        ax.set_xlim(0.0, 1.1 * max(r["smoothness"] for r in rows))
+        ax.set_ylim(0.0, 1100 * max(r["tracking_m"] for r in rows))
+    else:
+        ax.set_xlim(0.0, 1.1)
+        ax.set_ylim(5.0, 20.0)
+    ax.legend(loc="upper left" if label_all else "upper right", fontsize=8)
+    ax.set_xlabel("Mean RMS curvature rate [1/(m s)] (R4, smaller is smoother)")
     ax.set_ylabel("Mean RMS lateral error after 1 m [mm] (smaller is closer to the centre)")
     ax.set_title(title)
     ax.grid(True, alpha=0.3)
@@ -263,18 +273,78 @@ def mpc_name(settings: dict) -> str:
             f"k{settings['max_curvature_per_m']:g}")
 
 
+CHOSEN_MPC = "MPC N20 q3/1 r3 k3 (A4 choice)"
+"""The Task A4 choice, now the MpcConfig defaults."""
+
+
+def rl_designs(models: list[Path]) -> list[Design]:
+    """Task A5: each trained RL policy, with the A4 MPC and the A3 baseline for reference, on the same runs as A4."""
+    noises = (None, 0.03)
+    return ([Design(BASELINE, "pure_pursuit", (("lookahead_m", 1.0), ("gain", 1.0)), noises),
+             Design(CHOSEN_MPC, "mpc", (), noises)]
+            + [Design(f"RL {model.stem}", "rl", (("model", str(model)),), noises) for model in models])
+
+
 STARTING = mpc_name({"horizon_steps": 12, "lateral_error_weight": 10.0, "heading_error_weight": 1.0,
                      "curvature_change_weight": 1.0, "max_curvature_per_m": 3.0})
 """The A4 starting values (the MPC from the first car run) in the grid."""
 
 
+def m1(rl_model: Path, figures: Path | None) -> str:
+    """Milestone M1: the A4 MPC and the A5 RL policy (and the A3 baseline for reference) on the unseen cases, with
+    the cases' own disturbances, judged by the Card 1.3 rule: eligible only if every unseen case passes; the winner
+    is on the Pareto front of the worst case of R1b, R3 and R4 over the cases.
+
+    :return: The per-case tables and the decision table, as Markdown.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "unseen"))
+    from stage1_unseen_cases import UNSEEN_CASES
+
+    designs = [Design(BASELINE, "pure_pursuit", (("lookahead_m", 1.0), ("gain", 1.0))),
+               Design(CHOSEN_MPC, "mpc"),
+               Design(f"RL {rl_model.stem} (A5 choice)", "rl", (("model", str(rl_model)),))]
+    results = run_designs(designs, UNSEEN_CASES)
+    parts = []
+    rows = []
+    for name, runs in results.items():
+        parts.append(f"**{name}**\n\n{s1.format_table(runs)}")
+        rows.append({"name": name, "eligible": all(r.passed for r in runs),
+                     "failed": ", ".join(failed_requirements(r) for r in runs if not r.passed),
+                     "R1b": max(r.metrics["lateral_error_at_lane_end_m"] for r in runs),
+                     "R3": max(r.metrics["mean_speed_error_m_per_s"] for r in runs),
+                     "R4": max(r.metrics["rms_curvature_rate_per_m_s"] for r in runs),
+                     "R2": sum(r.metrics["cones_touched"] for r in runs),
+                     "R1a": max(r.metrics["body_outside_lane_m"] for r in runs)})
+        if figures:
+            for r in runs:
+                s1.plot_result(r, figures / f"stage1_M1_{name.split()[0]}_{r.case.name}.png")
+    axes = ("R1b", "R3", "R4")
+    for row in rows:
+        row["on_front"] = row["eligible"] and not any(
+            other["eligible"] and other is not row and all(other[a] <= row[a] for a in axes)
+            and any(other[a] < row[a] for a in axes) for other in rows)
+    table = ["| Design | Every unseen case passes | Failed | Worst R1b [m] | Worst R3 [m/s] | Worst R4 [1/(m s)] "
+             "| Cones touched | Worst outside lane [m] | Pareto front |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for r in rows:
+        table.append(f"| {r['name']} | {'yes' if r['eligible'] else 'no'} | {r['failed'] or '-'} | {r['R1b']:.3f} | "
+                     f"{r['R3']:.3f} | {r['R4']:.2f} | {r['R2']:.0f} | {r['R1a']:.3f} | "
+                     f"{'yes' if r['on_front'] else ''} |")
+    return "\n\n".join(parts + ["\n".join(table)])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("which", choices=("baseline", "mpc"))
+    parser.add_argument("which", choices=("baseline", "mpc", "rl", "m1"))
+    parser.add_argument("--figures", type=Path, help="for 'm1', save each unseen run's trajectory in this folder")
+    parser.add_argument("--models", type=Path, nargs="*", default=[], help="trained RL models, for 'rl'")
     parser.add_argument("--figure", type=Path, help="save the Pareto front figure here")
     parser.add_argument("--csv", type=Path, help="save every design's summary here")
     args = parser.parse_args()
-    designs = baseline_designs() if args.which == "baseline" else mpc_designs()
+    if args.which == "m1":
+        print(m1(args.models[0], args.figures))
+        return
+    designs = {"baseline": baseline_designs, "mpc": mpc_designs}.get(args.which, lambda: rl_designs(args.models))()
     rows = mark_pareto_front([summarise(name, runs) for name, runs in run_designs(designs).items()])
     if args.csv:
         import csv
@@ -282,13 +352,13 @@ def main():
             writer = csv.DictWriter(file, fieldnames=list(rows[0]))
             writer.writeheader()
             writer.writerows(rows)
-    if args.which == "mpc":
-        shown = [r for r in rows if r["on_front"] or r["name"] in (BASELINE, STARTING)]
+    if args.which in ("mpc", "rl"):
+        shown = [r for r in rows if r["on_front"] or r["name"] in (BASELINE, STARTING) or args.which == "rl"]
         print(format_summary(sorted(shown, key=lambda r: (-r["passed"], r["tracking_m"]))))
     else:
         print(format_summary(rows))
     if args.figure:
-        plot_front(rows, args.figure, "Stage 1 tuning cases, own noise and 0.03 m")
+        plot_front(rows, args.figure, "Stage 1 tuning cases, own noise and 0.03 m", label_all=args.which == "rl")
 
 
 if __name__ == "__main__":
