@@ -56,8 +56,10 @@ copy_files_to_car() {
         dry_run_flag=(--dry-run)
     fi
 
+    # The ${array[@]+...} form expands an empty array to nothing; macOS's bash 3.2 otherwise
+    # rejects "${array[@]}" as unbound under set -u.
     rsync -av \
-        "${dry_run_flag[@]}" \
+        ${dry_run_flag[@]+"${dry_run_flag[@]}"} \
         -e "ssh -p $REMOTE_PORT" \
         --exclude-from="$EXCLUDE_FROM" \
         "$ROOT_PATH/" "$REMOTE_USER@$REMOTE_HOST:$SRC_PATH"
