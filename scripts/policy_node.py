@@ -64,6 +64,7 @@ from dream_interfaces.msg import (ConeDetection, ConeDetections, DriveAndSteer,
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from policy.action_policy.mpc import MpcConfig
+from policy.cone_filter.cone_filter import ConeFilterConfig
 from policy.control.control import ControlConfig
 from policy.input_output import ConeColour, convert_observations, convert_actions
 from policy.policy_runner import MovementPolicy
@@ -210,17 +211,19 @@ class PolicyNode(Node):
         # YAML alone does not declare a parameter. A value such as 0.2 is a
         # floating-point number; 0 is an integer, which is a different ROS type.
 
-        # MPC and control settings: see mpc and control in ai4r_policy.yaml.
-        # MpcConfig (policy/action_policy/mpc.py) and ControlConfig
+        # MPC, cone filter and control settings: see mpc, cone_filter and control
+        # in ai4r_policy.yaml. MpcConfig (policy/action_policy/mpc.py),
+        # ConeFilterConfig (policy/cone_filter/cone_filter.py) and ControlConfig
         # (policy/control/control.py) hold their defaults and check them.
         settings = {}
-        for prefix, config_type in (("mpc", MpcConfig), ("control", ControlConfig)):
+        for prefix, config_type in (
+                ("mpc", MpcConfig), ("cone_filter", ConeFilterConfig), ("control", ControlConfig)):
             defaults = asdict(config_type())
             for name, default in defaults.items():
                 self.declare_parameter(f"{prefix}.{name}", default, ParameterDescriptor(read_only=True))
             settings[prefix] = config_type(**{
                 name: self.get_parameter(f"{prefix}.{name}").value for name in defaults})
-        self.movement_policy = MovementPolicy(settings["mpc"], settings["control"])
+        self.movement_policy = MovementPolicy(settings["mpc"], settings["cone_filter"], settings["control"])
 
         self.fsm_state = FSM_STATE_PUBLISHING_ZERO_ACTIONS
         self.state_reason = "Startup: waiting for an explicit policy request"
@@ -1012,8 +1015,14 @@ class PolicyNode(Node):
             z_coords=z_coords,
             cone_colour=[colour_converter[colour] for colour in cone_colour],
             cone_confidence=cone_confidence,
+            cone_acquisition_to_publish_latency_s=cone_acquisition_to_publish_latency_s,
+            fiducials_available=fiducials_available,
+            fiducial_dictionary_name=fiducial_dictionary_name,
+            fiducial_source_frame_id=fiducial_source_frame_id,
+            fiducials=fiducials,
             wheel_speed_in_meters_per_second=wheel_speed_in_meters_per_second,
-            lidar=lidar_scan,
+            lidar_scan=lidar_scan,
+            lidar_cartesian=lidar_cartesian,
             roll_angle_in_radians=roll_angle_in_radians,
             pitch_angle_in_radians=pitch_angle_in_radians,
             heading_angle_in_radians=heading_angle_in_radians,

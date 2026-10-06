@@ -1,6 +1,6 @@
 """Hardware-free checks of the MPC movement policy, without ROS.
 
-Run from the repository root with: python3 -m pytest tests/test_mpc.py
+Run from the repository root with: python3 -m pytest tests/policy/test_mpc.py
 """
 import dataclasses
 import math
@@ -9,14 +9,14 @@ import sys
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from policy.action_policy.mpc import MpcConfig  # noqa: E402
 from policy.action_policy.policy import MpcPolicy  # noqa: E402
 from policy.action_policy.reference import reference_from_cones  # noqa: E402
 from policy.control.actions import DriveCommand  # noqa: E402
 from policy.input_output import (  # noqa: E402
-    CarObservations, ConeColour, ConeDetection, Detections, ObservedCarState, PolicyState, Position, SensorAge)
+    CarObservations, ConeBatch, ConeColour, ConeDetection, ObservedCarState, PolicyState, Position, SensorAge)
 
 LANE_WIDTH_M = 1.0
 
@@ -39,8 +39,10 @@ def lane_cones(offset_m, heading_rad, colours=(ConeColour.YELLOW, ConeColour.BLU
 
 def observe(cones, first_step=False, cone_age_s=0.0):
     return CarObservations(
-        cones=None if cones is None else Detections(cones, SensorAge(cone_age_s, None)),
-        lidar_obs=None,
+        cones=(None if cones is None else ConeBatch(cones, SensorAge(cone_age_s, None), acquisition_to_publish_latency_s=0.0)),
+        fiducials=None,
+        lidar_scan=None,
+        lidar_cartesian=None,
         car=ObservedCarState(None, None, None, None),
         policy=PolicyState(dt=0.0 if first_step else 0.1, policy_elapsed_s=0.0, is_first_policy_step=first_step),
     )

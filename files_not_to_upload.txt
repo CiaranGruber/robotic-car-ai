@@ -1,0 +1,23 @@
+# Paths relative to the workspace root that rsync must not upload to the car.
+# One pattern per line. Blank lines and lines starting with # are ignored.
+
+.git
+.idea/
+.venv/
+.vscode/
+.github/
+wheels/
+build/
+install/
+log/
+files_not_to_upload.txt
+docs/
+LICENSE
+package.xml
+requirements.txt
+.gitignore
+.gitlab-ci.yml
+.gitattributes
+*.md
+ci/
+.gitlab/

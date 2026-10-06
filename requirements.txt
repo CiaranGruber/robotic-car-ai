@@ -1,1 +1,7 @@
-dreamgym~=0.2.2
+# PyPI packages. Custom wheels (e.g. dreamgym) live in wheels/ and are installed with:
+#   pip install wheels/*.whl
+# dreamgym~=0.2.2
+
+numpy
+scipy
+pytest

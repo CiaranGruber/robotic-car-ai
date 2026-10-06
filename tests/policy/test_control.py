@@ -1,6 +1,6 @@
 """Hardware-free checks of the temporary control conversion and the whole movement policy, without ROS.
 
-Run from the repository root with: python3 -m pytest tests/test_control.py
+Run from the repository root with: python3 -m pytest tests/policy/test_control.py
 """
 import dataclasses
 import math
@@ -9,13 +9,14 @@ import sys
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from policy.action_policy.mpc import MpcConfig  # noqa: E402
+from policy.cone_filter.cone_filter import ConeFilterConfig  # noqa: E402
 from policy.control.actions import DriveCommand, MoveCameraTo  # noqa: E402
 from policy.control.control import CarControl, ControlConfig  # noqa: E402
 from policy.input_output import (  # noqa: E402
-    CarActions, CarObservations, Detections, ObservedCarState, PolicyState, SensorAge, WheelSpeed, default_actions)
+    CarActions, CarObservations, ConeBatch, ObservedCarState, PolicyState, SensorAge, WheelSpeed, default_actions)
 from policy.policy_runner import MovementPolicy  # noqa: E402
 from test_mpc import lane_cones  # noqa: E402
 
@@ -23,8 +24,10 @@ from test_mpc import lane_cones  # noqa: E402
 def observe(wheel_speed=None, first_step=False, dt=0.1, cones=None):
     speed = None if wheel_speed is None else WheelSpeed(wheel_speed, SensorAge(0.0, None))
     return CarObservations(
-        cones=None if cones is None else Detections(cones, SensorAge(0.0, None)),
-        lidar_obs=None,
+        cones=None if cones is None else ConeBatch(cones, SensorAge(0.0, None), acquisition_to_publish_latency_s=0.0),
+        fiducials=None,
+        lidar_scan=None,
+        lidar_cartesian=None,
         car=ObservedCarState(None, None, None, speed),
         policy=PolicyState(dt=0.0 if first_step else dt, policy_elapsed_s=0.0, is_first_policy_step=first_step),
     )
@@ -92,7 +95,7 @@ def test_invalid_settings_are_rejected(change):
 def test_movement_policy_turns_back_to_the_lane_centre_within_the_effort_limit():
     """The whole chain: cones, MPC, then control. The car is 0.3 m left of the lane centre."""
     control_config = ControlConfig()
-    actions = MovementPolicy(MpcConfig(), control_config).step(
+    actions = MovementPolicy(MpcConfig(), ConeFilterConfig(), control_config).step(
         observe(0.3, first_step=True, cones=lane_cones(0.3, 0.0)))
     assert isinstance(actions, CarActions)
     assert actions.steering_action < 0.0  # right, with positive steering turning left
@@ -101,5 +104,5 @@ def test_movement_policy_turns_back_to_the_lane_centre_within_the_effort_limit()
 
 
 def test_movement_policy_stops_without_a_lane():
-    actions = MovementPolicy(MpcConfig(), ControlConfig()).step(observe(0.5, first_step=True, cones=[]))
+    actions = MovementPolicy(MpcConfig(), ConeFilterConfig(), ControlConfig()).step(observe(0.5, first_step=True, cones=[]))
     assert actions == default_actions()

@@ -182,3 +182,38 @@
       speed_ki: 0.1
       # Largest drive effort ever requested, double in (0, 1]. Keep it small.
       max_drive_effort: 0.2
+
+    # CONE OUTLIER FILTER SETTINGS (ConeFilterConfig in
+    # policy/cone_filter/cone_filter.py, which checks them; invalid values stop
+    # the node from starting). The detector only applies its own confidence and
+    # depth limits; this filter then removes cones that cannot belong to the
+    # Stage 1 lane: outside the space below, duplicates, or off their colour's
+    # straight row (both rows share one fitted direction). Every later policy
+    # stage only sees the kept cones. Replace the starting values after Task A1.
+    cone_filter:
+      # Keep cones with 0 < x <= this, metres ahead of base_link, positive
+      # double. Default 4.0, the shared camera range.
+      max_forward_m: 4.0
+      # Keep cones with |y| <= this, metres, positive double. Default 2.0: half
+      # the 1.0 m lane, a 0.2 m start offset and a 15 degree heading error
+      # seen 4 m ahead.
+      max_lateral_m: 2.0
+      # Accepted detected-point height above nominal ground, metres, finite
+      # doubles with min below max. The fixed camera pose ignores vehicle
+      # pitch, so keep this band loose.
+      min_height_m: -0.15
+      max_height_m: 0.45
+      # Minimum classification confidence, double in [0.0, 1.0]. The detector
+      # already applies its own threshold (default 0.5); raising this removes
+      # more cones.
+      min_confidence: 0.5
+      # Same-colour detections closer than this, metres, count as one cone; the
+      # most confident is kept. Positive double, well below the 0.5 m spacing.
+      merge_distance_m: 0.1
+      # Maximum distance of a cone from its fitted colour row, metres, positive
+      # double. Keep it above detector position noise but well below half the
+      # 1.0 m lane width. Curved lanes need a larger value or a curved fit.
+      row_residual_m: 0.15
+      # Nearest cones of each colour used for the row fit: INTEGER from 2 to 12.
+      # Bounds calculation time; farther cones are still checked against the fit.
+      max_fit_cones_per_colour: 8
