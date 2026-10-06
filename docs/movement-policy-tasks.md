@@ -40,10 +40,11 @@ Starting values from dream-gym's cone-following example
 | Maximum steering angle | 45 degrees (likely larger than the real car) | Chris |
 | Lane width | 1.0 m (also 0.8 m and 1.2 m test lanes) | Task 2.2: drawn in `docs/stage1-test-cases.md`; lab fit still to check |
 | Cone spacing | 0.5 m (also 0.75 m test lane) | Task 2.2: drawn in `docs/stage1-test-cases.md`; lab fit still to check |
-| Which colour is on which side | No default; dream-gym treats colours as labels per road | Long |
+| Which colour is on which side | Yellow left, blue right, as seen on the lab lane on 2026-10-06; to confirm | Long |
 | Camera view | 80 degrees wide, 4 m range, 0.01 m position noise | Task A1 |
 | Target speed | 1.0 m/s | Chris |
-| Time allowed per policy update | 50 ms | Task 1.5 |
+| Cone detection rate and age | 10 Hz; detections about 0.2 s old when the policy receives them | Task 1.5, measured on car 20 |
+| Time allowed per policy update | 20 ms (99th percentile) | Task 1.5, [stage1-approach.md](stage1-approach.md) |
 
 ## Log-book entries
 
