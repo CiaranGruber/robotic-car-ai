@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import stage1_scenarios as s1  # noqa: E402
 from stage1_tuning_cases import TUNING_CASES  # noqa: E402
-from policy.action_policy.policy import MpcPolicy  # noqa: E402
 from policy.control.actions import DriveCommand  # noqa: E402
 from policy.input_output import ConeColour  # noqa: E402
 
@@ -197,9 +196,9 @@ def test_stopping_outside_the_zone_fails(stop_x_m):
 # ------------------------------------------------------------------------------------------------
 @functools.cache
 def mpc_result(case):
-    """Runs the shipped MPC settings, set to the case's speed and lane width, once per case."""
+    """Runs the team's pipeline (shipped cone filter, then the MPC at the case's speed and lane width) once per case."""
     pytest.importorskip("dreamgym")
-    return s1.run_case(case, MpcPolicy(s1.mpc_config_for(case)))
+    return s1.run_case(case, s1.shipped_mpc_policy(case))
 
 
 def driving_failures(result):
@@ -209,7 +208,7 @@ def driving_failures(result):
 
 DYNAMIC_MODEL_XFAIL = pytest.mark.xfail(
     reason="Unexplained: on dream-gym's dynamic tyre model the car holds a steady heading error (3 degrees dry, "
-           "6 degrees wet) without turning, so it ends 0.12 m off centre. Check the tyre model against the 1:10 car "
+           "6 degrees wet) without turning, so it ends about 0.15 m off centre. Check the tyre model against the 1:10 car "
            "(Task A2) before tuning on T11.", strict=False)
 
 

@@ -22,7 +22,9 @@ python3 tests/policy/stage1_scenarios.py --layout docs/figures   # redraw the fl
 ```
 
 **Testing a design.** `run_case(case, policy)` accepts any object with `run_policy(observations, lanes)` returning
-a `DriveCommand`, so MPC and RL use the same cases, metrics and disturbances (Card 1.3). The policy only receives
+a `DriveCommand`, so MPC and RL use the same cases, metrics and disturbances (Card 1.3). `shipped_mpc_policy(case)`
+is the team's current chain, as in `MovementPolicy.step`: the shipped cone filter (`ConeFilterConfig`), then the MPC;
+wrap another design in `ConeFilteredPolicy` to give it the same filtered cones. The policy only receives
 cone detections, wheel speed and timing; the simulator's ground truth is used only to set up the case, create the
 disturbances and score the run.
 
@@ -77,28 +79,31 @@ at the 0.33 m wheelbase). The stop zone follows the card's example rule.
 
 ### Current result: shipped MPC on the tuning cases
 
-Shipped `MpcConfig` defaults with the case's speed and lane width, in simulation (5 October 2026):
+Shipped `ConeFilterConfig` defaults, then shipped `MpcConfig` defaults with the case's speed and lane width, in
+simulation (6 October 2026):
 
 | Case | Lane | Touched | Outside lane [m] | Lat. err. at end [m] | Speed err. [m/s] | Curv. rate RMS [1/(m s)] | Stop past last cone [m] | Fallbacks | Result |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | 6x1m_0.5 | 0 | 0.000 | 0.002 | 0.000 | 0.14 | -0.50 | 0 | Fail (R5) |
 | T2 | 6x1m_0.5 | 0 | 0.000 | 0.003 | 0.000 | 0.35 | -0.51 | 0 | Fail (R5) |
 | T3 | 6x1m_0.5 | 0 | 0.000 | 0.001 | 0.000 | 0.32 | -0.50 | 0 | Fail (R5) |
-| T4 | 6x1m_0.5 | 0 | 0.000 | 0.002 | 0.000 | 0.35 | -0.50 | 0 | Fail (R5) |
+| T4 | 6x1m_0.5 | 0 | 0.000 | 0.007 | 0.000 | 0.38 | -0.50 | 0 | Fail (R5) |
 | T5 | 6x1m_0.5 | 0 | 0.000 | 0.000 | 0.000 | 0.62 | -0.51 | 0 | Fail (R5) |
 | T6 | 6x1m_0.5 | 0 | 0.000 | 0.005 | 0.003 | 0.12 | -0.38 | 0 | Fail (R5) |
 | T7 | 6x0.8m_0.5 | 0 | 0.000 | 0.000 | 0.000 | 0.25 | -0.40 | 0 | Fail (R5) |
 | T8 | 6x1.2m_0.75 | 0 | 0.000 | 0.000 | 0.000 | 0.38 | -0.91 | 0 | Fail (R5) |
-| T9 | 8x1m_0.5 | 0 | 0.000 | 0.000 | 0.000 | 0.17 | -0.50 | 0 | Fail (R5) |
-| T10 | 6x1m_0.5 | 0 | 0.000 | 0.006 | 0.000 | 0.37 | -0.50 | 0 | Fail (R5) |
-| T11 | 6x1m_0.5 | 0 | 0.000 | 0.122 | 0.001 | 0.86 | -0.21 | 0 | Fail (R1, R5) |
+| T9 | 8x1m_0.5 | 0 | 0.000 | 0.005 | 0.000 | 0.15 | -0.50 | 0 | Fail (R5) |
+| T10 | 6x1m_0.5 | 0 | 0.000 | 0.008 | 0.000 | 0.17 | -0.50 | 0 | Fail (R5) |
+| T11 | 6x1m_0.5 | 0 | 0.000 | 0.153 | 0.001 | 0.89 | -0.20 | 0 | Fail (R1, R5) |
 
 - **Lane end (R5, all cases).** The MPC follows the lane well but stops 0.4 to 0.9 m **before** the last cone
   pair. Each row needs two cones at least 0.25 m apart, and the 80 degree camera cannot see a cone beside the lane
   closer than about 0.6 m ahead (more on wider lanes), so the lane is "lost" before the end. This is the lane-end
   rule for Task A7. The stop-zone test is marked `xfail` until then; remove the mark when A7 is done.
+- **Extra object (T10).** The cone filter removes the object beside the lane (it is off the yellow row), so the
+  steering is smoother than without the filter (curvature-rate RMS 0.17 against 0.37 1/(m s)).
 - **Wet floor (T11).** On dream-gym's dynamic tyre model the car holds a steady heading error (about 3 degrees on a
-  dry floor and 6 degrees on a wet one) while not turning, and ends 0.12 m off centre. This also happens on a dry
+  dry floor and 6 degrees on a wet one) while not turning, and ends 0.15 m off centre. This also happens on a dry
   floor, so the tyre model may not be calibrated for a 1:10 car. Check it (Task A2) before tuning on T11; its
   driving test is marked `xfail` until then.
 

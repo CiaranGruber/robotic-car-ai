@@ -28,9 +28,15 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+# Imported here rather than inside functions, so every policy object comes from the same import of the policy
+# package even if another test re-imports it (test_src_compiles.py does)
+import dataclasses  # noqa: E402
+from policy.action_policy.mpc import MpcConfig  # noqa: E402
+from policy.action_policy.policy import MpcPolicy  # noqa: E402
+from policy.cone_filter.cone_filter import ConeFilterConfig, filter_cones  # noqa: E402
 from policy.control.actions import DriveCommand  # noqa: E402
 from policy.input_output import (  # noqa: E402
-    CarObservations, ConeColour, ConeDetection, Detections, ObservedCarState, PolicyState, Position, SensorAge,
+    CarObservations, ConeBatch, ConeColour, ConeDetection, ObservedCarState, PolicyState, Position, SensorAge,
     WheelSpeed)
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -478,8 +484,11 @@ def run_case(case: Stage1Case, policy, thresholds: Thresholds = Thresholds()) ->
             speed = scalar(observation["body_longitudinal_velocity_mps"])
             first = step == 0
             observations = CarObservations(
-                cones=None if cones is None else Detections(cones, SensorAge(case.disturbances.delay_s, None)),
-                lidar_obs=None,
+                cones=None if cones is None else ConeBatch(cones, SensorAge(case.disturbances.delay_s, None),
+                                                           acquisition_to_publish_latency_s=0.0),
+                fiducials=None,
+                lidar_scan=None,
+                lidar_cartesian=None,
                 car=ObservedCarState(None, None, None, WheelSpeed(abs(speed), SensorAge(0.0, None))),
                 policy=PolicyState(dt=0.0 if first else POLICY_PERIOD_S, policy_elapsed_s=step * ENV_STEP_S,
                                    is_first_policy_step=first),
@@ -745,16 +754,42 @@ def format_table(results: list[Stage1Result]) -> str:
     return "\n".join(rows)
 
 
+class ConeFilteredPolicy:
+    """Runs the cone filter before a policy, as MovementPolicy.step in policy/policy_runner.py does on the car.
+
+    Lane detection is skipped (it does not produce lanes yet) and control is replaced by command_to_action.
+    """
+
+    def __init__(self, policy, cone_filter_config):
+        """
+        :param policy: The movement policy, with run_policy(observations, lanes).
+        :param cone_filter_config: The cone filter settings (ConeFilterConfig).
+        """
+        self.policy = policy
+        self.cone_filter_config = cone_filter_config
+
+    @property
+    def fallback_count(self) -> int:
+        return getattr(self.policy, "fallback_count", 0)
+
+    def run_policy(self, observations: CarObservations, lanes):
+        filtered = dataclasses.replace(observations, cones=filter_cones(observations.cones, self.cone_filter_config))
+        return self.policy.run_policy(filtered, lanes)
+
+
 def mpc_config_for(case: Stage1Case):
     """The MPC settings for a case: the shipped defaults, set to the case's speed and lane width, as the team would
     configure them for that lane in config/ai4r_policy.yaml."""
-    from policy.action_policy.mpc import MpcConfig
     return MpcConfig(target_speed_m_per_s=case.speed_m_per_s, lane_width_m=case.lane.width_m)
+
+
+def shipped_mpc_policy(case: Stage1Case) -> ConeFilteredPolicy:
+    """The team's current pipeline for a case: the shipped cone filter settings, then the MPC (mpc_config_for)."""
+    return ConeFilteredPolicy(MpcPolicy(mpc_config_for(case)), ConeFilterConfig())
 
 
 def main():
     import argparse
-    from policy.action_policy.policy import MpcPolicy
     from stage1_tuning_cases import TUNING_CASES
 
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -774,7 +809,7 @@ def main():
         cases = UNSEEN_CASES
     results = []
     for case in cases:
-        result = run_case(case, MpcPolicy(mpc_config_for(case)))
+        result = run_case(case, shipped_mpc_policy(case))
         results.append(result)
         if args.figures:
             args.figures.mkdir(parents=True, exist_ok=True)
