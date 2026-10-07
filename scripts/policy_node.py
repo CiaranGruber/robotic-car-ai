@@ -64,6 +64,7 @@ from dream_interfaces.msg import (ConeDetection, ConeDetections, DriveAndSteer,
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from policy.action_policy.mpc import MpcConfig
+from policy.cone_filter.cone_filter import ConeFilterConfig
 from policy.data_logging.data_logging import (
     DEFAULT_LOG_FOLDER,
     DEFAULT_LOG_LEVEL_NAME,
@@ -235,8 +236,16 @@ class PolicyNode(Node):
         mpc_defaults = asdict(MpcConfig())
         for name, default in mpc_defaults.items():
             self.declare_parameter(f"mpc.{name}", default, ParameterDescriptor(read_only=True))
-        self.movement_policy = MovementPolicy(MpcConfig(**{
-            name: self.get_parameter(f"mpc.{name}").value for name in mpc_defaults}))
+        mpc_config = MpcConfig(**{
+            name: self.get_parameter(f"mpc.{name}").value for name in mpc_defaults})
+        # Cone filter settings: see cone_filter in ai4r_policy.yaml. ConeFilterConfig in
+        # policy/cone_filter/cone_filter.py holds their defaults and checks them.
+        cone_filter_defaults = asdict(ConeFilterConfig())
+        for name, default in cone_filter_defaults.items():
+            self.declare_parameter(f"cone_filter.{name}", default, ParameterDescriptor(read_only=True))
+        cone_filter_config = ConeFilterConfig(**{
+            name: self.get_parameter(f"cone_filter.{name}").value for name in cone_filter_defaults})
+        self.movement_policy = MovementPolicy(mpc_config, cone_filter_config)
 
         self.fsm_state = FSM_STATE_PUBLISHING_ZERO_ACTIONS
         self.state_reason = "Startup: waiting for an explicit policy request"
