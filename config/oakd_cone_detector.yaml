@@ -37,7 +37,7 @@
     # Unannotated, calibrated RGB for ArUco: explicit opt-in, independent of
     # cones and debug images. Enable this before starting the ArUco detector.
     # Dimensions are startup-only; the rate can be changed live (0 pauses it).
-    publish_rgb_image: false
+    publish_rgb_image: true
     rgb_image_width_px: 1280
     rgb_image_height_px: 720
     rgb_image_publish_frequency_hz: 10.0
