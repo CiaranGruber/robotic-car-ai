@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Generator
 
 from policy.input_output import CarObservations, CarActions
-from scenarios import SCENARIOS_DIR
+from scenarios import SCENARIO_SUFFIX, SCENARIOS_DIR
 
 
 class ScenarioType(Enum):
@@ -18,7 +18,7 @@ class Scenario:
 
     @classmethod
     def from_name(cls, scenario_type: ScenarioType, name: str):
-        return cls(SCENARIOS_DIR / scenario_type.value / f"{name}_scenario.json")
+        return cls(SCENARIOS_DIR / scenario_type.value / f"{name}{SCENARIO_SUFFIX}")
 
     def reload(self):
         with open(self.scenario_path, "r") as f:
