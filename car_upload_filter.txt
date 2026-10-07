@@ -16,6 +16,7 @@
 + tests/test_policy_node.py
 + tests/test_release_contract.py
 - tests/*
+- scenarios/
 - __pycache__
 - .pytest_cache/
 - build/
@@ -27,6 +28,7 @@
 - LICENSE
 - package.xml
 - requirements.txt
+- pytest.ini
 - .gitignore
 - .gitlab-ci.yml
 - .gitattributes

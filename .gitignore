@@ -3,6 +3,7 @@ install/
 log/
 logs/
 .verification/
+scenarios/data/original_data
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
