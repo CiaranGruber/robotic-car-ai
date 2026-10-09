@@ -5,7 +5,7 @@ This file is responsible for taking in the observations and detected lanes and c
 control module
 """
 
-from policy.action_policy.mpc import MpcConfig, MpcController
+from policy.action_policy.mpc import MpcConfig, MpcController, PathTrackingState
 from policy.action_policy.reference import reference_from_cones
 from policy.control.actions import DriveCommand, Instruction
 from policy.input_output import CarObservations
@@ -41,19 +41,26 @@ class MpcPolicy:
         """Chooses the instructions for the car to follow from the observations and detected lanes
 
         :param observations: The observations taken by the car at the current policy step
-        :param lanes: The lanes detected by the lane detection module. Not used yet: the reference path comes from
-            the cones until the lane detection output is agreed (Task 1.4).
+        :param lanes: The lanes detected by the lane detection module, followed when given. When None (no cone
+            data, or a caller without lane detection such as the Stage 1 simulation harness), the reference path is
+            built from the cones with reference_from_cones instead.
         :return: The instructions for the control module to convert into car actions
         """
         if observations.policy.is_first_policy_step:
             self.reset()
-        cones = observations.cones
-        state = reference_from_cones(cones, self.config.lane_width_m)
-        if cones is None or state is None:
+        if lanes is not None:
+            state = (PathTrackingState(lanes.lateral_error_m, lanes.heading_error_rad, lanes.path_curvature_per_m)
+                     if lanes.has_lane else None)
+            delay_s = lanes.sensor_age
+        else:
+            cones = observations.cones
+            state = reference_from_cones(cones, self.config.lane_width_m)
+            delay_s = cones.sensor_age if cones is not None else 0.0
+        if state is None:
             # No lane or a doubtful lane: stop. Task A7 decides how long to continue and how to slow down instead.
             self.previous_curvature_per_m = 0.0
             return [DriveCommand(0.0, 0.0)]
-        solution = self.controller.solve(state, self.previous_curvature_per_m, cones.sensor_age)
+        solution = self.controller.solve(state, self.previous_curvature_per_m, delay_s)
         self.solve_count += 1
         self.last_solve_time_s = solution.solve_time_s
         if solution.converged:
