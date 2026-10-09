@@ -282,3 +282,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# System-ID rosbags (control/low-level-sysid)
+bags/
+*.mcap
+*.db3

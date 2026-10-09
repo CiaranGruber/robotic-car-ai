@@ -73,6 +73,7 @@ from policy.data_logging.data_logging import (
     start_data_log,
     validate_parameters,
 )
+from policy.control.control import ControlConfig
 from policy.input_output import ConeColour, convert_observations, convert_actions
 from policy.policy_runner import MovementPolicy
 
@@ -253,7 +254,15 @@ class PolicyNode(Node):
             self.declare_parameter(f"lane_detection.{name}", default, ParameterDescriptor(read_only=True))
         lane_detection_config = LaneDetectionConfig(**{
             name: self.get_parameter(f"lane_detection.{name}").value for name in lane_detection_defaults})
-        self.movement_policy = MovementPolicy(mpc_config, cone_filter_config, lane_detection_config)
+        # Control settings: see control in ai4r_policy.yaml. ControlConfig in
+        # policy/control/control.py holds their defaults and checks them.
+        control_defaults = asdict(ControlConfig())
+        for name, default in control_defaults.items():
+            self.declare_parameter(f"control.{name}", default, ParameterDescriptor(read_only=True))
+        control_config = ControlConfig(**{
+            name: self.get_parameter(f"control.{name}").value for name in control_defaults})
+        self.movement_policy = MovementPolicy(mpc_config, cone_filter_config, lane_detection_config,
+                                             control_config)
 
         self.fsm_state = FSM_STATE_PUBLISHING_ZERO_ACTIONS
         self.state_reason = "Startup: waiting for an explicit policy request"

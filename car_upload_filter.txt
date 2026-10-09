@@ -35,4 +35,6 @@
 - .gitattributes
 - *.md
 - ci/
+- tools/record_run.ps1
+- tools/sysid_analyze.py
 - .gitlab/
