@@ -65,6 +65,7 @@ from tf2_ros import Buffer, TransformException, TransformListener
 
 from policy.action_policy.mpc import MpcConfig
 from policy.cone_filter.cone_filter import ConeFilterConfig
+from policy.lane_detection.lane_detection import LaneDetectionConfig
 from policy.data_logging.data_logging import (
     DEFAULT_LOG_FOLDER,
     DEFAULT_LOG_LEVEL_NAME,
@@ -245,7 +246,14 @@ class PolicyNode(Node):
             self.declare_parameter(f"cone_filter.{name}", default, ParameterDescriptor(read_only=True))
         cone_filter_config = ConeFilterConfig(**{
             name: self.get_parameter(f"cone_filter.{name}").value for name in cone_filter_defaults})
-        self.movement_policy = MovementPolicy(mpc_config, cone_filter_config)
+        # Lane detection settings: see lane_detection in ai4r_policy.yaml. LaneDetectionConfig in
+        # policy/lane_detection/lane_detection.py holds their defaults and checks them.
+        lane_detection_defaults = asdict(LaneDetectionConfig())
+        for name, default in lane_detection_defaults.items():
+            self.declare_parameter(f"lane_detection.{name}", default, ParameterDescriptor(read_only=True))
+        lane_detection_config = LaneDetectionConfig(**{
+            name: self.get_parameter(f"lane_detection.{name}").value for name in lane_detection_defaults})
+        self.movement_policy = MovementPolicy(mpc_config, cone_filter_config, lane_detection_config)
 
         self.fsm_state = FSM_STATE_PUBLISHING_ZERO_ACTIONS
         self.state_reason = "Startup: waiting for an explicit policy request"

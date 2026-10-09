@@ -7,7 +7,7 @@ from policy.action_policy.policy import MpcPolicy
 from policy.cone_filter.cone_filter import ConeFilterConfig, filter_cones
 from policy.control.control import determine_car_actions
 from policy.input_output import CarActions, CarObservations
-from policy.lane_detection.lane_detection import detect_lanes
+from policy.lane_detection.lane_detection import LaneDetectionConfig, detect_lanes
 
 
 class MovementPolicy:
@@ -16,13 +16,17 @@ class MovementPolicy:
     policy_node creates one when it starts and calls step once per policy step.
     """
 
-    def __init__(self, mpc_config: MpcConfig, cone_filter_config: ConeFilterConfig):
+    def __init__(self, mpc_config: MpcConfig, cone_filter_config: ConeFilterConfig,
+                 lane_detection_config: LaneDetectionConfig):
         """
         :param mpc_config: The MPC settings, from the mpc parameters in config/ai4r_policy.yaml.
         :param cone_filter_config: The cone filter settings, from the cone_filter parameters in
             config/ai4r_policy.yaml.
+        :param lane_detection_config: The lane detection settings, from the lane_detection parameters in
+            config/ai4r_policy.yaml.
         """
         self.cone_filter_config = cone_filter_config
+        self.lane_detection_config = lane_detection_config
         self.action_policy = MpcPolicy(mpc_config)
 
     def step(self, observations: CarObservations) -> CarActions:
@@ -34,10 +38,10 @@ class MovementPolicy:
         # Remove the cone outliers, so every later stage uses the same plausible cones
         observations = dataclasses.replace(
             observations, cones=filter_cones(observations.cones, self.cone_filter_config))
-        # Detect the lanes and construct a road instance
-        road_map = detect_lanes(observations)
+        # Detect the lane edges, centre line and where the car is in the lane
+        lanes = detect_lanes(observations, self.lane_detection_config)
         # Determine the policy to take based upon the car location
-        instructions = self.action_policy.run_policy(observations, road_map)
+        instructions = self.action_policy.run_policy(observations, lanes)
         # The car actions to determine
         car_actions = determine_car_actions(observations, instructions)
         # Return final car actions

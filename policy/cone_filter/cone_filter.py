@@ -9,7 +9,9 @@ other lanes, misclassified colours and other objects still reach the policy. Thi
 1. Cones outside the space the lane can occupy, or below the confidence floor.
 2. Duplicate detections of one cone: same-colour detections closer than merge_distance_m. The most confident is kept.
 3. Cones off their colour's row. Stage 1 is a straight lane, so each colour is one straight row and both rows are
-   parallel. The rows are fitted together, so a long row can outvote a wrong cone in a short one.
+   parallel. The rows are fitted together, so a long row can outvote a wrong cone in a short one. A curved lane's
+   cones are not on straight rows, so this step is skipped when check_straight_rows is False; lane detection's curved
+   fit then leaves out the cones off their edge instead.
 
 It keeps no state between policy steps, and its loops are bounded by the batch size and max_fit_cones_per_colour, so
 it is safe to run inside the real-time policy step.
@@ -71,6 +73,11 @@ class ConeFilterConfig:
     The fit's calculation time grows with the fourth power of this, so it is bounded. Farther cones are still checked
     against the fitted rows.
     """
+    check_straight_rows: bool = True
+    """When True, remove the cones off their colour's straight row (step 3), for straight lanes such as Stage 1.
+
+    Set False for curved lanes, whose cones are not on straight rows and would be removed.
+    """
 
     def __post_init__(self):
         for name in ("max_forward_m", "max_lateral_m", "merge_distance_m", "row_residual_m"):
@@ -86,6 +93,8 @@ class ConeFilterConfig:
         count = self.max_fit_cones_per_colour
         if isinstance(count, bool) or not isinstance(count, int) or not 2 <= count <= 12:
             raise ValueError(f"cone_filter.max_fit_cones_per_colour must be an integer from 2 to 12, not {count}")
+        if not isinstance(self.check_straight_rows, bool):
+            raise ValueError(f"cone_filter.check_straight_rows must be true or false, not {self.check_straight_rows}")
 
 
 def filter_cones(cones: ConeBatch | None, config: ConeFilterConfig) -> ConeBatch | None:
@@ -103,7 +112,7 @@ def filter_cones(cones: ConeBatch | None, config: ConeFilterConfig) -> ConeBatch
     if cones is None:
         return None
     kept = _merge_duplicates([cone for cone in cones if _is_plausible(cone, config)], config.merge_distance_m)
-    fit = _fit_parallel_rows(kept, config)
+    fit = _fit_parallel_rows(kept, config) if config.check_straight_rows else None
     if fit is not None:
         slope, offsets = fit
         kept = [cone for cone in kept

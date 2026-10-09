@@ -201,8 +201,42 @@
       merge_distance_m: 0.1
       # Maximum distance of a cone from its fitted colour row, metres, positive
       # double. Keep it above detector position noise but well below half the
-      # 1.0 m lane width. Curved lanes need a larger value or a curved fit.
+      # 1.0 m lane width.
       row_residual_m: 0.15
       # Nearest cones of each colour used for the row fit: INTEGER from 2 to 12.
       # Bounds calculation time; farther cones are still checked against the fit.
       max_fit_cones_per_colour: 8
+      # true removes cones off their colour's straight row (Stage 1). Set false
+      # for curved lanes, whose cones are not on straight rows; lane detection
+      # then leaves out cones off its curved edges instead (boolean).
+      check_straight_rows: true
+
+    # LANE DETECTION SETTINGS (LaneDetectionConfig in
+    # policy/lane_detection/lane_detection.py, which checks them; invalid values
+    # stop the node from starting). Each cone colour is one lane edge; both edges
+    # are fitted together as arcs around one centre point (straight lines when
+    # the curvature is 0), giving the centre line and where the car is in it.
+    lane_detection:
+      # Colour of the LEFT edge's cones, string "BLUE" or "YELLOW"; the other
+      # colour is the right edge. "BLUE" matches the lab floor.
+      left_colour: "BLUE"
+      # Lane width, metres, positive double (shared default 1.0). Places the
+      # centre line when only one edge is found.
+      lane_width_m: 1.0
+      # Fewest cones of one colour for that edge to count, INTEGER >= 1.
+      min_cones_per_edge: 2
+      # Plausible measured lane width with both edges, metres, positive doubles
+      # with min below max. Outside it (or crossed edges) gives no lane.
+      min_lane_width_m: 0.5
+      max_lane_width_m: 1.5
+      # Largest curvature the fit may find, 1/m, double >= 0.0. 0.0 fits
+      # straight edges (Stage 1; fitting curves on straight lanes made the heading
+      # worse). For curved roads set 2.0 (a 0.5 m radius) AND set
+      # cone_filter.check_straight_rows: false.
+      max_curvature_per_m: 0.0
+      # Curvature treated as ordinary, 1/m, positive double (0.5 is a 2 m
+      # radius). Smaller values pull noisy fits harder towards straight.
+      typical_curvature_per_m: 0.5
+      # Cones farther than this from their fitted edge are left out and the
+      # edges refitted, metres, positive double.
+      outlier_distance_m: 0.15
