@@ -67,7 +67,9 @@ class MpcPolicy:
         """
         if observations.policy.is_first_policy_step:
             self.reset()
-        if self.stopped_for_lane_loss or self.stopped_for_solver_failure:
+        run_duration_s = self.config.run_duration_s
+        if (self.stopped_for_lane_loss or self.stopped_for_solver_failure
+                or 0.0 < run_duration_s <= observations.policy.policy_elapsed_s):
             return [self._command(0.0, 0.0)]
         measured_speed = observations.car.wheel_speed
         if measured_speed is not None and (not math.isfinite(measured_speed) or measured_speed < 0.0):

@@ -177,10 +177,22 @@ def test_waits_stopped_until_the_first_usable_lane():
     assert command(policy, lane_cones(0.0, 0.0), first_step=False).speed_m_per_s == MpcConfig().target_speed_m_per_s
 
 
+def test_run_duration_stops_with_fresh_lane_and_resets_on_new_run():
+    policy = MpcPolicy(MpcConfig(run_duration_s=0.2))
+    cones = lane_cones(0.2, 0.0)
+    assert command(policy, cones).speed_m_per_s > 0
+    observations = observe(cones)
+    for elapsed in (0.2, 0.3):
+        timed = dataclasses.replace(observations, policy=PolicyState(0.1, elapsed, False))
+        assert policy.run_policy(timed, None) == [DriveCommand(0.0, 0.0)]
+    assert command(policy, cones, first_step=True).speed_m_per_s > 0
+
+
 @pytest.mark.parametrize("change", [
     {"horizon_steps": 0}, {"horizon_steps": 2.0}, {"step_s": 0.0}, {"curvature_weight": 0.0},
     {"lateral_error_weight": -1.0}, {"target_speed_m_per_s": math.nan}, {"max_curvature_per_m": math.inf},
     {"lane_loss_timeout_s": -0.1}, {"lane_loss_timeout_s": math.inf}, {"lane_loss_speed_fraction": 1.5},
+    {"run_duration_s": -0.1}, {"run_duration_s": math.inf},
 ])
 def test_invalid_settings_are_rejected(change):
     with pytest.raises(ValueError):

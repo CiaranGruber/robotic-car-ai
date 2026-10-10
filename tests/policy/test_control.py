@@ -47,7 +47,8 @@ def test_steering_saturates_at_full_lock():
 
 
 def test_drive_effort_rises_while_too_slow_but_never_exceeds_the_limit():
-    config = ControlConfig()
+    # Explicit saturation target, independent of the constructor's tuning defaults.
+    config = ControlConfig(max_drive_effort=0.2)
     control = CarControl(config)
     efforts = [control.determine_car_actions(observe(0.3, first_step=step == 0), [DriveCommand(0.5, 0.0)]).drive_action
                for step in range(150)]

@@ -13,6 +13,28 @@ not actual sensor/vehicle response.
 Keep revision, command, result and limitations here; retain detailed logs in
 CI artifacts or merge requests rather than a tracked evidence directory.
 
+## MPC and RC/open-space integration, 2026-10-10
+
+Combined MPC branch `f7052b2` with prototype branch `7e30078`. The conflict
+resolution retains measured-speed prediction, solver-failure latching and
+distance-bounded lane-loss fallback alongside the prototype's run-duration
+stop and RC/open-space selection. Travelled distance is accumulated once.
+Endpoint inference remains an offline experiment, not a ROS-selected policy.
+
+On Windows with Python 3.12.14, `.venv/Scripts/python.exe -B -m pytest
+tests/policy/ -q -p no:cacheprovider` passed all 139 tests. This includes
+timed-stop/restart and invalid-duration regressions plus the existing MPC,
+endpoint, filtering, control and open-space tests. The saturation test now
+sets its effort limit explicitly; the control default is float `1.0` so ROS
+declares the same parameter type as the shipped YAML's `0.2` override.
+
+The CONTRIBUTING fast command was attempted through Windows Bash but could
+not start (`Bash/E_ACCESSDENIED`). The pinned interfaces checkout is also
+absent. These portable tests include import stubs and do not establish ROS
+integration, physical stopping or frame accuracy. The installed ROS gate
+and recorded human diff review remain required before PR merge. No robot
+configuration or hardware was changed.
+
 ## MPC kinematic screening, 2026-10-06
 
 Final-pair endpoint prototype, also uncommitted: the owner chose the final cone
