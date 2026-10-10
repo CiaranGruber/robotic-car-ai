@@ -18,7 +18,7 @@ from policy.control.control import CarControl, ControlConfig  # noqa: E402
 from policy.input_output import (  # noqa: E402
     CarActions, CarObservations, ConeBatch, ObservedCarState, PolicyState, SensorAge, WheelSpeed, default_actions)
 from policy.policy_runner import MovementPolicy  # noqa: E402
-from test_mpc import lane_cones  # noqa: E402
+from tests.policy.test_mpc import lane_cones  # noqa: E402
 
 
 def observe(wheel_speed=None, first_step=False, dt=0.1, cones=None):

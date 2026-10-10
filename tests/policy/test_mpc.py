@@ -4,19 +4,15 @@ Run from the repository root with: python3 -m pytest tests/policy/test_mpc.py
 """
 import dataclasses
 import math
-from pathlib import Path
-import sys
 
 import pytest
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from policy.action_policy.mpc import MpcConfig, MpcController, MpcSolution, PathTrackingState  # noqa: E402
-from policy.action_policy.policy import MpcPolicy  # noqa: E402
-from policy.action_policy.reference import reference_from_cones  # noqa: E402
-from policy.control.actions import DriveCommand  # noqa: E402
-from policy.input_output import (  # noqa: E402
+from policy.action_policy.mpc import MpcConfig, MpcController, MpcSolution, PathTrackingState
+from policy.action_policy.policy import MpcPolicy
+from policy.action_policy.reference import reference_from_cones
+from policy.control.actions import DriveCommand
+from policy.input_output import (
     CarObservations, ConeBatch, ConeColour, ConeDetection, ObservedCarState, PolicyState, Position, SensorAge)
 
 LANE_WIDTH_M = 1.0

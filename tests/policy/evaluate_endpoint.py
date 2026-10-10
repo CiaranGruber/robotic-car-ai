@@ -17,7 +17,11 @@ import platform
 import numpy as np
 import scipy
 
-from evaluate_mpc import Case, MpcConfig, MpcPolicy, ROOT, rollout
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from tests.policy.evaluate_mpc import Case, MpcConfig, MpcPolicy, ROOT, rollout
 from policy.action_policy.endpoint import EndpointConfig, EndpointMpcPolicy
 
 

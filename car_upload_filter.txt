@@ -1,0 +1,37 @@
+# rsync filter rules for car_management.sh (used with --filter=merge).
+# Paths are relative to the workspace root. Blank lines and # comments are ignored.
+# Each rule needs + (include) or - (exclude). First matching rule wins.
+# To keep a few files in an otherwise-excluded folder, + those files first, then
+# - the folder contents (e.g. scripts/*). Do not - the folder itself (scripts/),
+# or rsync never looks inside.
+
+- .git
+- .idea/
+- .venv/
+- .vscode/
+- .github/
+- wheels/
++ scripts/policy_node.py
+- scripts/*
++ tests/test_policy_node.py
++ tests/test_release_contract.py
+- tests/*
+- scenarios/
+- __pycache__
+- .pytest_cache/
+- build/
+- install/
+- log/
+- logs/
+- car_upload_filter.txt
+- docs/
+- LICENSE
+- package.xml
+- requirements.txt
+- pytest.ini
+- .gitignore
+- .gitlab-ci.yml
+- .gitattributes
+- *.md
+- ci/
+- .gitlab/

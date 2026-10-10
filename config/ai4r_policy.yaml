@@ -145,6 +145,24 @@
     #               open-space exercise settings above.
     action_policy: mpc
 
+    # Logging settings (policy/data_logging/data_logging.py).
+    logging:
+      # When true, record CarObservations and CarActions each policy step as JSON
+      # arrays in logging_folder. A new pair is named when the state becomes
+      # "Publishing policy actions".
+      is_data_logging: false
+      # Directory for drive and general log files. Empty or unusable paths fall
+      # back to data_logging.DEFAULT_LOG_FOLDER only when is_data_logging or
+      # log_to_file is true. Otherwise the supplied path is kept.
+      logging_folder: "./logs"
+      # Python logging level name: critical, error, warning, info, or debug.
+      # Default info. Unrecognised values fall back to info. Restart the policy
+      # node after changing this setting.
+      log_level: info
+      # When true, write general Python logs to logging_folder. When false,
+      # logs are instead written to the console.
+      log_to_file: false
+
     # MPC SETTINGS (MpcConfig in policy/action_policy/mpc.py, which checks them;
     # invalid values stop the node from starting). Starting values follow the
     # shared defaults in docs/movement-policy-tasks.md where one exists; record

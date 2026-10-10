@@ -13,6 +13,26 @@ not actual sensor/vehicle response.
 Keep revision, command, result and limitations here; retain detailed logs in
 CI artifacts or merge requests rather than a tracked evidence directory.
 
+## PR target conflict resolution, 2026-10-10
+
+Merged `dev` at `238fe38` into the combined MPC/prototype branch based on
+`3b950e6`. Kept the Stage 1 documentation and dev's updated figures, logging,
+scenario tools and replacement car-management script. Combined logging and RC
+observations with serialisable RC records and compatibility for recordings
+made before the RC field existed. Updated evaluation imports for the new test
+package layout; the MPC and open-space behavior remains selected as before.
+
+With the declared dependencies and bundled DREAMGym 0.2.2 installed in the local
+Windows Python 3.12.14 environment, the policy suite passed 207 tests, with
+12 existing expected failures (lane-end stopping and dynamic tyre-model cases)
+and three intentionally withheld unseen cases. Command:
+`.venv/Scripts/python.exe -B -m pytest tests/policy/ -q -rs -p no:cacheprovider
+--basetemp=build/pytest-dev-merge-2`.
+The ROS fast command again could not start through Windows Bash
+(`Bash/E_ACCESSDENIED`); the pinned interfaces checkout is absent. No physical
+acceptance or live configuration changes are claimed. Recorded human review
+and the installed ROS gate remain outstanding before PR merge.
+
 ## MPC and RC/open-space integration, 2026-10-10
 
 Combined MPC branch `f7052b2` with prototype branch `7e30078`. The conflict

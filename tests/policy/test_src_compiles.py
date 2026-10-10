@@ -149,9 +149,6 @@ def test_policy_sources_import_with_installed_dependencies(
     Generated ROS packages are stubbed when absent. Failures here usually mean a
     missing PyPI dependency, a broken import, or invalid module-level code.
     """
-    if str(REPO_ROOT) not in sys.path:
-        sys.path.insert(0, str(REPO_ROOT))
-
     # Fresh imports so this check does not rely on other tests having run first.
     for name in list(sys.modules):
         if name == "policy" or name.startswith("policy."):

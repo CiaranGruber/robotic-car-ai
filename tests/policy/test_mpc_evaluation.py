@@ -1,8 +1,8 @@
 """Guard against optimistic sensor/scoring errors in the offline evaluator."""
 import numpy as np
 
-from evaluate_mpc import Case, MpcConfig, detect, pareto_front, rollout
-from evaluate_mpc_speed import spatial_error
+from tests.policy.evaluate_mpc import Case, MpcConfig, detect, pareto_front, rollout
+from tests.policy.evaluate_mpc_speed import spatial_error
 
 
 def test_camera_cannot_see_behind_or_past_the_end_of_the_finite_lane():

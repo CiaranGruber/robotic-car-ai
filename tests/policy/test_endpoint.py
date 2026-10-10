@@ -4,11 +4,11 @@ import math
 
 import pytest
 
-from evaluate_mpc import Case, rollout
+from tests.policy.evaluate_mpc import Case, rollout
 from policy.action_policy.endpoint import EndpointConfig, EndpointMpcPolicy, EndpointTracker, stopping_speed
 from policy.action_policy.mpc import MpcConfig, PathTrackingState
 from policy.input_output import ConeBatch, ConeColour, ConeDetection, Position, SensorAge
-from test_mpc import observe
+from tests.policy.test_mpc import observe
 
 
 def pair_rows(distance, stamp=1, age=0.0):

@@ -41,7 +41,7 @@ The nominal operator sequence for running this policy on the actual car is:
      respective button in Foxglove).
   4. Stop your policy code by requesting policy state 2, which publishes zeros.
 """
-
+import logging
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 import math
@@ -67,6 +67,13 @@ from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig
 from policy.cone_filter.cone_filter import ConeFilterConfig
 from policy.control.control import ControlConfig
+from policy.data_logging.data_logging import (
+    DEFAULT_LOG_FOLDER,
+    DEFAULT_LOG_LEVEL_NAME,
+    setup_logging,
+    start_data_log,
+    validate_parameters,
+)
 from policy.input_output import ConeColour, convert_observations, convert_actions
 from policy.policy_runner import MovementPolicy
 
@@ -84,6 +91,9 @@ FIDUCIAL_DICTIONARY_SIZES = {
        for bits in (4, 5, 6, 7) for count in (50, 100, 250, 1000)},
     "DICT_ARUCO_ORIGINAL": 1024,
 }
+
+# Custom constants
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -177,6 +187,10 @@ class PolicyNode(Node):
             "status_period_s": 0.5,
             "timestamp_tolerance_s": 0.05,
             "policy_frame_id": "base_link",
+            "logging.is_data_logging": False,
+            "logging.logging_folder": DEFAULT_LOG_FOLDER,
+            "logging.log_level": DEFAULT_LOG_LEVEL_NAME,
+            "logging.log_to_file": False,
         }
         defaults.update({f"sensor_timeout_s.{name}": 0.5 for name in SENSORS})
         for name, default in defaults.items():
@@ -198,10 +212,17 @@ class PolicyNode(Node):
         self.status_period_s = self.get_parameter("status_period_s").value
         self.timestamp_tolerance_s = self.get_parameter("timestamp_tolerance_s").value
         self.policy_frame_id = self.get_parameter("policy_frame_id").value
+        self.logging_params = validate_parameters(
+            self.get_parameter("logging.is_data_logging").value,
+            self.get_parameter("logging.logging_folder").value,
+            self.get_parameter("logging.log_level").value,
+            self.get_parameter("logging.log_to_file").value,
+        )
         self.sensor_timeout_s = {
             name: self.get_parameter(f"sensor_timeout_s.{name}").value for name in SENSORS}
         self._validate_parameters()
         self.add_on_set_parameters_callback(self._reject_clock_change)
+        setup_logging(self.logging_params)
 
         # TO ADD A STUDENT PARAMETER, follow these THREE steps:
         # 1. Declare it here, for example:
@@ -1074,9 +1095,10 @@ class PolicyNode(Node):
             dt=dt,
             policy_elapsed_s=policy_elapsed_s,
             is_first_policy_step=is_first_policy_step,
+            logging_params=self.logging_params,
         )
         actions = self.movement_policy.step(observations)
-        drive_action, steering_action, camera_pan_action, debug1, debug2 = convert_actions(actions)
+        drive_action, steering_action, camera_pan_action, debug1, debug2 = convert_actions(actions, self.logging_params)
 
         # =====================================
         # END OF: INSERT POLICY CODE ABOVE HERE
@@ -1108,9 +1130,21 @@ class PolicyNode(Node):
             self.previous_policy_step_at = None
         self._change_state(requested, "Operator request")
 
+    def _state_name(self, state) -> str:
+        if state == FSM_STATE_PUBLISHING_POLICY_ACTION:
+            return "policy actions"
+        if state == FSM_STATE_PUBLISHING_ZERO_ACTIONS:
+            return "zero actions"
+        if state == FSM_STATE_NOT_PUBLISHING_ACTIONS:
+            return "not publishing actions"
+        return "unknown"
+
     def _change_state(self, state, reason):
         self.fsm_state = state
         self.state_reason = reason
+        _LOGGER.info("Changing state to %s", self._state_name(state))
+        if state == FSM_STATE_PUBLISHING_POLICY_ACTION:
+            self.logging_params = start_data_log(self.logging_params)
         if state == FSM_STATE_PUBLISHING_ZERO_ACTIONS:
             self.publish_zero_actions()
         self.get_logger().info(f"{STATE_NAMES[state]}: {reason}")

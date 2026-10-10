@@ -1,0 +1,6124 @@
+{
+  "name": "Messy staggered cones",
+  "description": "Blue and yellow cones placed in a staggered, uneven lane rather than two clean parallel lines. Stresses mid-lane tracking when boundaries wobble.",
+  "test_data": [
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.6186596270644787,
+                "y": 0.4310429992675781,
+                "z": 0.028883871070552514
+              },
+              "colour": "BLUE",
+              "confidence": 0.955078125
+            },
+            {
+              "pos": {
+                "x": 1.1450309982360902,
+                "y": 0.24140725708007815,
+                "z": 0.059426165458374036
+              },
+              "colour": "BLUE",
+              "confidence": 0.9482421875
+            },
+            {
+              "pos": {
+                "x": 1.3554888568336119,
+                "y": 0.20102125549316413,
+                "z": 0.06947873729998005
+              },
+              "colour": "BLUE",
+              "confidence": 0.9384765625
+            },
+            {
+              "pos": {
+                "x": 1.3551970332716554,
+                "y": -0.6396390991210937,
+                "z": 0.023372980658618203
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9375
+            },
+            {
+              "pos": {
+                "x": 1.728675514592628,
+                "y": -0.6356981811523438,
+                "z": 0.05339984444425244
+              },
+              "colour": "YELLOW",
+              "confidence": 0.92578125
+            },
+            {
+              "pos": {
+                "x": 0.7390866847567089,
+                "y": 0.28316040039062496,
+                "z": 0.04365882971139751
+              },
+              "colour": "BLUE",
+              "confidence": 0.91357421875
+            },
+            {
+              "pos": {
+                "x": 0.9080246149544414,
+                "y": -0.6114730834960939,
+                "z": -0.0003080722277560288
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9111328125
+            },
+            {
+              "pos": {
+                "x": 0.9678609401532753,
+                "y": 0.3935875854492187,
+                "z": 0.050393720730029734
+              },
+              "colour": "BLUE",
+              "confidence": 0.89208984375
+            },
+            {
+              "pos": {
+                "x": 1.747109193179007,
+                "y": 0.16719158935546868,
+                "z": 0.08408043055908249
+              },
+              "colour": "BLUE",
+              "confidence": 0.8818359375
+            },
+            {
+              "pos": {
+                "x": 1.909861134622771,
+                "y": -0.7624285278320313,
+                "z": 0.07400745771886402
+              },
+              "colour": "YELLOW",
+              "confidence": 0.8671875
+            },
+            {
+              "pos": {
+                "x": 1.5512166508114462,
+                "y": 0.1892928619384766,
+                "z": 0.07359822868881344
+              },
+              "colour": "BLUE",
+              "confidence": 0.8662109375
+            },
+            {
+              "pos": {
+                "x": 1.5479923705428726,
+                "y": -0.6655342407226562,
+                "z": 0.040250588147248745
+              },
+              "colour": "YELLOW",
+              "confidence": 0.80712890625
+            },
+            {
+              "pos": {
+                "x": 0.5223333541175854,
+                "y": 0.45910485839843757,
+                "z": -0.13655948094826492
+              },
+              "colour": "BLUE",
+              "confidence": 0.583984375
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.20013931,
+            "stamp_ns": 1791281216446831054
+          },
+          "acquisition_to_publish_latency_s": 0.192347217
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.200138543,
+            "stamp_ns": 1791281216446831821
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.0,
+            "sensor_age": {
+              "age_s": 0.01188136199971268,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.0,
+          "policy_elapsed_s": 0.07655002799992872,
+          "is_first_policy_step": true
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.6166433411271923,
+                "y": 0.4298336486816406,
+                "z": 0.02964451976280208
+              },
+              "colour": "BLUE",
+              "confidence": 0.955078125
+            },
+            {
+              "pos": {
+                "x": 1.144215639945679,
+                "y": 0.24124917602539064,
+                "z": 0.05958370644427896
+              },
+              "colour": "BLUE",
+              "confidence": 0.9482421875
+            },
+            {
+              "pos": {
+                "x": 1.3588017994821655,
+                "y": 0.20147882080078128,
+                "z": 0.0689540466271305
+              },
+              "colour": "BLUE",
+              "confidence": 0.9404296875
+            },
+            {
+              "pos": {
+                "x": 1.3419579895563007,
+                "y": -0.63381982421875,
+                "z": 0.025889674288449516
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9375
+            },
+            {
+              "pos": {
+                "x": 1.7183827908747533,
+                "y": -0.6321201171875002,
+                "z": 0.05478786792595186
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9267578125
+            },
+            {
+              "pos": {
+                "x": 0.7452104694918951,
+                "y": 0.28538488769531256,
+                "z": 0.04035943561020766
+              },
+              "colour": "BLUE",
+              "confidence": 0.9140625
+            },
+            {
+              "pos": {
+                "x": 0.9011453983518861,
+                "y": -0.6074677124023438,
+                "z": 0.0008997289386440399
+              },
+              "colour": "YELLOW",
+              "confidence": 0.90869140625
+            },
+            {
+              "pos": {
+                "x": 0.9678609401532753,
+                "y": 0.3935875854492187,
+                "z": 0.050393720730029734
+              },
+              "colour": "BLUE",
+              "confidence": 0.89208984375
+            },
+            {
+              "pos": {
+                "x": 1.748859992506636,
+                "y": 0.1673500671386718,
+                "z": 0.0838757737467472
+              },
+              "colour": "BLUE",
+              "confidence": 0.88427734375
+            },
+            {
+              "pos": {
+                "x": 1.5554505666720935,
+                "y": 0.18977822875976563,
+                "z": 0.07301772331205986
+              },
+              "colour": "BLUE",
+              "confidence": 0.87158203125
+            },
+            {
+              "pos": {
+                "x": 1.8516334048433791,
+                "y": -0.7403402099609375,
+                "z": 0.08055466372653769
+              },
+              "colour": "YELLOW",
+              "confidence": 0.8642578125
+            },
+            {
+              "pos": {
+                "x": 1.5312188921447825,
+                "y": -0.6604378051757813,
+                "z": 0.04289436173006428
+              },
+              "colour": "YELLOW",
+              "confidence": 0.8095703125
+            },
+            {
+              "pos": {
+                "x": 0.46861915921150776,
+                "y": 0.4196102294921876,
+                "z": -0.09949273956517773
+              },
+              "colour": "BLUE",
+              "confidence": 0.6025390625
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.209292014,
+            "stamp_ns": 1791281216546795486
+          },
+          "acquisition_to_publish_latency_s": 0.201807645
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.209288206,
+            "stamp_ns": 1791281216546799294
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.0,
+            "sensor_age": {
+              "age_s": 0.017520064000109414,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10911675200031823,
+          "policy_elapsed_s": 0.18566678000024694,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.6140675438361612,
+                "y": 0.4282886962890625,
+                "z": 0.03061624589253692
+              },
+              "colour": "BLUE",
+              "confidence": 0.955078125
+            },
+            {
+              "pos": {
+                "x": 1.1450309982360902,
+                "y": 0.24140725708007815,
+                "z": 0.059426165458374036
+              },
+              "colour": "BLUE",
+              "confidence": 0.947265625
+            },
+            {
+              "pos": {
+                "x": 1.3599095447285179,
+                "y": 0.20163180541992198,
+                "z": 0.06877858294202083
+              },
+              "colour": "BLUE",
+              "confidence": 0.9384765625
+            },
+            {
+              "pos": {
+                "x": 1.3246760956874768,
+                "y": -0.6262235107421874,
+                "z": 0.029174899238463003
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9384765625
+            },
+            {
+              "pos": {
+                "x": 1.704838109741205,
+                "y": -0.6274116210937499,
+                "z": 0.05661437482210324
+              },
+              "colour": "YELLOW",
+              "confidence": 0.92822265625
+            },
+            {
+              "pos": {
+                "x": 0.7434954580412468,
+                "y": 0.283815185546875,
+                "z": 0.041599306813081716
+              },
+              "colour": "BLUE",
+              "confidence": 0.9140625
+            },
+            {
+              "pos": {
+                "x": 0.9108025040495086,
+                "y": -0.6128198852539063,
+                "z": 0.0005624607495959277
+              },
+              "colour": "YELLOW",
+              "confidence": 0.91015625
+            },
+            {
+              "pos": {
+                "x": 0.9678609401532753,
+                "y": 0.3935875854492187,
+                "z": 0.050393720730029734
+              },
+              "colour": "BLUE",
+              "confidence": 0.888671875
+            },
+            {
+              "pos": {
+                "x": 1.741876620378267,
+                "y": 0.16671795654296867,
+                "z": 0.08469212159140155
+              },
+              "colour": "BLUE",
+              "confidence": 0.87744140625
+            },
+            {
+              "pos": {
+                "x": 1.8380804371653396,
+                "y": -0.7351990356445313,
+                "z": 0.08207858631082748
+              },
+              "colour": "YELLOW",
+              "confidence": 0.86767578125
+            },
+            {
+              "pos": {
+                "x": 1.5428135399180205,
+                "y": 0.18832954406738278,
+                "z": 0.07475039467356542
+              },
+              "colour": "BLUE",
+              "confidence": 0.86279296875
+            },
+            {
+              "pos": {
+                "x": 1.5367720112425403,
+                "y": -0.6610029907226562,
+                "z": 0.04201911185857837
+              },
+              "colour": "YELLOW",
+              "confidence": 0.79541015625
+            },
+            {
+              "pos": {
+                "x": 0.4551687997102314,
+                "y": 0.410362579345703,
+                "z": -0.09004296792711403
+              },
+              "colour": "BLUE",
+              "confidence": 0.5498046875
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.216135317,
+            "stamp_ns": 1791281216646825206
+          },
+          "acquisition_to_publish_latency_s": 0.210276927
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.216139477,
+            "stamp_ns": 1791281216646821046
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.0,
+            "sensor_age": {
+              "age_s": 0.01979486700020061,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.1068746870000723,
+          "policy_elapsed_s": 0.29254146700031924,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.6237799104418887,
+                "y": 0.4343600769042969,
+                "z": 0.025670700907501842
+              },
+              "colour": "BLUE",
+              "confidence": 0.95703125
+            },
+            {
+              "pos": {
+                "x": 1.138538015022899,
+                "y": 0.24014828491210938,
+                "z": 0.06068079672549692
+              },
+              "colour": "BLUE",
+              "confidence": 0.95166015625
+            },
+            {
+              "pos": {
+                "x": 1.3624720047634105,
+                "y": 0.20058708190917968,
+                "z": 0.06613342504088643
+              },
+              "colour": "BLUE",
+              "confidence": 0.939453125
+            },
+            {
+              "pos": {
+                "x": 1.335046206728752,
+                "y": -0.63094970703125,
+                "z": 0.026081105952468986
+              },
+              "colour": "YELLOW",
+              "confidence": 0.93603515625
+            },
+            {
+              "pos": {
+                "x": 1.7200902390204615,
+                "y": -0.6327136840820313,
+                "z": 0.054557615065988274
+              },
+              "colour": "YELLOW",
+              "confidence": 0.927734375
+            },
+            {
+              "pos": {
+                "x": 0.9113580748635713,
+                "y": -0.6138339843750001,
+                "z": -0.0030020811845326567
+              },
+              "colour": "YELLOW",
+              "confidence": 0.919921875
+            },
+            {
+              "pos": {
+                "x": 0.7427951820266614,
+                "y": 0.2847269897460937,
+                "z": 0.03967531427562293
+              },
+              "colour": "BLUE",
+              "confidence": 0.91943359375
+            },
+            {
+              "pos": {
+                "x": 0.9706226718996028,
+                "y": 0.3947121582031249,
+                "z": 0.048885672208580144
+              },
+              "colour": "BLUE",
+              "confidence": 0.8974609375
+            },
+            {
+              "pos": {
+                "x": 1.744882644099754,
+                "y": 0.16703340148925788,
+                "z": 0.0829686960188824
+              },
+              "colour": "BLUE",
+              "confidence": 0.8798828125
+            },
+            {
+              "pos": {
+                "x": 1.538643969446647,
+                "y": 0.18952470397949228,
+                "z": 0.07532209450165145
+              },
+              "colour": "BLUE",
+              "confidence": 0.86767578125
+            },
+            {
+              "pos": {
+                "x": 1.8496856965672412,
+                "y": -0.7396013793945313,
+                "z": 0.08077366916852319
+              },
+              "colour": "YELLOW",
+              "confidence": 0.8603515625
+            },
+            {
+              "pos": {
+                "x": 1.525703378900364,
+                "y": -0.656532958984375,
+                "z": 0.04376371846109478
+              },
+              "colour": "YELLOW",
+              "confidence": 0.8154296875
+            },
+            {
+              "pos": {
+                "x": 0.49982257083414916,
+                "y": 0.4405768737792968,
+                "z": -0.12206239828319015
+              },
+              "colour": "BLUE",
+              "confidence": 0.544921875
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.208643222,
+            "stamp_ns": 1791281216746795334
+          },
+          "acquisition_to_publish_latency_s": 0.198725515
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.208650646,
+            "stamp_ns": 1791281216746787910
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.0,
+            "sensor_age": {
+              "age_s": 0.039715403000172955,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.09242932699999074,
+          "policy_elapsed_s": 0.38497079400031,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.6233697854383659,
+                "y": 0.4375640258789062,
+                "z": 0.024543891721168942
+              },
+              "colour": "BLUE",
+              "confidence": 0.95166015625
+            },
+            {
+              "pos": {
+                "x": 1.141445095436891,
+                "y": 0.24077612304687507,
+                "z": 0.05914594018452418
+              },
+              "colour": "BLUE",
+              "confidence": 0.94970703125
+            },
+            {
+              "pos": {
+                "x": 1.3547223175475454,
+                "y": 0.20102125549316424,
+                "z": 0.06737268792038681
+              },
+              "colour": "BLUE",
+              "confidence": 0.9404296875
+            },
+            {
+              "pos": {
+                "x": 1.3455740398917913,
+                "y": -0.637251708984375,
+                "z": 0.022940250155735142
+              },
+              "colour": "YELLOW",
+              "confidence": 0.931640625
+            },
+            {
+              "pos": {
+                "x": 1.7200902390204615,
+                "y": -0.6327136840820313,
+                "z": 0.054557615065988274
+              },
+              "colour": "YELLOW",
+              "confidence": 0.92822265625
+            },
+            {
+              "pos": {
+                "x": 0.9127546237749148,
+                "y": -0.61703662109375,
+                "z": -0.004272829542818324
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9248046875
+            },
+            {
+              "pos": {
+                "x": 0.7370067657371112,
+                "y": 0.28277142333984373,
+                "z": 0.041463250523712636
+              },
+              "colour": "BLUE",
+              "confidence": 0.92236328125
+            },
+            {
+              "pos": {
+                "x": 0.9666762356164805,
+                "y": 0.3899848327636718,
+                "z": 0.04895151621817234
+              },
+              "colour": "BLUE",
+              "confidence": 0.8984375
+            },
+            {
+              "pos": {
+                "x": 1.739661262551987,
+                "y": 0.16656068420410142,
+                "z": 0.08358293889841056
+              },
+              "colour": "BLUE",
+              "confidence": 0.88134765625
+            },
+            {
+              "pos": {
+                "x": 1.5582852050573068,
+                "y": 0.19179638671875004,
+                "z": 0.07262902665548004
+              },
+              "colour": "BLUE",
+              "confidence": 0.8642578125
+            },
+            {
+              "pos": {
+                "x": 1.889394158187344,
+                "y": -0.7546644897460937,
+                "z": 0.07630880949540425
+              },
+              "colour": "YELLOW",
+              "confidence": 0.8505859375
+            },
+            {
+              "pos": {
+                "x": 1.5914749976338953,
+                "y": -0.6865732421875002,
+                "z": 0.033397068145433806
+              },
+              "colour": "YELLOW",
+              "confidence": 0.8154296875
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.20438107,
+            "stamp_ns": 1791281216846822550
+          },
+          "acquisition_to_publish_latency_s": 0.200812236
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.204307467,
+            "stamp_ns": 1791281216846896153
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.0,
+            "sensor_age": {
+              "age_s": 0.01831618900041576,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.09581466600002386,
+          "policy_elapsed_s": 0.48078546000033384,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.6124499736564888,
+                "y": 0.43302752685546875,
+                "z": 0.026172008349503673
+              },
+              "colour": "BLUE",
+              "confidence": 0.95361328125
+            },
+            {
+              "pos": {
+                "x": 1.1301884712332313,
+                "y": 0.23987377929687498,
+                "z": 0.06132984761420984
+              },
+              "colour": "BLUE",
+              "confidence": 0.9482421875
+            },
+            {
+              "pos": {
+                "x": 1.3499486061667494,
+                "y": 0.20190696716308598,
+                "z": 0.0670251119040603
+              },
+              "colour": "BLUE",
+              "confidence": 0.93603515625
+            },
+            {
+              "pos": {
+                "x": 1.7166786799258937,
+                "y": -0.6315277709960938,
+                "z": 0.05501765309654755
+              },
+              "colour": "YELLOW",
+              "confidence": 0.93115234375
+            },
+            {
+              "pos": {
+                "x": 0.8791410017174421,
+                "y": -0.5999954833984374,
+                "z": -0.000782746326410122
+              },
+              "colour": "YELLOW",
+              "confidence": 0.92919921875
+            },
+            {
+              "pos": {
+                "x": 0.7367749447490808,
+                "y": 0.28548800659179685,
+                "z": 0.04082632759374344
+              },
+              "colour": "BLUE",
+              "confidence": 0.92431640625
+            },
+            {
+              "pos": {
+                "x": 1.3018657628242665,
+                "y": -0.6194421997070313,
+                "z": 0.03131740170160974
+              },
+              "colour": "YELLOW",
+              "confidence": 0.916015625
+            },
+            {
+              "pos": {
+                "x": 0.9636765733548106,
+                "y": 0.38460375976562505,
+                "z": 0.04794135966066854
+              },
+              "colour": "BLUE",
+              "confidence": 0.8984375
+            },
+            {
+              "pos": {
+                "x": 1.7275923456370283,
+                "y": 0.16546797180175787,
+                "z": 0.08500270320136688
+              },
+              "colour": "BLUE",
+              "confidence": 0.8857421875
+            },
+            {
+              "pos": {
+                "x": 1.5437783030067023,
+                "y": 0.1901682434082031,
+                "z": 0.07337833005660016
+              },
+              "colour": "BLUE",
+              "confidence": 0.88525390625
+            },
+            {
+              "pos": {
+                "x": 1.8438657967435819,
+                "y": -0.7413292846679689,
+                "z": 0.0814281104632823
+              },
+              "colour": "YELLOW",
+              "confidence": 0.86279296875
+            },
+            {
+              "pos": {
+                "x": 1.5513698419761563,
+                "y": -0.6706475830078125,
+                "z": 0.0371910319152588
+              },
+              "colour": "YELLOW",
+              "confidence": 0.8056640625
+            },
+            {
+              "pos": {
+                "x": 0.5528282587383707,
+                "y": 0.48802685546875013,
+                "z": -0.1692673600209233
+              },
+              "colour": "BLUE",
+              "confidence": 0.72265625
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.211459841,
+            "stamp_ns": 1791281216946825832
+          },
+          "acquisition_to_publish_latency_s": 0.208078886
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.211508228,
+            "stamp_ns": 1791281216946777445
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.0,
+            "sensor_age": {
+              "age_s": 0.032353117000184284,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10708208500000183,
+          "policy_elapsed_s": 0.5878675450003357,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 1.1276145509307547,
+                "y": 0.2408426818847656,
+                "z": 0.05893928754944827
+              },
+              "colour": "BLUE",
+              "confidence": 0.9560546875
+            },
+            {
+              "pos": {
+                "x": 0.6068423363714844,
+                "y": 0.43324536132812497,
+                "z": 0.02581139446430808
+              },
+              "colour": "BLUE",
+              "confidence": 0.95166015625
+            },
+            {
+              "pos": {
+                "x": 1.7363824781006096,
+                "y": -0.6405855102539062,
+                "z": 0.049594084665270655
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9384765625
+            },
+            {
+              "pos": {
+                "x": 0.7312802215627724,
+                "y": 0.2857291259765625,
+                "z": 0.039708782591770075
+              },
+              "colour": "BLUE",
+              "confidence": 0.927734375
+            },
+            {
+              "pos": {
+                "x": 1.3448226231251244,
+                "y": 0.2027873687744141,
+                "z": 0.06563294186497676
+              },
+              "colour": "BLUE",
+              "confidence": 0.92333984375
+            },
+            {
+              "pos": {
+                "x": 1.320272795035625,
+                "y": -0.6297242431640625,
+                "z": 0.023337483469114406
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9208984375
+            },
+            {
+              "pos": {
+                "x": 0.8573207458367038,
+                "y": -0.5919720458984374,
+                "z": -0.010359526123657148
+              },
+              "colour": "YELLOW",
+              "confidence": 0.919921875
+            },
+            {
+              "pos": {
+                "x": 1.7317935384382057,
+                "y": 0.16593450927734382,
+                "z": 0.08178181512124966
+              },
+              "colour": "BLUE",
+              "confidence": 0.9072265625
+            },
+            {
+              "pos": {
+                "x": 0.958290819118608,
+                "y": 0.3817449035644531,
+                "z": 0.04750830997297889
+              },
+              "colour": "BLUE",
+              "confidence": 0.87841796875
+            },
+            {
+              "pos": {
+                "x": 1.8404235952836625,
+                "y": -0.7405923461914061,
+                "z": 0.07749712973413064
+              },
+              "colour": "YELLOW",
+              "confidence": 0.8642578125
+            },
+            {
+              "pos": {
+                "x": 1.549490131708421,
+                "y": 0.1892928619384766,
+                "z": 0.06885465643899485
+              },
+              "colour": "BLUE",
+              "confidence": 0.8603515625
+            },
+            {
+              "pos": {
+                "x": 1.5267416501630804,
+                "y": -0.660993896484375,
+                "z": 0.03861835546653042
+              },
+              "colour": "YELLOW",
+              "confidence": 0.83251953125
+            },
+            {
+              "pos": {
+                "x": 0.4815507278090455,
+                "y": 0.4365812683105469,
+                "z": -0.1199328794525128
+              },
+              "colour": "BLUE",
+              "confidence": 0.513671875
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.214265875,
+            "stamp_ns": 1791281217046821758
+          },
+          "acquisition_to_publish_latency_s": 0.205815999
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.214271316,
+            "stamp_ns": 1791281217046816317
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.0,
+            "sensor_age": {
+              "age_s": 0.025418335999802366,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10279779999973471,
+          "policy_elapsed_s": 0.6906653450000704,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 1.1236570556451695,
+                "y": 0.24134135437011722,
+                "z": 0.05971640559103791
+              },
+              "colour": "BLUE",
+              "confidence": 0.95703125
+            },
+            {
+              "pos": {
+                "x": 0.6042842642174343,
+                "y": 0.4359572448730469,
+                "z": 0.024919854654667006
+              },
+              "colour": "BLUE",
+              "confidence": 0.95068359375
+            },
+            {
+              "pos": {
+                "x": 1.7123325250169672,
+                "y": -0.6340462036132812,
+                "z": 0.052873505439723745
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9404296875
+            },
+            {
+              "pos": {
+                "x": 0.727803387782108,
+                "y": 0.2855892639160156,
+                "z": 0.03939129921083245
+              },
+              "colour": "BLUE",
+              "confidence": 0.93603515625
+            },
+            {
+              "pos": {
+                "x": 1.3415685123657006,
+                "y": 0.20233062744140629,
+                "z": 0.06616080391048901
+              },
+              "colour": "BLUE",
+              "confidence": 0.91748046875
+            },
+            {
+              "pos": {
+                "x": 1.7185958054379549,
+                "y": 0.16838586425781255,
+                "z": 0.08470788716325178
+              },
+              "colour": "BLUE",
+              "confidence": 0.91357421875
+            },
+            {
+              "pos": {
+                "x": 1.3170930608343143,
+                "y": -0.6283143920898436,
+                "z": 0.023956909958064043
+              },
+              "colour": "YELLOW",
+              "confidence": 0.90771484375
+            },
+            {
+              "pos": {
+                "x": 0.8685005890807589,
+                "y": -0.5978295288085937,
+                "z": 0.0016667280567396747
+              },
+              "colour": "YELLOW",
+              "confidence": 0.89599609375
+            },
+            {
+              "pos": {
+                "x": 1.8332401058218122,
+                "y": -0.7396174316406249,
+                "z": 0.07975557285335716
+              },
+              "colour": "YELLOW",
+              "confidence": 0.876953125
+            },
+            {
+              "pos": {
+                "x": 1.5466825479889963,
+                "y": 0.19402001953124987,
+                "z": 0.06924808778414099
+              },
+              "colour": "BLUE",
+              "confidence": 0.86181640625
+            },
+            {
+              "pos": {
+                "x": 0.9547115186654574,
+                "y": 0.38156857299804686,
+                "z": 0.04836228118029967
+              },
+              "colour": "BLUE",
+              "confidence": 0.861328125
+            },
+            {
+              "pos": {
+                "x": 1.5420357847242516,
+                "y": -0.6688986206054688,
+                "z": 0.03616091282345718
+              },
+              "colour": "YELLOW",
+              "confidence": 0.8271484375
+            },
+            {
+              "pos": {
+                "x": 0.509548521285302,
+                "y": 0.4593593444824219,
+                "z": -0.14481468016162208
+              },
+              "colour": "BLUE",
+              "confidence": 0.78173828125
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.206104036,
+            "stamp_ns": 1791281217147499646
+          },
+          "acquisition_to_publish_latency_s": 0.202359772
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.206105285,
+            "stamp_ns": 1791281217147498397
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.0,
+            "sensor_age": {
+              "age_s": 0.007810493000306451,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.09251870500020232,
+          "policy_elapsed_s": 0.7831840500002727,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 1.1201838411413059,
+                "y": 0.24326417541503903,
+                "z": 0.05943991723674763
+              },
+              "colour": "BLUE",
+              "confidence": 0.96044921875
+            },
+            {
+              "pos": {
+                "x": 0.5977626101809759,
+                "y": 0.43641607666015625,
+                "z": 0.024349354237882037
+              },
+              "colour": "BLUE",
+              "confidence": 0.9482421875
+            },
+            {
+              "pos": {
+                "x": 1.716957929613594,
+                "y": -0.6358305664062499,
+                "z": 0.05087309378506005
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9453125
+            },
+            {
+              "pos": {
+                "x": 0.7206418132716651,
+                "y": 0.286835906982422,
+                "z": 0.04025037087727762
+              },
+              "colour": "BLUE",
+              "confidence": 0.927734375
+            },
+            {
+              "pos": {
+                "x": 1.7227521465556155,
+                "y": 0.168858413696289,
+                "z": 0.08150118033642356
+              },
+              "colour": "BLUE",
+              "confidence": 0.91748046875
+            },
+            {
+              "pos": {
+                "x": 1.3336542544388865,
+                "y": 0.2042268371582031,
+                "z": 0.06634437814661548
+              },
+              "colour": "BLUE",
+              "confidence": 0.916015625
+            },
+            {
+              "pos": {
+                "x": 1.347667587683981,
+                "y": -0.6452301025390625,
+                "z": 0.015728550707106714
+              },
+              "colour": "YELLOW",
+              "confidence": 0.89599609375
+            },
+            {
+              "pos": {
+                "x": 0.8666720620888756,
+                "y": -0.6013825073242188,
+                "z": -0.00022558270897149457
+              },
+              "colour": "YELLOW",
+              "confidence": 0.89501953125
+            },
+            {
+              "pos": {
+                "x": 0.9426878273081915,
+                "y": 0.38745205688476564,
+                "z": 0.048701374477823245
+              },
+              "colour": "BLUE",
+              "confidence": 0.8759765625
+            },
+            {
+              "pos": {
+                "x": 1.836573598786087,
+                "y": -0.7410848999023438,
+                "z": 0.07793858188906316
+              },
+              "colour": "YELLOW",
+              "confidence": 0.85986328125
+            },
+            {
+              "pos": {
+                "x": 1.5245609165792489,
+                "y": 0.18975303649902353,
+                "z": 0.0723480353910792
+              },
+              "colour": "BLUE",
+              "confidence": 0.83447265625
+            },
+            {
+              "pos": {
+                "x": 1.504574487919197,
+                "y": -0.6554629516601562,
+                "z": 0.040950056825085734
+              },
+              "colour": "YELLOW",
+              "confidence": 0.81201171875
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.193063725,
+            "stamp_ns": 1791281217247540573
+          },
+          "acquisition_to_publish_latency_s": 0.190191971
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.193067052,
+            "stamp_ns": 1791281217247537246
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.0,
+            "sensor_age": {
+              "age_s": 0.014842781999959698,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.08699955999964004,
+          "policy_elapsed_s": 0.8701836099999127,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 1.1103196998213378,
+                "y": 0.24408116149902348,
+                "z": 0.05757656850309151
+              },
+              "colour": "BLUE",
+              "confidence": 0.95068359375
+            },
+            {
+              "pos": {
+                "x": 1.6539591013091348,
+                "y": -0.6157365112304688,
+                "z": 0.058188107209238005
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94921875
+            },
+            {
+              "pos": {
+                "x": 0.58739787881102,
+                "y": 0.43296713256835934,
+                "z": 0.024746663385552037
+              },
+              "colour": "BLUE",
+              "confidence": 0.94287109375
+            },
+            {
+              "pos": {
+                "x": 1.3205453346008675,
+                "y": 0.20534054565429682,
+                "z": 0.06739013571190638
+              },
+              "colour": "BLUE",
+              "confidence": 0.919921875
+            },
+            {
+              "pos": {
+                "x": 1.3237750569483362,
+                "y": -0.6360647583007812,
+                "z": 0.020420203000662995
+              },
+              "colour": "YELLOW",
+              "confidence": 0.91748046875
+            },
+            {
+              "pos": {
+                "x": 0.8526678027607473,
+                "y": -0.5972534790039062,
+                "z": -0.003160364024000717
+              },
+              "colour": "YELLOW",
+              "confidence": 0.91162109375
+            },
+            {
+              "pos": {
+                "x": 1.7159572498678637,
+                "y": 0.17007205200195302,
+                "z": 0.08231569965060909
+              },
+              "colour": "BLUE",
+              "confidence": 0.90771484375
+            },
+            {
+              "pos": {
+                "x": 0.7151888943300201,
+                "y": 0.28782211303710936,
+                "z": 0.03989404559071036
+              },
+              "colour": "BLUE",
+              "confidence": 0.90478515625
+            },
+            {
+              "pos": {
+                "x": 0.9383660165007305,
+                "y": 0.3927557373046875,
+                "z": 0.04721979400743942
+              },
+              "colour": "BLUE",
+              "confidence": 0.89990234375
+            },
+            {
+              "pos": {
+                "x": 1.873265817468925,
+                "y": -0.7573217773437501,
+                "z": 0.07226596708728267
+              },
+              "colour": "YELLOW",
+              "confidence": 0.88134765625
+            },
+            {
+              "pos": {
+                "x": 1.5177691995319016,
+                "y": 0.19226686096191392,
+                "z": 0.0732997781935329
+              },
+              "colour": "BLUE",
+              "confidence": 0.8330078125
+            },
+            {
+              "pos": {
+                "x": 1.4726202664162256,
+                "y": -0.645818542480469,
+                "z": 0.04490269586519274
+              },
+              "colour": "YELLOW",
+              "confidence": 0.8310546875
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.20115294,
+            "stamp_ns": 1791281217347507206
+          },
+          "acquisition_to_publish_latency_s": 0.197499591
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.201149453,
+            "stamp_ns": 1791281217347510693
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.0,
+            "sensor_age": {
+              "age_s": 0.002308820000052947,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.1080579280001075,
+          "policy_elapsed_s": 0.9782415380000202,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 1.6653759300423647,
+                "y": -0.6238397827148437,
+                "z": 0.052615430665032104
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94921875
+            },
+            {
+              "pos": {
+                "x": 0.5790581489643641,
+                "y": 0.43184951782226555,
+                "z": 0.022583996428382325
+              },
+              "colour": "BLUE",
+              "confidence": 0.94189453125
+            },
+            {
+              "pos": {
+                "x": 1.2818271894441517,
+                "y": -0.6251913452148438,
+                "z": 0.024311915177270327
+              },
+              "colour": "YELLOW",
+              "confidence": 0.939453125
+            },
+            {
+              "pos": {
+                "x": 1.0978758517314724,
+                "y": 0.24426719665527352,
+                "z": 0.057237051317683585
+              },
+              "colour": "BLUE",
+              "confidence": 0.93603515625
+            },
+            {
+              "pos": {
+                "x": 0.7741408784087863,
+                "y": -0.5602662353515626,
+                "z": -0.005243922885558028
+              },
+              "colour": "YELLOW",
+              "confidence": 0.921875
+            },
+            {
+              "pos": {
+                "x": 1.3148571428785938,
+                "y": 0.2047343597412109,
+                "z": 0.06397041117086494
+              },
+              "colour": "BLUE",
+              "confidence": 0.91845703125
+            },
+            {
+              "pos": {
+                "x": 0.9306569249139177,
+                "y": 0.39036883544921885,
+                "z": 0.04491333859286922
+              },
+              "colour": "BLUE",
+              "confidence": 0.91845703125
+            },
+            {
+              "pos": {
+                "x": 0.7044712114396229,
+                "y": 0.2897604675292968,
+                "z": 0.039193676272325784
+              },
+              "colour": "BLUE",
+              "confidence": 0.9052734375
+            },
+            {
+              "pos": {
+                "x": 1.6895249372034118,
+                "y": 0.16954501342773437,
+                "z": 0.08148126717244136
+              },
+              "colour": "BLUE",
+              "confidence": 0.89990234375
+            },
+            {
+              "pos": {
+                "x": 1.8350667604068343,
+                "y": -0.7469707641601562,
+                "z": 0.07379857746729884
+              },
+              "colour": "YELLOW",
+              "confidence": 0.896484375
+            },
+            {
+              "pos": {
+                "x": 1.4830448810132724,
+                "y": -0.6538776855468749,
+                "z": 0.039565213306987645
+              },
+              "colour": "YELLOW",
+              "confidence": 0.86328125
+            },
+            {
+              "pos": {
+                "x": 1.5214989790122933,
+                "y": 0.1945711669921874,
+                "z": 0.06787107451342717
+              },
+              "colour": "BLUE",
+              "confidence": 0.83544921875
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.192126934,
+            "stamp_ns": 1791281217447539990
+          },
+          "acquisition_to_publish_latency_s": 0.187689845
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.192125175,
+            "stamp_ns": 1791281217447541749
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.0,
+            "sensor_age": {
+              "age_s": 0.011927411999749893,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.0910007620000215,
+          "policy_elapsed_s": 1.0692423000000417,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 1.6639900741912275,
+                "y": -0.6274486694335937,
+                "z": 0.04880782300741354
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94189453125
+            },
+            {
+              "pos": {
+                "x": 0.569282637311365,
+                "y": 0.4316000366210937,
+                "z": 0.019303454791068486
+              },
+              "colour": "BLUE",
+              "confidence": 0.94140625
+            },
+            {
+              "pos": {
+                "x": 1.0853487114760567,
+                "y": 0.24692800903320306,
+                "z": 0.05603232076312342
+              },
+              "colour": "BLUE",
+              "confidence": 0.9384765625
+            },
+            {
+              "pos": {
+                "x": 1.2809886099561565,
+                "y": -0.6299749145507813,
+                "z": 0.019037734306236398
+              },
+              "colour": "YELLOW",
+              "confidence": 0.93017578125
+            },
+            {
+              "pos": {
+                "x": 0.6930822592965201,
+                "y": 0.2922638854980468,
+                "z": 0.0381300067096903
+              },
+              "colour": "BLUE",
+              "confidence": 0.9248046875
+            },
+            {
+              "pos": {
+                "x": 1.299278736066319,
+                "y": 0.20841905212402345,
+                "z": 0.06333583180666386
+              },
+              "colour": "BLUE",
+              "confidence": 0.921875
+            },
+            {
+              "pos": {
+                "x": 0.914130403678861,
+                "y": 0.3900141296386719,
+                "z": 0.044876387150013464
+              },
+              "colour": "BLUE",
+              "confidence": 0.91943359375
+            },
+            {
+              "pos": {
+                "x": 1.687416759122317,
+                "y": 0.17120535278320315,
+                "z": 0.08040458667702638
+              },
+              "colour": "BLUE",
+              "confidence": 0.9072265625
+            },
+            {
+              "pos": {
+                "x": 1.7691607629306243,
+                "y": -0.727593017578125,
+                "z": 0.07872183977781039
+              },
+              "colour": "YELLOW",
+              "confidence": 0.90283203125
+            },
+            {
+              "pos": {
+                "x": 0.8070600994582414,
+                "y": -0.5881639404296876,
+                "z": -0.011232364318013388
+              },
+              "colour": "YELLOW",
+              "confidence": 0.88134765625
+            },
+            {
+              "pos": {
+                "x": 1.52925901216096,
+                "y": -0.6783625488281251,
+                "z": 0.029457038698851024
+              },
+              "colour": "YELLOW",
+              "confidence": 0.876953125
+            },
+            {
+              "pos": {
+                "x": 1.502255756419384,
+                "y": 0.19723202514648436,
+                "z": 0.0694123551100218
+              },
+              "colour": "BLUE",
+              "confidence": 0.7119140625
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.206942308,
+            "stamp_ns": 1791281217547510022
+          },
+          "acquisition_to_publish_latency_s": 0.20319798
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.206942756,
+            "stamp_ns": 1791281217547509574
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.13944347202777863,
+            "sensor_age": {
+              "age_s": 0.029007874999933847,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.11479087799989429,
+          "policy_elapsed_s": 1.184033177999936,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 1.0679798350032608,
+                "y": 0.2496819610595703,
+                "z": 0.055910632326374
+              },
+              "colour": "BLUE",
+              "confidence": 0.955078125
+            },
+            {
+              "pos": {
+                "x": 0.564397348150926,
+                "y": 0.4357835693359375,
+                "z": 0.014689229581718866
+              },
+              "colour": "BLUE",
+              "confidence": 0.94384765625
+            },
+            {
+              "pos": {
+                "x": 1.2480471662663462,
+                "y": -0.6212446289062499,
+                "z": 0.021480074606257504
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94140625
+            },
+            {
+              "pos": {
+                "x": 1.2813853114800815,
+                "y": 0.21157023620605464,
+                "z": 0.06423135340224978
+              },
+              "colour": "BLUE",
+              "confidence": 0.93603515625
+            },
+            {
+              "pos": {
+                "x": 1.6534668350365225,
+                "y": -0.6276216430664063,
+                "z": 0.047650902088314184
+              },
+              "colour": "YELLOW",
+              "confidence": 0.92919921875
+            },
+            {
+              "pos": {
+                "x": 0.6765191795482438,
+                "y": 0.2956088562011719,
+                "z": 0.03557383442640588
+              },
+              "colour": "BLUE",
+              "confidence": 0.92431640625
+            },
+            {
+              "pos": {
+                "x": 1.762831807392264,
+                "y": -0.7292876586914061,
+                "z": 0.07669671301752817
+              },
+              "colour": "YELLOW",
+              "confidence": 0.90625
+            },
+            {
+              "pos": {
+                "x": 1.6606192200538479,
+                "y": 0.17409558105468736,
+                "z": 0.08106649855741693
+              },
+              "colour": "BLUE",
+              "confidence": 0.90283203125
+            },
+            {
+              "pos": {
+                "x": 0.738128269375651,
+                "y": -0.5523828124999999,
+                "z": -0.008053942340285503
+              },
+              "colour": "YELLOW",
+              "confidence": 0.89453125
+            },
+            {
+              "pos": {
+                "x": 1.4927838231011183,
+                "y": -0.6669892578125001,
+                "z": 0.03183526466614878
+              },
+              "colour": "YELLOW",
+              "confidence": 0.83642578125
+            },
+            {
+              "pos": {
+                "x": 0.8948802176015257,
+                "y": 0.39159207153320325,
+                "z": 0.04565919725200035
+              },
+              "colour": "BLUE",
+              "confidence": 0.81591796875
+            },
+            {
+              "pos": {
+                "x": 1.4676200280437288,
+                "y": 0.19949063110351567,
+                "z": 0.07202046603860163
+              },
+              "colour": "BLUE",
+              "confidence": 0.74755859375
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.218378641,
+            "stamp_ns": 1791281217647548318
+          },
+          "acquisition_to_publish_latency_s": 0.205757381
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.218382737,
+            "stamp_ns": 1791281217647544222
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.1657032072544098,
+            "sensor_age": {
+              "age_s": 0.019354529999873193,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.11147251700003835,
+          "policy_elapsed_s": 1.2955056949999744,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 1.044794550093652,
+                "y": 0.24978535461425777,
+                "z": 0.057125038687671326
+              },
+              "colour": "BLUE",
+              "confidence": 0.96533203125
+            },
+            {
+              "pos": {
+                "x": 0.5433471292016587,
+                "y": 0.4314909057617187,
+                "z": 0.005922890031435812
+              },
+              "colour": "BLUE",
+              "confidence": 0.9462890625
+            },
+            {
+              "pos": {
+                "x": 0.6544870389333004,
+                "y": 0.29538778686523437,
+                "z": 0.03719381903565039
+              },
+              "colour": "BLUE",
+              "confidence": 0.9326171875
+            },
+            {
+              "pos": {
+                "x": 1.2632036749389428,
+                "y": 0.21323542785644534,
+                "z": 0.06312223994198368
+              },
+              "colour": "BLUE",
+              "confidence": 0.93115234375
+            },
+            {
+              "pos": {
+                "x": 1.6545995869495367,
+                "y": -0.6353766479492187,
+                "z": 0.04615826322479405
+              },
+              "colour": "YELLOW",
+              "confidence": 0.927734375
+            },
+            {
+              "pos": {
+                "x": 1.2412288171796053,
+                "y": -0.6256171875000001,
+                "z": 0.019704308917876723
+              },
+              "colour": "YELLOW",
+              "confidence": 0.92431640625
+            },
+            {
+              "pos": {
+                "x": 0.7142191275538359,
+                "y": -0.5427993774414063,
+                "z": -0.007166187948975333
+              },
+              "colour": "YELLOW",
+              "confidence": 0.91162109375
+            },
+            {
+              "pos": {
+                "x": 1.8287285357299168,
+                "y": -0.7591981811523438,
+                "z": 0.06736013589958739
+              },
+              "colour": "YELLOW",
+              "confidence": 0.90625
+            },
+            {
+              "pos": {
+                "x": 1.6470545376865375,
+                "y": 0.1781748352050782,
+                "z": 0.08014052887574347
+              },
+              "colour": "BLUE",
+              "confidence": 0.89501953125
+            },
+            {
+              "pos": {
+                "x": 1.4832040090503154,
+                "y": -0.6734938354492187,
+                "z": 0.028563814481304017
+              },
+              "colour": "YELLOW",
+              "confidence": 0.8642578125
+            },
+            {
+              "pos": {
+                "x": 1.448380920748383,
+                "y": 0.200423583984375,
+                "z": 0.0701163827149564
+              },
+              "colour": "BLUE",
+              "confidence": 0.79833984375
+            },
+            {
+              "pos": {
+                "x": 0.8809034027334987,
+                "y": 0.39540087890625,
+                "z": 0.04199962738628632
+              },
+              "colour": "BLUE",
+              "confidence": 0.7841796875
+            },
+            {
+              "pos": {
+                "x": 0.8819414106362574,
+                "y": 0.4177933044433594,
+                "z": 0.041726607634742396
+              },
+              "colour": "BLUE",
+              "confidence": 0.65869140625
+            },
+            {
+              "pos": {
+                "x": 0.9091410941711063,
+                "y": -0.6639880981445314,
+                "z": 0.006129370755505403
+              },
+              "colour": "YELLOW",
+              "confidence": 0.6064453125
+            },
+            {
+              "pos": {
+                "x": 0.896766836714669,
+                "y": -0.641341247558594,
+                "z": -0.0028296210052931037
+              },
+              "colour": "YELLOW",
+              "confidence": 0.60400390625
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.212784766,
+            "stamp_ns": 1791281217747515910
+          },
+          "acquisition_to_publish_latency_s": 0.206185773
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.212789087,
+            "stamp_ns": 1791281217747511589
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.1657032072544098,
+            "sensor_age": {
+              "age_s": 0.021728441000050225,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.09437592500034953,
+          "policy_elapsed_s": 1.389881620000324,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 1.0236332971927125,
+                "y": 0.25284127807617185,
+                "z": 0.053567890987195665
+              },
+              "colour": "BLUE",
+              "confidence": 0.9541015625
+            },
+            {
+              "pos": {
+                "x": 1.6164436396927526,
+                "y": -0.6258941650390625,
+                "z": 0.04516461581983661
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94140625
+            },
+            {
+              "pos": {
+                "x": 1.202656896267373,
+                "y": -0.6155958862304689,
+                "z": 0.02052906320791531
+              },
+              "colour": "YELLOW",
+              "confidence": 0.93505859375
+            },
+            {
+              "pos": {
+                "x": 1.2428530722173332,
+                "y": 0.2159493560791016,
+                "z": 0.060417875984833225
+              },
+              "colour": "BLUE",
+              "confidence": 0.92919921875
+            },
+            {
+              "pos": {
+                "x": 0.6363247113539234,
+                "y": 0.30092413330078127,
+                "z": 0.03324214797928354
+              },
+              "colour": "BLUE",
+              "confidence": 0.91748046875
+            },
+            {
+              "pos": {
+                "x": 0.5274055116289896,
+                "y": 0.43256347656250005,
+                "z": -0.008627771440776366
+              },
+              "colour": "BLUE",
+              "confidence": 0.91748046875
+            },
+            {
+              "pos": {
+                "x": 0.7446778137197035,
+                "y": -0.5651893920898436,
+                "z": -0.0023163890970647194
+              },
+              "colour": "YELLOW",
+              "confidence": 0.90869140625
+            },
+            {
+              "pos": {
+                "x": 0.8634853589742236,
+                "y": 0.3995187683105468,
+                "z": 0.04023669393519208
+              },
+              "colour": "BLUE",
+              "confidence": 0.9052734375
+            },
+            {
+              "pos": {
+                "x": 1.7311353556994913,
+                "y": -0.7287872314453125,
+                "z": 0.07503348551829608
+              },
+              "colour": "YELLOW",
+              "confidence": 0.90283203125
+            },
+            {
+              "pos": {
+                "x": 1.6235549624107557,
+                "y": 0.1812258911132813,
+                "z": 0.07793452834155284
+              },
+              "colour": "BLUE",
+              "confidence": 0.89599609375
+            },
+            {
+              "pos": {
+                "x": 1.486778815819816,
+                "y": -0.6806531372070312,
+                "z": 0.023045178820919332
+              },
+              "colour": "YELLOW",
+              "confidence": 0.86328125
+            },
+            {
+              "pos": {
+                "x": 1.423523703390863,
+                "y": 0.200540008544922,
+                "z": 0.06917060287802052
+              },
+              "colour": "BLUE",
+              "confidence": 0.8291015625
+            },
+            {
+              "pos": {
+                "x": 0.9082980510239235,
+                "y": -0.6567464599609375,
+                "z": -0.0029338925417097816
+              },
+              "colour": "YELLOW",
+              "confidence": 0.6943359375
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.223107193,
+            "stamp_ns": 1791281217847540966
+          },
+          "acquisition_to_publish_latency_s": 0.19878285
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.223103929,
+            "stamp_ns": 1791281217847544230
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.18566453456878662,
+            "sensor_age": {
+              "age_s": 0.03484466300005806,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.11034706700002062,
+          "policy_elapsed_s": 1.5002286870003445,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.9969496507236936,
+                "y": 0.25646633911132805,
+                "z": 0.05416189754497441
+              },
+              "colour": "BLUE",
+              "confidence": 0.96435546875
+            },
+            {
+              "pos": {
+                "x": 1.2119063517411588,
+                "y": 0.21935760498046886,
+                "z": 0.061863832641306515
+              },
+              "colour": "BLUE",
+              "confidence": 0.94384765625
+            },
+            {
+              "pos": {
+                "x": 1.19306533197741,
+                "y": -0.6217214965820311,
+                "z": 0.015376894082912151
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9375
+            },
+            {
+              "pos": {
+                "x": 0.6574076400284721,
+                "y": -0.519094482421875,
+                "z": -0.004648250308621649
+              },
+              "colour": "YELLOW",
+              "confidence": 0.931640625
+            },
+            {
+              "pos": {
+                "x": 0.6168462668511151,
+                "y": 0.30618026733398435,
+                "z": 0.030202053607106316
+              },
+              "colour": "BLUE",
+              "confidence": 0.927734375
+            },
+            {
+              "pos": {
+                "x": 1.5980993964072194,
+                "y": 0.1856100006103516,
+                "z": 0.07739203324638949
+              },
+              "colour": "BLUE",
+              "confidence": 0.92333984375
+            },
+            {
+              "pos": {
+                "x": 1.6146418548654378,
+                "y": -0.6294130859375,
+                "z": 0.040214252692073404
+              },
+              "colour": "YELLOW",
+              "confidence": 0.919921875
+            },
+            {
+              "pos": {
+                "x": 1.748838449643404,
+                "y": -0.7439273071289062,
+                "z": 0.06871430745908097
+              },
+              "colour": "YELLOW",
+              "confidence": 0.91943359375
+            },
+            {
+              "pos": {
+                "x": 1.4155055344612382,
+                "y": -0.6603594970703125,
+                "z": 0.029614456244498377
+              },
+              "colour": "YELLOW",
+              "confidence": 0.916015625
+            },
+            {
+              "pos": {
+                "x": 0.8431848228363835,
+                "y": 0.4032836303710938,
+                "z": 0.03790830247724991
+              },
+              "colour": "BLUE",
+              "confidence": 0.85595703125
+            },
+            {
+              "pos": {
+                "x": 0.8245111380276703,
+                "y": -0.6168677368164063,
+                "z": 0.009731238596459246
+              },
+              "colour": "YELLOW",
+              "confidence": 0.84716796875
+            },
+            {
+              "pos": {
+                "x": 0.5080199906882369,
+                "y": 0.43091503906249995,
+                "z": -0.017769122480977784
+              },
+              "colour": "BLUE",
+              "confidence": 0.82568359375
+            },
+            {
+              "pos": {
+                "x": 1.4040877080502714,
+                "y": 0.20746022033691408,
+                "z": 0.06752862095873974
+              },
+              "colour": "BLUE",
+              "confidence": 0.6845703125
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.195401886,
+            "stamp_ns": 1791281217947511758
+          },
+          "acquisition_to_publish_latency_s": 0.191599507
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.195408286,
+            "stamp_ns": 1791281217947505358
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.18566453456878662,
+            "sensor_age": {
+              "age_s": 0.026708078999945428,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.07226634899961937,
+          "policy_elapsed_s": 1.5724950359999639,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 1.1847286144336469,
+                "y": 0.22055101013183598,
+                "z": 0.0597926185747501
+              },
+              "colour": "BLUE",
+              "confidence": 0.9541015625
+            },
+            {
+              "pos": {
+                "x": 0.9748509426293456,
+                "y": 0.259843505859375,
+                "z": 0.05135479761015821
+              },
+              "colour": "BLUE",
+              "confidence": 0.947265625
+            },
+            {
+              "pos": {
+                "x": 1.56011944402896,
+                "y": -0.6184039916992188,
+                "z": 0.04467903477688945
+              },
+              "colour": "YELLOW",
+              "confidence": 0.93115234375
+            },
+            {
+              "pos": {
+                "x": 1.1405194186060243,
+                "y": -0.6070476074218751,
+                "z": 0.01801144395347415
+              },
+              "colour": "YELLOW",
+              "confidence": 0.93017578125
+            },
+            {
+              "pos": {
+                "x": 1.402363488511405,
+                "y": -0.6650267944335937,
+                "z": 0.024955010720057957
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9140625
+            },
+            {
+              "pos": {
+                "x": 1.571467544627958,
+                "y": 0.18800450134277347,
+                "z": 0.07585768492633543
+              },
+              "colour": "BLUE",
+              "confidence": 0.9091796875
+            },
+            {
+              "pos": {
+                "x": 0.8189617183663841,
+                "y": 0.4080462646484377,
+                "z": 0.03546274406745836
+              },
+              "colour": "BLUE",
+              "confidence": 0.9013671875
+            },
+            {
+              "pos": {
+                "x": 0.7793307912662525,
+                "y": -0.6035143432617187,
+                "z": -0.0001964158369150426
+              },
+              "colour": "YELLOW",
+              "confidence": 0.900390625
+            },
+            {
+              "pos": {
+                "x": 1.768710610538716,
+                "y": -0.7620189819335937,
+                "z": 0.06203300696586317
+              },
+              "colour": "YELLOW",
+              "confidence": 0.900390625
+            },
+            {
+              "pos": {
+                "x": 0.5895717046185581,
+                "y": 0.30847705078125,
+                "z": 0.028202094927739674
+              },
+              "colour": "BLUE",
+              "confidence": 0.896484375
+            },
+            {
+              "pos": {
+                "x": 0.6081148222187277,
+                "y": -0.49679312133789055,
+                "z": -0.01188289445706553
+              },
+              "colour": "YELLOW",
+              "confidence": 0.896484375
+            },
+            {
+              "pos": {
+                "x": 1.3801391895432928,
+                "y": 0.21356047058105465,
+                "z": 0.06557461727561059
+              },
+              "colour": "BLUE",
+              "confidence": 0.80078125
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.218894882,
+            "stamp_ns": 1791281218047533029
+          },
+          "acquisition_to_publish_latency_s": 0.211731932
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.218896385,
+            "stamp_ns": 1791281218047531526
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.2404305338859558,
+            "sensor_age": {
+              "age_s": 0.014940064999791502,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.123513690999971,
+          "policy_elapsed_s": 1.6960087269999349,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.9440997067714608,
+                "y": 0.2639171752929688,
+                "z": 0.052580481422147496
+              },
+              "colour": "BLUE",
+              "confidence": 0.95947265625
+            },
+            {
+              "pos": {
+                "x": 1.1563978305012839,
+                "y": 0.22518191528320314,
+                "z": 0.05919790108777406
+              },
+              "colour": "BLUE",
+              "confidence": 0.947265625
+            },
+            {
+              "pos": {
+                "x": 1.5174996318598657,
+                "y": -0.611637451171875,
+                "z": 0.045056755052848174
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94189453125
+            },
+            {
+              "pos": {
+                "x": 0.5674663246776962,
+                "y": 0.31588421630859376,
+                "z": 0.025510683843944115
+              },
+              "colour": "BLUE",
+              "confidence": 0.9384765625
+            },
+            {
+              "pos": {
+                "x": 1.1169454485850723,
+                "y": -0.6083565063476563,
+                "z": 0.01554608144041375
+              },
+              "colour": "YELLOW",
+              "confidence": 0.93017578125
+            },
+            {
+              "pos": {
+                "x": 1.353747185928659,
+                "y": -0.65377001953125,
+                "z": 0.02592100563982641
+              },
+              "colour": "YELLOW",
+              "confidence": 0.92822265625
+            },
+            {
+              "pos": {
+                "x": 1.7613939476537972,
+                "y": -0.7674116821289063,
+                "z": 0.05738269018365311
+              },
+              "colour": "YELLOW",
+              "confidence": 0.91162109375
+            },
+            {
+              "pos": {
+                "x": 0.5424191494361458,
+                "y": -0.4635768432617189,
+                "z": -0.00810171772539825
+              },
+              "colour": "YELLOW",
+              "confidence": 0.90283203125
+            },
+            {
+              "pos": {
+                "x": 1.537686786508145,
+                "y": 0.189364501953125,
+                "z": 0.07668786027159386
+              },
+              "colour": "BLUE",
+              "confidence": 0.89892578125
+            },
+            {
+              "pos": {
+                "x": 0.7878740910730543,
+                "y": 0.41052185058593754,
+                "z": 0.03772363435178899
+              },
+              "colour": "BLUE",
+              "confidence": 0.87841796875
+            },
+            {
+              "pos": {
+                "x": 0.7418254221821413,
+                "y": -0.5911868286132811,
+                "z": -0.010153270437960826
+              },
+              "colour": "YELLOW",
+              "confidence": 0.78466796875
+            },
+            {
+              "pos": {
+                "x": 1.3462918912559072,
+                "y": 0.213364486694336,
+                "z": 0.06650393368926116
+              },
+              "colour": "BLUE",
+              "confidence": 0.74658203125
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.206574487,
+            "stamp_ns": 1791281218147499918
+          },
+          "acquisition_to_publish_latency_s": 0.200587965
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.206576855,
+            "stamp_ns": 1791281218147497550
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.2794465720653534,
+            "sensor_age": {
+              "age_s": 0.004297565000342729,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.08764703800034113,
+          "policy_elapsed_s": 1.783655765000276,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 1.1231948631147914,
+                "y": 0.22971746826171874,
+                "z": 0.06076752593884266
+              },
+              "colour": "BLUE",
+              "confidence": 0.95361328125
+            },
+            {
+              "pos": {
+                "x": 0.9127517149474224,
+                "y": 0.2662703247070312,
+                "z": 0.0526341434212349
+              },
+              "colour": "BLUE",
+              "confidence": 0.947265625
+            },
+            {
+              "pos": {
+                "x": 0.5354939701542609,
+                "y": 0.3191968994140626,
+                "z": 0.025355974704148465
+              },
+              "colour": "BLUE",
+              "confidence": 0.9462890625
+            },
+            {
+              "pos": {
+                "x": 1.070438885666844,
+                "y": -0.5969237670898438,
+                "z": 0.015067911024310099
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94140625
+            },
+            {
+              "pos": {
+                "x": 1.4904415585109074,
+                "y": -0.6090700683593752,
+                "z": 0.04079132022216275
+              },
+              "colour": "YELLOW",
+              "confidence": 0.93408203125
+            },
+            {
+              "pos": {
+                "x": 1.5096183785395325,
+                "y": 0.19936781311035168,
+                "z": 0.0780878255997492
+              },
+              "colour": "BLUE",
+              "confidence": 0.9248046875
+            },
+            {
+              "pos": {
+                "x": 1.2931802563202668,
+                "y": -0.636574401855469,
+                "z": 0.028614988905695193
+              },
+              "colour": "YELLOW",
+              "confidence": 0.90234375
+            },
+            {
+              "pos": {
+                "x": 1.6919615899656648,
+                "y": -0.7488898315429687,
+                "z": 0.059699516949839715
+              },
+              "colour": "YELLOW",
+              "confidence": 0.90234375
+            },
+            {
+              "pos": {
+                "x": 0.7587020723233733,
+                "y": 0.41714199829101567,
+                "z": 0.036214944741110366
+              },
+              "colour": "BLUE",
+              "confidence": 0.890625
+            },
+            {
+              "pos": {
+                "x": 1.3138911802967792,
+                "y": 0.21900637817382818,
+                "z": 0.06739355253753149
+              },
+              "colour": "BLUE",
+              "confidence": 0.73583984375
+            },
+            {
+              "pos": {
+                "x": 0.5012851827877313,
+                "y": -0.4469387512207031,
+                "z": -0.012502846426841796
+              },
+              "colour": "YELLOW",
+              "confidence": 0.73193359375
+            },
+            {
+              "pos": {
+                "x": 0.6825260442524624,
+                "y": -0.5646830444335937,
+                "z": -0.009136382877997284
+              },
+              "colour": "YELLOW",
+              "confidence": 0.53515625
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.206057359,
+            "stamp_ns": 1791281218247541734
+          },
+          "acquisition_to_publish_latency_s": 0.198099436
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.206064591,
+            "stamp_ns": 1791281218247534502
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.3111133277416229,
+            "sensor_age": {
+              "age_s": 0.0066374910002195975,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.09952187199996843,
+          "policy_elapsed_s": 1.8831776370002444,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 1.050371322255217,
+                "y": -0.6018805541992187,
+                "z": 0.009664533628641003
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9658203125
+            },
+            {
+              "pos": {
+                "x": 1.0936660879161866,
+                "y": 0.23462055969238294,
+                "z": 0.059031378633267406
+              },
+              "colour": "BLUE",
+              "confidence": 0.958984375
+            },
+            {
+              "pos": {
+                "x": 1.3369679325741342,
+                "y": -0.6713038940429688,
+                "z": 0.012179605408154603
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94921875
+            },
+            {
+              "pos": {
+                "x": 0.5024100684202893,
+                "y": 0.3239910278320312,
+                "z": 0.025195859048936897
+              },
+              "colour": "BLUE",
+              "confidence": 0.94482421875
+            },
+            {
+              "pos": {
+                "x": 0.8794554873441615,
+                "y": 0.27181066894531253,
+                "z": 0.052002023066231196
+              },
+              "colour": "BLUE",
+              "confidence": 0.9404296875
+            },
+            {
+              "pos": {
+                "x": 1.4727084200005283,
+                "y": -0.6111861572265627,
+                "z": 0.03763729995426729
+              },
+              "colour": "YELLOW",
+              "confidence": 0.93603515625
+            },
+            {
+              "pos": {
+                "x": 0.7278436814179926,
+                "y": 0.42293920898437515,
+                "z": 0.03373809159384028
+              },
+              "colour": "BLUE",
+              "confidence": 0.92236328125
+            },
+            {
+              "pos": {
+                "x": 1.4764838748434697,
+                "y": 0.20191534423828128,
+                "z": 0.07789361365305608
+              },
+              "colour": "BLUE",
+              "confidence": 0.91015625
+            },
+            {
+              "pos": {
+                "x": 1.700071781893756,
+                "y": -0.7640936279296875,
+                "z": 0.05318839473551956
+              },
+              "colour": "YELLOW",
+              "confidence": 0.90625
+            },
+            {
+              "pos": {
+                "x": 1.2755340531036103,
+                "y": 0.2232845001220703,
+                "z": 0.06841192102515364
+              },
+              "colour": "BLUE",
+              "confidence": 0.8212890625
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.212455368,
+            "stamp_ns": 1791281218347503638
+          },
+          "acquisition_to_publish_latency_s": 0.200278572
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.212454601,
+            "stamp_ns": 1791281218347504405
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.3354302644729614,
+            "sensor_age": {
+              "age_s": 0.030358932000126515,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10636221699996895,
+          "policy_elapsed_s": 1.9895398540002134,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 1.059381169115676,
+                "y": 0.23935076904296876,
+                "z": 0.057707600362508715
+              },
+              "colour": "BLUE",
+              "confidence": 0.9560546875
+            },
+            {
+              "pos": {
+                "x": 1.4219420721786582,
+                "y": -0.6021495361328125,
+                "z": 0.036715611359527
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9560546875
+            },
+            {
+              "pos": {
+                "x": 0.8453907678737723,
+                "y": 0.27545568847656243,
+                "z": 0.04978653658528959
+              },
+              "colour": "BLUE",
+              "confidence": 0.9541015625
+            },
+            {
+              "pos": {
+                "x": 0.468388042857385,
+                "y": 0.32696789550781247,
+                "z": 0.022563022358965512
+              },
+              "colour": "BLUE",
+              "confidence": 0.95068359375
+            },
+            {
+              "pos": {
+                "x": 1.0129951970872924,
+                "y": -0.5975998535156248,
+                "z": 0.006342064871736219
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94189453125
+            },
+            {
+              "pos": {
+                "x": 1.2308390098179172,
+                "y": -0.6360907592773438,
+                "z": 0.021875625667275578
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9326171875
+            },
+            {
+              "pos": {
+                "x": 1.4417693891248344,
+                "y": 0.20578150939941414,
+                "z": 0.0734401691013506
+              },
+              "colour": "BLUE",
+              "confidence": 0.92333984375
+            },
+            {
+              "pos": {
+                "x": 1.6989203493675422,
+                "y": -0.7740027465820313,
+                "z": 0.04519480067203879
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9111328125
+            },
+            {
+              "pos": {
+                "x": 0.6884844701708742,
+                "y": 0.4252526245117188,
+                "z": 0.030817781146434686
+              },
+              "colour": "BLUE",
+              "confidence": 0.89453125
+            },
+            {
+              "pos": {
+                "x": 1.2386290557880841,
+                "y": 0.22612133789062516,
+                "z": 0.0653209882677101
+              },
+              "colour": "BLUE",
+              "confidence": 0.80322265625
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.197130787,
+            "stamp_ns": 1791281218447544206
+          },
+          "acquisition_to_publish_latency_s": 0.191636763
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.197136259,
+            "stamp_ns": 1791281218447538734
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.3555566966533661,
+            "sensor_age": {
+              "age_s": 0.005806771999687044,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.08470280199981062,
+          "policy_elapsed_s": 2.074242656000024,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 1.0217971498124432,
+                "y": 0.2426774139404297,
+                "z": 0.058438426364002705
+              },
+              "colour": "BLUE",
+              "confidence": 0.9658203125
+            },
+            {
+              "pos": {
+                "x": 1.3968991493571723,
+                "y": -0.6024826049804688,
+                "z": 0.03409501354770422
+              },
+              "colour": "YELLOW",
+              "confidence": 0.95263671875
+            },
+            {
+              "pos": {
+                "x": 0.46188848068240895,
+                "y": 0.3517049255371093,
+                "z": 0.004705622046877689
+              },
+              "colour": "BLUE",
+              "confidence": 0.94970703125
+            },
+            {
+              "pos": {
+                "x": 0.9805266057393697,
+                "y": -0.5972579956054688,
+                "z": 0.003324756996470224
+              },
+              "colour": "YELLOW",
+              "confidence": 0.939453125
+            },
+            {
+              "pos": {
+                "x": 0.812277772844636,
+                "y": 0.2813963317871093,
+                "z": 0.048764855478726055
+              },
+              "colour": "BLUE",
+              "confidence": 0.9375
+            },
+            {
+              "pos": {
+                "x": 0.6569052222836749,
+                "y": 0.43203564453124993,
+                "z": 0.029098065701805564
+              },
+              "colour": "BLUE",
+              "confidence": 0.93505859375
+            },
+            {
+              "pos": {
+                "x": 1.6550594374577916,
+                "y": -0.7665022583007812,
+                "z": 0.047421692112549374
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9267578125
+            },
+            {
+              "pos": {
+                "x": 1.1650886844753676,
+                "y": -0.6190646362304688,
+                "z": 0.028588918038945754
+              },
+              "colour": "YELLOW",
+              "confidence": 0.92578125
+            },
+            {
+              "pos": {
+                "x": 1.4049007001311988,
+                "y": 0.21330711364746102,
+                "z": 0.07657177883043093
+              },
+              "colour": "BLUE",
+              "confidence": 0.9140625
+            },
+            {
+              "pos": {
+                "x": 1.2052201208851676,
+                "y": 0.23152601623535157,
+                "z": 0.06713205179770226
+              },
+              "colour": "BLUE",
+              "confidence": 0.82958984375
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.199857294,
+            "stamp_ns": 1791281218547509254
+          },
+          "acquisition_to_publish_latency_s": 0.197513113
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.199859822,
+            "stamp_ns": 1791281218547506726
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.37324059009552,
+            "sensor_age": {
+              "age_s": 0.009525372000098287,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.1027038120000725,
+          "policy_elapsed_s": 2.1769464680000965,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.9821732425600939,
+                "y": 0.24752014160156244,
+                "z": 0.0548734942186479
+              },
+              "colour": "BLUE",
+              "confidence": 0.96435546875
+            },
+            {
+              "pos": {
+                "x": 0.7755500464998987,
+                "y": 0.2856065979003906,
+                "z": 0.04503224373121534
+              },
+              "colour": "BLUE",
+              "confidence": 0.95068359375
+            },
+            {
+              "pos": {
+                "x": 0.6193769858329056,
+                "y": 0.4360690002441407,
+                "z": 0.025426201295668804
+              },
+              "colour": "BLUE",
+              "confidence": 0.9453125
+            },
+            {
+              "pos": {
+                "x": 0.47587775417008715,
+                "y": 0.37988037109374995,
+                "z": -0.02986808123861756
+              },
+              "colour": "BLUE",
+              "confidence": 0.94482421875
+            },
+            {
+              "pos": {
+                "x": 0.9408543890595203,
+                "y": -0.5954549560546876,
+                "z": -0.00397697853050244
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94384765625
+            },
+            {
+              "pos": {
+                "x": 1.1855211436887088,
+                "y": -0.6439591674804688,
+                "z": 0.007781900141864584
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94140625
+            },
+            {
+              "pos": {
+                "x": 1.3460699200715152,
+                "y": -0.5927363891601564,
+                "z": 0.03075452670317852
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9404296875
+            },
+            {
+              "pos": {
+                "x": 1.3752403756144285,
+                "y": 0.22032467651367194,
+                "z": 0.06860696390890014
+              },
+              "colour": "BLUE",
+              "confidence": 0.9267578125
+            },
+            {
+              "pos": {
+                "x": 1.5931029967399137,
+                "y": -0.7554835205078125,
+                "z": 0.042187852682161686
+              },
+              "colour": "YELLOW",
+              "confidence": 0.90478515625
+            },
+            {
+              "pos": {
+                "x": 1.163582437546004,
+                "y": 0.23804727172851553,
+                "z": 0.06177330151936061
+              },
+              "colour": "BLUE",
+              "confidence": 0.82958984375
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.209451167,
+            "stamp_ns": 1791281218647548278
+          },
+          "acquisition_to_publish_latency_s": 0.201049836
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.209454944,
+            "stamp_ns": 1791281218647544501
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.3890071511268616,
+            "sensor_age": {
+              "age_s": 0.01478341999973054,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10961916799988103,
+          "policy_elapsed_s": 2.2865656359999775,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.9438173272256377,
+                "y": 0.25399026489257814,
+                "z": 0.0518046499962827
+              },
+              "colour": "BLUE",
+              "confidence": 0.9580078125
+            },
+            {
+              "pos": {
+                "x": 1.0834650488425601,
+                "y": -0.6100925292968751,
+                "z": 0.017643695784185953
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9541015625
+            },
+            {
+              "pos": {
+                "x": 0.7386224021713251,
+                "y": 0.2922280883789062,
+                "z": 0.04238322379180931
+              },
+              "colour": "BLUE",
+              "confidence": 0.94921875
+            },
+            {
+              "pos": {
+                "x": 1.3097288046999913,
+                "y": -0.5883442993164063,
+                "z": 0.02539141451616128
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9462890625
+            },
+            {
+              "pos": {
+                "x": 0.586234329012895,
+                "y": 0.4388385925292969,
+                "z": 0.019032730810941312
+              },
+              "colour": "BLUE",
+              "confidence": 0.9462890625
+            },
+            {
+              "pos": {
+                "x": 0.8937555725311209,
+                "y": -0.5879490966796876,
+                "z": -0.007795162098144737
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94482421875
+            },
+            {
+              "pos": {
+                "x": 1.3325843146246046,
+                "y": 0.22621241760253907,
+                "z": 0.0665187799459272
+              },
+              "colour": "BLUE",
+              "confidence": 0.9208984375
+            },
+            {
+              "pos": {
+                "x": 1.601505133052483,
+                "y": -0.7695828247070311,
+                "z": 0.030514522794207133
+              },
+              "colour": "YELLOW",
+              "confidence": 0.89453125
+            },
+            {
+              "pos": {
+                "x": 1.1241199256733954,
+                "y": 0.24404890441894528,
+                "z": 0.05866393446581991
+              },
+              "colour": "BLUE",
+              "confidence": 0.890625
+            },
+            {
+              "pos": {
+                "x": 0.4700558714570632,
+                "y": 0.3970859375,
+                "z": -0.06369656653211458
+              },
+              "colour": "BLUE",
+              "confidence": 0.7841796875
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.201422825,
+            "stamp_ns": 1791281218747515174
+          },
+          "acquisition_to_publish_latency_s": 0.197837095
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.201425609,
+            "stamp_ns": 1791281218747512390
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.40048643946647644,
+            "sensor_age": {
+              "age_s": 0.007318922999729693,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.0919523150000714,
+          "policy_elapsed_s": 2.378517951000049,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.8255207086429026,
+                "y": -0.5682255859375,
+                "z": -0.00480600247475077
+              },
+              "colour": "YELLOW",
+              "confidence": 0.96337890625
+            },
+            {
+              "pos": {
+                "x": 1.2712484244149749,
+                "y": -0.5857399291992187,
+                "z": 0.01885407653330312
+              },
+              "colour": "YELLOW",
+              "confidence": 0.95263671875
+            },
+            {
+              "pos": {
+                "x": 0.9040168353568688,
+                "y": 0.25829461669921877,
+                "z": 0.0466020941290905
+              },
+              "colour": "BLUE",
+              "confidence": 0.95166015625
+            },
+            {
+              "pos": {
+                "x": 0.7040627952203209,
+                "y": 0.2987715759277344,
+                "z": 0.035883883822825646
+              },
+              "colour": "BLUE",
+              "confidence": 0.94921875
+            },
+            {
+              "pos": {
+                "x": 0.5564901760011199,
+                "y": 0.4365505981445313,
+                "z": 0.007220854376915498
+              },
+              "colour": "BLUE",
+              "confidence": 0.9453125
+            },
+            {
+              "pos": {
+                "x": 1.0510823224115413,
+                "y": -0.6120308227539063,
+                "z": 0.009485098035674933
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94140625
+            },
+            {
+              "pos": {
+                "x": 1.5042941348710968,
+                "y": -0.7409622192382812,
+                "z": 0.0323681101839865
+              },
+              "colour": "YELLOW",
+              "confidence": 0.93505859375
+            },
+            {
+              "pos": {
+                "x": 1.2856534436262201,
+                "y": 0.2309528961181641,
+                "z": 0.061363197956942395
+              },
+              "colour": "BLUE",
+              "confidence": 0.93408203125
+            },
+            {
+              "pos": {
+                "x": 1.0767069386387031,
+                "y": 0.2478533020019531,
+                "z": 0.05408679216358919
+              },
+              "colour": "BLUE",
+              "confidence": 0.9052734375
+            },
+            {
+              "pos": {
+                "x": 0.5633772919442134,
+                "y": 0.49873272705078125,
+                "z": -0.18992545281883172
+              },
+              "colour": "BLUE",
+              "confidence": 0.70654296875
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.208381553,
+            "stamp_ns": 1791281218847580511
+          },
+          "acquisition_to_publish_latency_s": 0.204306716
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.208424019,
+            "stamp_ns": 1791281218847538045
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.41267523169517517,
+            "sensor_age": {
+              "age_s": 0.009767141000338597,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10702483300019594,
+          "policy_elapsed_s": 2.485542784000245,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.7673468388403147,
+                "y": -0.5552725830078125,
+                "z": -0.004379758118024768
+              },
+              "colour": "YELLOW",
+              "confidence": 0.95068359375
+            },
+            {
+              "pos": {
+                "x": 0.8625358838746815,
+                "y": 0.2641752014160156,
+                "z": 0.043665160398822456
+              },
+              "colour": "BLUE",
+              "confidence": 0.94970703125
+            },
+            {
+              "pos": {
+                "x": 1.2449785086129226,
+                "y": 0.2359177246093751,
+                "z": 0.0579507477390086
+              },
+              "colour": "BLUE",
+              "confidence": 0.9375
+            },
+            {
+              "pos": {
+                "x": 0.6658007982582912,
+                "y": 0.3049378356933594,
+                "z": 0.03258768099310311
+              },
+              "colour": "BLUE",
+              "confidence": 0.93701171875
+            },
+            {
+              "pos": {
+                "x": 0.9872985182787871,
+                "y": -0.5981998901367187,
+                "z": 0.0104393685424084
+              },
+              "colour": "YELLOW",
+              "confidence": 0.93359375
+            },
+            {
+              "pos": {
+                "x": 1.2168582334223292,
+                "y": -0.5768994750976563,
+                "z": 0.016435077853486912
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9326171875
+            },
+            {
+              "pos": {
+                "x": 1.0472081848742372,
+                "y": 0.25566790771484377,
+                "z": 0.0493123095065639
+              },
+              "colour": "BLUE",
+              "confidence": 0.92236328125
+            },
+            {
+              "pos": {
+                "x": 1.4659857039808193,
+                "y": -0.7381417846679688,
+                "z": 0.026674385385952737
+              },
+              "colour": "YELLOW",
+              "confidence": 0.896484375
+            },
+            {
+              "pos": {
+                "x": 0.5265976279511446,
+                "y": 0.4386351013183593,
+                "z": -0.0190126156496771
+              },
+              "colour": "BLUE",
+              "confidence": 0.86572265625
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.209512624,
+            "stamp_ns": 1791281218947507686
+          },
+          "acquisition_to_publish_latency_s": 0.200458406
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.20951784,
+            "stamp_ns": 1791281218947502470
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.4241870939731598,
+            "sensor_age": {
+              "age_s": 0.030698751999807428,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10105574999988676,
+          "policy_elapsed_s": 2.5865985340001316,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.8217421976748717,
+                "y": 0.2668552246093751,
+                "z": 0.04310204818278923
+              },
+              "colour": "BLUE",
+              "confidence": 0.96044921875
+            },
+            {
+              "pos": {
+                "x": 0.6301520451385966,
+                "y": 0.31222888183593744,
+                "z": 0.02841799576147158
+              },
+              "colour": "BLUE",
+              "confidence": 0.955078125
+            },
+            {
+              "pos": {
+                "x": 1.148610605098829,
+                "y": -0.5633716430664064,
+                "z": 0.018173711438552898
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9541015625
+            },
+            {
+              "pos": {
+                "x": 0.6897637302255033,
+                "y": -0.5256226196289062,
+                "z": 0.0020596719364149307
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94189453125
+            },
+            {
+              "pos": {
+                "x": 1.0015521070287892,
+                "y": 0.2589800109863282,
+                "z": 0.049600781779231606
+              },
+              "colour": "BLUE",
+              "confidence": 0.9404296875
+            },
+            {
+              "pos": {
+                "x": 1.2017594318989335,
+                "y": 0.24098851013183586,
+                "z": 0.057623886952268666
+              },
+              "colour": "BLUE",
+              "confidence": 0.9326171875
+            },
+            {
+              "pos": {
+                "x": 0.9568620770354269,
+                "y": -0.603754150390625,
+                "z": 0.0019307955892626238
+              },
+              "colour": "YELLOW",
+              "confidence": 0.93017578125
+            },
+            {
+              "pos": {
+                "x": 1.393744574429295,
+                "y": -0.7259050903320311,
+                "z": 0.02885672181484117
+              },
+              "colour": "YELLOW",
+              "confidence": 0.90625
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.21092366,
+            "stamp_ns": 1791281219047534910
+          },
+          "acquisition_to_publish_latency_s": 0.205291455
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.210929197,
+            "stamp_ns": 1791281219047529373
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.43787428736686707,
+            "sensor_age": {
+              "age_s": 0.006656402999851707,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10144021199994313,
+          "policy_elapsed_s": 2.6880387460000748,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.5919340013537917,
+                "y": 0.3213501892089844,
+                "z": 0.02541279922860945
+              },
+              "colour": "BLUE",
+              "confidence": 0.9560546875
+            },
+            {
+              "pos": {
+                "x": 1.1548991278057592,
+                "y": 0.24723941040039055,
+                "z": 0.05751937027806936
+              },
+              "colour": "BLUE",
+              "confidence": 0.95068359375
+            },
+            {
+              "pos": {
+                "x": 0.9579788045634309,
+                "y": 0.26637979125976563,
+                "z": 0.0484373901607566
+              },
+              "colour": "BLUE",
+              "confidence": 0.9462890625
+            },
+            {
+              "pos": {
+                "x": 0.7809407916059455,
+                "y": 0.27425051879882817,
+                "z": 0.041987357961487726
+              },
+              "colour": "BLUE",
+              "confidence": 0.94482421875
+            },
+            {
+              "pos": {
+                "x": 0.6432281908675372,
+                "y": -0.5062064819335937,
+                "z": 0.00038672499624198275
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94384765625
+            },
+            {
+              "pos": {
+                "x": 0.8949049315434766,
+                "y": -0.5874273071289062,
+                "z": 0.0036005090089960556
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9384765625
+            },
+            {
+              "pos": {
+                "x": 1.1035785220736738,
+                "y": -0.557974853515625,
+                "z": 0.013817178055589296
+              },
+              "colour": "YELLOW",
+              "confidence": 0.92236328125
+            },
+            {
+              "pos": {
+                "x": 1.3474448495953382,
+                "y": -0.7129901733398438,
+                "z": 0.024846655537966222
+              },
+              "colour": "YELLOW",
+              "confidence": 0.90771484375
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.233110348,
+            "stamp_ns": 1791281219147502182
+          },
+          "acquisition_to_publish_latency_s": 0.214656875
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.233116684,
+            "stamp_ns": 1791281219147495846
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.461195170879364,
+            "sensor_age": {
+              "age_s": 0.012276831999770366,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.12215277599989349,
+          "policy_elapsed_s": 2.8101915219999682,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.5474144379086688,
+                "y": 0.32544415283203126,
+                "z": 0.023165729412358116
+              },
+              "colour": "BLUE",
+              "confidence": 0.9541015625
+            },
+            {
+              "pos": {
+                "x": 0.9163413784392681,
+                "y": 0.2720354919433593,
+                "z": 0.04597602583650623
+              },
+              "colour": "BLUE",
+              "confidence": 0.9541015625
+            },
+            {
+              "pos": {
+                "x": 0.7393859676774855,
+                "y": 0.2801756286621094,
+                "z": 0.03859494772851696
+              },
+              "colour": "BLUE",
+              "confidence": 0.9541015625
+            },
+            {
+              "pos": {
+                "x": 0.8365125653521982,
+                "y": -0.5789951171875,
+                "z": 0.001980598208738582
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9482421875
+            },
+            {
+              "pos": {
+                "x": 1.1186883916204657,
+                "y": 0.25360173034667965,
+                "z": 0.05301914230076571
+              },
+              "colour": "BLUE",
+              "confidence": 0.94287109375
+            },
+            {
+              "pos": {
+                "x": 0.5961731793306061,
+                "y": -0.4926220092773438,
+                "z": -0.014989548190444346
+              },
+              "colour": "YELLOW",
+              "confidence": 0.919921875
+            },
+            {
+              "pos": {
+                "x": 1.0746263803398195,
+                "y": -0.5645260009765625,
+                "z": 0.004500590465295662
+              },
+              "colour": "YELLOW",
+              "confidence": 0.91259765625
+            },
+            {
+              "pos": {
+                "x": 1.293367598099498,
+                "y": -0.7058052978515625,
+                "z": 0.02310578401342095
+              },
+              "colour": "YELLOW",
+              "confidence": 0.90380859375
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.212014028,
+            "stamp_ns": 1791281219247550886
+          },
+          "acquisition_to_publish_latency_s": 0.199193528
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.212029324,
+            "stamp_ns": 1791281219247535590
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.467916339635849,
+            "sensor_age": {
+              "age_s": 0.02955477500017878,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.07895526400034214,
+          "policy_elapsed_s": 2.8891467860003104,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.5038976638552359,
+                "y": 0.33231457519531254,
+                "z": 0.020577609012858045
+              },
+              "colour": "BLUE",
+              "confidence": 0.95361328125
+            },
+            {
+              "pos": {
+                "x": 0.6984078504683209,
+                "y": 0.2862387084960938,
+                "z": 0.037741402767225096
+              },
+              "colour": "BLUE",
+              "confidence": 0.9404296875
+            },
+            {
+              "pos": {
+                "x": 0.7922140782576947,
+                "y": -0.5796777343750001,
+                "z": -0.002282355744814335
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9375
+            },
+            {
+              "pos": {
+                "x": 0.8719456548021317,
+                "y": 0.27763250732421874,
+                "z": 0.04674852434047144
+              },
+              "colour": "BLUE",
+              "confidence": 0.9375
+            },
+            {
+              "pos": {
+                "x": 1.068702109668319,
+                "y": 0.2559515686035157,
+                "z": 0.05575967482355021
+              },
+              "colour": "BLUE",
+              "confidence": 0.93603515625
+            },
+            {
+              "pos": {
+                "x": 1.239813456058733,
+                "y": -0.7027221069335937,
+                "z": 0.024240490063366982
+              },
+              "colour": "YELLOW",
+              "confidence": 0.89990234375
+            },
+            {
+              "pos": {
+                "x": 1.050484377558225,
+                "y": -0.5731121826171874,
+                "z": -0.0007153662270065753
+              },
+              "colour": "YELLOW",
+              "confidence": 0.89990234375
+            },
+            {
+              "pos": {
+                "x": 0.5089208804924875,
+                "y": -0.45023519897460934,
+                "z": -0.015293948086381848
+              },
+              "colour": "YELLOW",
+              "confidence": 0.77587890625
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.210453737,
+            "stamp_ns": 1791281219347501742
+          },
+          "acquisition_to_publish_latency_s": 0.192855623
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.210455017,
+            "stamp_ns": 1791281219347500462
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.4736012816429138,
+            "sensor_age": {
+              "age_s": 0.012602635999883205,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.09836893199963015,
+          "policy_elapsed_s": 2.9875157179999405,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.6527937297482144,
+                "y": 0.29373422241210934,
+                "z": 0.03254149028547132
+              },
+              "colour": "BLUE",
+              "confidence": 0.94970703125
+            },
+            {
+              "pos": {
+                "x": 0.8214894244564578,
+                "y": 0.2836401977539063,
+                "z": 0.04240755947295377
+              },
+              "colour": "BLUE",
+              "confidence": 0.94921875
+            },
+            {
+              "pos": {
+                "x": 0.4645549680630924,
+                "y": 0.34389321899414055,
+                "z": 0.012031735914565689
+              },
+              "colour": "BLUE",
+              "confidence": 0.9453125
+            },
+            {
+              "pos": {
+                "x": 0.7319921381440463,
+                "y": -0.5553641357421875,
+                "z": -0.004336265348009183
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94189453125
+            },
+            {
+              "pos": {
+                "x": 1.0210871929643153,
+                "y": 0.2643257446289062,
+                "z": 0.05054564607970197
+              },
+              "colour": "BLUE",
+              "confidence": 0.9375
+            },
+            {
+              "pos": {
+                "x": 0.994398069371273,
+                "y": -0.5635523071289062,
+                "z": -0.005018721731244791
+              },
+              "colour": "YELLOW",
+              "confidence": 0.92578125
+            },
+            {
+              "pos": {
+                "x": 1.2041616400772082,
+                "y": -0.700844970703125,
+                "z": 0.01397493755799023
+              },
+              "colour": "YELLOW",
+              "confidence": 0.88818359375
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.199617094,
+            "stamp_ns": 1791281219447540838
+          },
+          "acquisition_to_publish_latency_s": 0.197426039
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.199619654,
+            "stamp_ns": 1791281219447538278
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.47607457637786865,
+            "sensor_age": {
+              "age_s": 0.008063237999976991,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.08922402200005308,
+          "policy_elapsed_s": 3.0767397399999936,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.9751769681057146,
+                "y": 0.2690643310546875,
+                "z": 0.05041460166134243
+              },
+              "colour": "BLUE",
+              "confidence": 0.95947265625
+            },
+            {
+              "pos": {
+                "x": 0.45879730757779835,
+                "y": 0.36575900268554684,
+                "z": -0.012301566007188514
+              },
+              "colour": "BLUE",
+              "confidence": 0.9541015625
+            },
+            {
+              "pos": {
+                "x": 0.6096951925489539,
+                "y": 0.2978856506347656,
+                "z": 0.031009134307845965
+              },
+              "colour": "BLUE",
+              "confidence": 0.9541015625
+            },
+            {
+              "pos": {
+                "x": 0.7785921423794736,
+                "y": 0.28778170776367185,
+                "z": 0.041939063658955555
+              },
+              "colour": "BLUE",
+              "confidence": 0.9541015625
+            },
+            {
+              "pos": {
+                "x": 0.6591371012374511,
+                "y": -0.5233166503906251,
+                "z": 0.00010340531087132954
+              },
+              "colour": "YELLOW",
+              "confidence": 0.93408203125
+            },
+            {
+              "pos": {
+                "x": 0.9292172335113446,
+                "y": -0.5561903076171876,
+                "z": -0.004028866282854537
+              },
+              "colour": "YELLOW",
+              "confidence": 0.88671875
+            },
+            {
+              "pos": {
+                "x": 1.168675831691702,
+                "y": -0.70785009765625,
+                "z": 0.01059343117400341
+              },
+              "colour": "YELLOW",
+              "confidence": 0.85888671875
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.203670889,
+            "stamp_ns": 1791281219547511222
+          },
+          "acquisition_to_publish_latency_s": 0.188947792
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.203678473,
+            "stamp_ns": 1791281219547503638
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.4790586233139038,
+            "sensor_age": {
+              "age_s": 0.0349745870003062,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10402245000022958,
+          "policy_elapsed_s": 3.180762190000223,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.9286456551594519,
+                "y": 0.27255389404296865,
+                "z": 0.04958611551608211
+              },
+              "colour": "BLUE",
+              "confidence": 0.95947265625
+            },
+            {
+              "pos": {
+                "x": 0.56803949388685,
+                "y": 0.3069287719726562,
+                "z": 0.027085453303620832
+              },
+              "colour": "BLUE",
+              "confidence": 0.94970703125
+            },
+            {
+              "pos": {
+                "x": 0.7374616976649203,
+                "y": 0.2958551330566406,
+                "z": 0.03919421436980314
+              },
+              "colour": "BLUE",
+              "confidence": 0.9384765625
+            },
+            {
+              "pos": {
+                "x": 0.8599854796961445,
+                "y": -0.5420100708007811,
+                "z": -0.003038230015988186
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9267578125
+            },
+            {
+              "pos": {
+                "x": 0.44422299363098683,
+                "y": 0.3796968688964844,
+                "z": -0.0438299047305733
+              },
+              "colour": "BLUE",
+              "confidence": 0.89453125
+            },
+            {
+              "pos": {
+                "x": 0.5886304960020708,
+                "y": -0.4938110351562501,
+                "z": -0.0128555097784524
+              },
+              "colour": "YELLOW",
+              "confidence": 0.87744140625
+            },
+            {
+              "pos": {
+                "x": 1.103252925535558,
+                "y": -0.6902428588867188,
+                "z": 0.012922608919263945
+              },
+              "colour": "YELLOW",
+              "confidence": 0.7705078125
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.206463351,
+            "stamp_ns": 1791281219647545358
+          },
+          "acquisition_to_publish_latency_s": 0.202442821
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.206463383,
+            "stamp_ns": 1791281219647545326
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.494587242603302,
+            "sensor_age": {
+              "age_s": 0.0077866520000497985,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10282883899981243,
+          "policy_elapsed_s": 3.2835910290000356,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.5260084301349771,
+                "y": 0.3147254638671876,
+                "z": 0.023126421755981286
+              },
+              "colour": "BLUE",
+              "confidence": 0.95703125
+            },
+            {
+              "pos": {
+                "x": 0.8843523614369256,
+                "y": 0.2786245422363281,
+                "z": 0.048350640518994126
+              },
+              "colour": "BLUE",
+              "confidence": 0.95703125
+            },
+            {
+              "pos": {
+                "x": 0.6898793100779944,
+                "y": 0.30071673583984376,
+                "z": 0.03783085169127315
+              },
+              "colour": "BLUE",
+              "confidence": 0.93408203125
+            },
+            {
+              "pos": {
+                "x": 0.8044458156710053,
+                "y": -0.5363956298828125,
+                "z": -0.007207371064008983
+              },
+              "colour": "YELLOW",
+              "confidence": 0.921875
+            },
+            {
+              "pos": {
+                "x": 1.040198936013949,
+                "y": -0.6766505126953124,
+                "z": 0.011301806194597808
+              },
+              "colour": "YELLOW",
+              "confidence": 0.78662109375
+            },
+            {
+              "pos": {
+                "x": 0.526759292902878,
+                "y": 0.4726273193359376,
+                "z": -0.15874848367709088
+              },
+              "colour": "BLUE",
+              "confidence": 0.72607421875
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.19902191,
+            "stamp_ns": 1791281219747512958
+          },
+          "acquisition_to_publish_latency_s": 0.191558982
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.19902511,
+            "stamp_ns": 1791281219747509758
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.5035065412521362,
+            "sensor_age": {
+              "age_s": 0.021013693999975658,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.09252615900004457,
+          "policy_elapsed_s": 3.37611718800008,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.4726360240634244,
+                "y": 0.31723440551757814,
+                "z": 0.022660029594174846
+              },
+              "colour": "BLUE",
+              "confidence": 0.9677734375
+            },
+            {
+              "pos": {
+                "x": 0.651639376339615,
+                "y": 0.3098811950683594,
+                "z": 0.03229569776487934
+              },
+              "colour": "BLUE",
+              "confidence": 0.95166015625
+            },
+            {
+              "pos": {
+                "x": 0.8397525935906228,
+                "y": 0.2853798522949219,
+                "z": 0.04585983333510851
+              },
+              "colour": "BLUE",
+              "confidence": 0.9482421875
+            },
+            {
+              "pos": {
+                "x": 0.7293654530261346,
+                "y": -0.5202344360351563,
+                "z": -0.005562650710435546
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94189453125
+            },
+            {
+              "pos": {
+                "x": 0.9804077793778095,
+                "y": -0.66890380859375,
+                "z": 0.008713479546634983
+              },
+              "colour": "YELLOW",
+              "confidence": 0.76171875
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.1951178,
+            "stamp_ns": 1791281219847550910
+          },
+          "acquisition_to_publish_latency_s": 0.190843789
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.195120936,
+            "stamp_ns": 1791281219847547774
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.5082518458366394,
+            "sensor_age": {
+              "age_s": 0.005758129999776429,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.09613288199989256,
+          "policy_elapsed_s": 3.4722500699999728,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.4605552356873641,
+                "y": 0.3438932189941406,
+                "z": 0.0010425615283908285
+              },
+              "colour": "BLUE",
+              "confidence": 0.95703125
+            },
+            {
+              "pos": {
+                "x": 0.6048497750965524,
+                "y": 0.3151086730957031,
+                "z": 0.029093121892076856
+              },
+              "colour": "BLUE",
+              "confidence": 0.95166015625
+            },
+            {
+              "pos": {
+                "x": 0.7909391815766424,
+                "y": 0.288392333984375,
+                "z": 0.04352946689414877
+              },
+              "colour": "BLUE",
+              "confidence": 0.94384765625
+            },
+            {
+              "pos": {
+                "x": 0.6697852969996944,
+                "y": -0.5111253051757813,
+                "z": -0.008935009975715114
+              },
+              "colour": "YELLOW",
+              "confidence": 0.919921875
+            },
+            {
+              "pos": {
+                "x": 0.9050062595845009,
+                "y": -0.6524398803710938,
+                "z": 0.008174178149548517
+              },
+              "colour": "YELLOW",
+              "confidence": 0.81396484375
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.191696873,
+            "stamp_ns": 1791281219947513374
+          },
+          "acquisition_to_publish_latency_s": 0.187701079
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.191690825,
+            "stamp_ns": 1791281219947519422
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.5100439190864563,
+            "sensor_age": {
+              "age_s": 0.021120707000136463,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.09654243300019516,
+          "policy_elapsed_s": 3.568792503000168,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.7449765035716304,
+                "y": 0.2945237731933593,
+                "z": 0.03971661952735833
+              },
+              "colour": "BLUE",
+              "confidence": 0.947265625
+            },
+            {
+              "pos": {
+                "x": 0.59712977015969,
+                "y": -0.47807308959960937,
+                "z": -0.007044630891317627
+              },
+              "colour": "YELLOW",
+              "confidence": 0.94189453125
+            },
+            {
+              "pos": {
+                "x": 0.5603971702001599,
+                "y": 0.32278445434570313,
+                "z": 0.024229705538357293
+              },
+              "colour": "BLUE",
+              "confidence": 0.9375
+            },
+            {
+              "pos": {
+                "x": 0.8223856047844051,
+                "y": -0.6166201171875001,
+                "z": 0.009614966680020876
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9267578125
+            },
+            {
+              "pos": {
+                "x": 0.4518891510477919,
+                "y": 0.3647244567871093,
+                "z": -0.02276731033391649
+              },
+              "colour": "BLUE",
+              "confidence": 0.8935546875
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.194787489,
+            "stamp_ns": 1791281220047543606
+          },
+          "acquisition_to_publish_latency_s": 0.188723972
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.194789985,
+            "stamp_ns": 1791281220047541110
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.5184640288352966,
+            "sensor_age": {
+              "age_s": 0.005908472000101028,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10312091200012219,
+          "policy_elapsed_s": 3.67191341500029,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.5035938206071825,
+                "y": 0.32512338256835926,
+                "z": 0.025777971406290512
+              },
+              "colour": "BLUE",
+              "confidence": 0.96142578125
+            },
+            {
+              "pos": {
+                "x": 0.698630400234662,
+                "y": 0.301016845703125,
+                "z": 0.0383528532249528
+              },
+              "colour": "BLUE",
+              "confidence": 0.9462890625
+            },
+            {
+              "pos": {
+                "x": 0.7633658258273653,
+                "y": -0.5945540771484376,
+                "z": -0.0037339966183694284
+              },
+              "colour": "YELLOW",
+              "confidence": 0.9150390625
+            },
+            {
+              "pos": {
+                "x": 0.5226466661555814,
+                "y": -0.4474132080078126,
+                "z": -0.015805015760958774
+              },
+              "colour": "YELLOW",
+              "confidence": 0.8935546875
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.203165535,
+            "stamp_ns": 1791281220147508646
+          },
+          "acquisition_to_publish_latency_s": 0.196656146
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.203167903,
+            "stamp_ns": 1791281220147506278
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.5237799882888794,
+            "sensor_age": {
+              "age_s": 0.00887696399968263,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10834126199961247,
+          "policy_elapsed_s": 3.7802546769999026,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.6539509718941235,
+                "y": 0.3098316650390625,
+                "z": 0.0327879028973968
+              },
+              "colour": "BLUE",
+              "confidence": 0.9541015625
+            },
+            {
+              "pos": {
+                "x": 0.4657215554767018,
+                "y": 0.33803448486328125,
+                "z": 0.01523690849127729
+              },
+              "colour": "BLUE",
+              "confidence": 0.94482421875
+            },
+            {
+              "pos": {
+                "x": 0.45272242590793665,
+                "y": -0.41970016479492184,
+                "z": -0.020477906471469465
+              },
+              "colour": "YELLOW",
+              "confidence": 0.5849609375
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.19289688,
+            "stamp_ns": 1791281220247533598
+          },
+          "acquisition_to_publish_latency_s": 0.187912027
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.192896208,
+            "stamp_ns": 1791281220247534270
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.5302499532699585,
+            "sensor_age": {
+              "age_s": 0.012763217999690823,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.08975469699998939,
+          "policy_elapsed_s": 3.870009373999892,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.455555568260649,
+                "y": 0.3634224853515625,
+                "z": -0.012693911831292148
+              },
+              "colour": "BLUE",
+              "confidence": 0.95263671875
+            },
+            {
+              "pos": {
+                "x": 0.602307287378321,
+                "y": 0.3157980041503906,
+                "z": 0.02819603870131432
+              },
+              "colour": "BLUE",
+              "confidence": 0.947265625
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.189872023,
+            "stamp_ns": 1791281220347500646
+          },
+          "acquisition_to_publish_latency_s": 0.187454367
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.189873143,
+            "stamp_ns": 1791281220347499526
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.5359243154525757,
+            "sensor_age": {
+              "age_s": 0.010483647000000929,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.09694158300044364,
+          "policy_elapsed_s": 3.9669509570003356,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.552289620734605,
+                "y": 0.321652587890625,
+                "z": 0.02820724758480936
+              },
+              "colour": "BLUE",
+              "confidence": 0.9404296875
+            },
+            {
+              "pos": {
+                "x": 0.441889818803768,
+                "y": 0.37969686889648435,
+                "z": -0.050240249883996724
+              },
+              "colour": "BLUE",
+              "confidence": 0.8505859375
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.190523959,
+            "stamp_ns": 1791281220447526621
+          },
+          "acquisition_to_publish_latency_s": 0.18788287
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.190525526,
+            "stamp_ns": 1791281220447525054
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.5408076047897339,
+            "sensor_age": {
+              "age_s": 0.00880912200000239,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10068229499984227,
+          "policy_elapsed_s": 4.067633252000178,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.5027181715930807,
+                "y": 0.32854373168945317,
+                "z": 0.02337214551267791
+              },
+              "colour": "BLUE",
+              "confidence": 0.9677734375
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.213994266,
+            "stamp_ns": 1791281220547507759
+          },
+          "acquisition_to_publish_latency_s": 0.201602935
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.214008667,
+            "stamp_ns": 1791281220547493358
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.5401285886764526,
+            "sensor_age": {
+              "age_s": 0.016070185999979003,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.1234487890001219,
+          "policy_elapsed_s": 4.1910820410003,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.4657215554767017,
+                "y": 0.3425913085937499,
+                "z": 0.015236908491277401
+              },
+              "colour": "BLUE",
+              "confidence": 0.94384765625
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.201902378,
+            "stamp_ns": 1791281220647534790
+          },
+          "acquisition_to_publish_latency_s": 0.193462038
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.201905642,
+            "stamp_ns": 1791281220647531526
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.5455230474472046,
+            "sensor_age": {
+              "age_s": 0.012619180000001506,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.08792672599975049,
+          "policy_elapsed_s": 4.27900876700005,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.4550556007351554,
+                "y": 0.36667733764648436,
+                "z": -0.014067561318046151
+              },
+              "colour": "BLUE",
+              "confidence": 0.96044921875
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.206742951,
+            "stamp_ns": 1791281220747499670
+          },
+          "acquisition_to_publish_latency_s": 0.201728752
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.206746535,
+            "stamp_ns": 1791281220747496086
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.549934446811676,
+            "sensor_age": {
+              "age_s": 0.016634079000141355,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10481547000017599,
+          "policy_elapsed_s": 4.383824237000226,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [
+            {
+              "pos": {
+                "x": 0.4511376895285154,
+                "y": 0.3915944519042968,
+                "z": -0.06314601353514054
+              },
+              "colour": "BLUE",
+              "confidence": 0.51171875
+            }
+          ],
+          "sensor_age": {
+            "age_s": 0.190712231,
+            "stamp_ns": 1791281220847539149
+          },
+          "acquisition_to_publish_latency_s": 0.18720519
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.19071511,
+            "stamp_ns": 1791281220847536270
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.552509069442749,
+            "sensor_age": {
+              "age_s": 0.02066488200034655,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.0840097830000559,
+          "policy_elapsed_s": 4.467834020000282,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.200043422,
+            "stamp_ns": 1791281220947520678
+          },
+          "acquisition_to_publish_latency_s": 0.190273562
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.200045022,
+            "stamp_ns": 1791281220947519078
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.558012068271637,
+            "sensor_age": {
+              "age_s": 0.021145379000245157,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10931054399998175,
+          "policy_elapsed_s": 4.577144564000264,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.197670877,
+            "stamp_ns": 1791281221047540238
+          },
+          "acquisition_to_publish_latency_s": 0.186864788
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.197670078,
+            "stamp_ns": 1791281221047541037
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.55968177318573,
+            "sensor_age": {
+              "age_s": 0.027710802000001422,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.09764807099963946,
+          "policy_elapsed_s": 4.674792634999903,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.19229223,
+            "stamp_ns": 1791281221147504669
+          },
+          "acquisition_to_publish_latency_s": 0.187191564
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.192292325,
+            "stamp_ns": 1791281221147504574
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.5586454272270203,
+            "sensor_age": {
+              "age_s": 0.012254687000222475,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.09458719200029009,
+          "policy_elapsed_s": 4.7693798270001935,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.190600159,
+            "stamp_ns": 1791281221247572614
+          },
+          "acquisition_to_publish_latency_s": 0.187018748
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.190606623,
+            "stamp_ns": 1791281221247566150
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.5587747097015381,
+            "sensor_age": {
+              "age_s": 0.011128853999707644,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.09837571399975786,
+          "policy_elapsed_s": 4.867755540999951,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.193442818,
+            "stamp_ns": 1791281221347520134
+          },
+          "acquisition_to_publish_latency_s": 0.188877819
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.193451394,
+            "stamp_ns": 1791281221347511558
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.5627980828285217,
+            "sensor_age": {
+              "age_s": 0.033355295000092156,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10279030600031547,
+          "policy_elapsed_s": 4.970545847000267,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.196799419,
+            "stamp_ns": 1791281221447575910
+          },
+          "acquisition_to_publish_latency_s": 0.187568267
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.196802268,
+            "stamp_ns": 1791281221447573061
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.5646121501922607,
+            "sensor_age": {
+              "age_s": 0.02621558000009827,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10341170599986071,
+          "policy_elapsed_s": 5.0739575530001275,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.20436329,
+            "stamp_ns": 1791281221547520694
+          },
+          "acquisition_to_publish_latency_s": 0.198379744
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.204363483,
+            "stamp_ns": 1791281221547520501
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.572279155254364,
+            "sensor_age": {
+              "age_s": 0.01408297699981631,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.10750922999977774,
+          "policy_elapsed_s": 5.181466782999905,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    },
+    {
+      "observations": {
+        "cones": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.192544896,
+            "stamp_ns": 1791281221647533438
+          },
+          "acquisition_to_publish_latency_s": 0.190471733
+        },
+        "fiducials": {
+          "detections": [],
+          "sensor_age": {
+            "age_s": 0.192548449,
+            "stamp_ns": 1791281221647529885
+          },
+          "dictionary_name": "DICT_4X4_50",
+          "source_frame_id": "oakd_rgb_camera_optical_frame"
+        },
+        "lidar_scan": null,
+        "lidar_cartesian": null,
+        "car": {
+          "orientation": null,
+          "ang_velocity": null,
+          "specific_force": null,
+          "wheel_speed": {
+            "wheel_speed_m_per_s": 0.5747833251953125,
+            "sensor_age": {
+              "age_s": 0.013580398999692989,
+              "stamp_ns": null
+            }
+          }
+        },
+        "policy": {
+          "dt": 0.08819454300009966,
+          "policy_elapsed_s": 5.269661326000005,
+          "is_first_policy_step": false
+        }
+      },
+      "actions": {
+        "drive_action": 0.55,
+        "steering_action": 0,
+        "camera_pan_action": null,
+        "debug1": null,
+        "debug2": null
+      }
+    }
+  ]
+}
