@@ -7,7 +7,7 @@ from policy.action_policy.policy import MpcPolicy
 from policy.cone_filter.cone_filter import ConeFilterConfig, filter_cones
 from policy.control.control import CarController, ControlConfig
 from policy.input_output import CarActions, CarObservations
-from policy.lane_detection.lane_detection import LaneDetectionConfig, detect_lanes
+from policy.lane_detection.lane_detection import LaneDetectionConfig, LaneDetector
 
 
 class MovementPolicy:
@@ -29,7 +29,7 @@ class MovementPolicy:
             config/ai4r_policy.yaml.
         """
         self.cone_filter_config = cone_filter_config
-        self.lane_detection_config = lane_detection_config
+        self.lane_detector = LaneDetector(lane_detection_config)
         self.action_policy = MpcPolicy(mpc_config)
         self.car_controller = CarController(control_config)
 
@@ -43,10 +43,13 @@ class MovementPolicy:
         observations = dataclasses.replace(
             observations, cones=filter_cones(observations.cones, self.cone_filter_config))
         # Detect the lane edges, centre line and where the car is in the lane
-        lanes = detect_lanes(observations, self.lane_detection_config)
+        lanes = self.lane_detector.detect(observations)
         # Determine the policy to take based upon the car location
         instructions = self.action_policy.run_policy(observations, lanes)
         # The car actions to determine
         car_actions = self.car_controller.step(observations, instructions)
+        # Hold the camera at zero pan: the camera's fixed transform to base_link assumes it, and any pan rotates every
+        # detected cone position by the pan angle
+        car_actions.camera_pan_action = 0.0
         # Return final car actions
         return car_actions

@@ -39,6 +39,8 @@ def test_centred_car_drives_straight_at_the_target_speed():
     actions = movement_policy().step(observe(lane_cones()))
     assert actions.drive_action == pytest.approx(CONTROL.speed_ff_offset + 0.5 / CONTROL.speed_ff_gain)
     assert actions.steering_action == pytest.approx(CONTROL.steering_centre_action, abs=1e-6)
+    # The camera is held at zero pan, where its fixed transform is valid
+    assert actions.camera_pan_action == 0.0
 
 
 @pytest.mark.parametrize("offset_m, heading_deg", [(0.15, 0.0), (0.0, 10.0)])

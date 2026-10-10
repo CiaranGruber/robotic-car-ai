@@ -13,12 +13,15 @@ cone detector -> filter_cones -> detect_lanes -> action policy (MPC/RL) -> contr
                  (outliers)      LaneDetection     speed + curvature
 ```
 
-`detect_lanes(observations, config)` returns:
+`MovementPolicy` calls `LaneDetector.detect(observations)`, which runs
+`detect_lanes(observations, config, lane_width_m)` and remembers the lane
+width measured while both edges are seen. Either returns:
 
 - `None` when there is no cone data (`observations.cones is None`), or
 - a `LaneDetection`, whose `status` says what was found.
 
-It keeps no state between steps. On the recorded scenarios, on a laptop, it
+`detect_lanes` keeps no state; `LaneDetector` keeps only that width, reset on
+the first step of each run. On the recorded scenarios, on a laptop, it
 takes 0.04 ms (median) for straight edges and 0.65 ms (median, 6.5 ms at most)
 for curved edges, inside the 50 ms budget.
 
@@ -29,12 +32,12 @@ for curved edges, inside the 50 ms budget.
 | Frame | `base_link` when the cones were detected: +x forwards, +y left, origin on the ground below the CG |
 | Units | Metres, radians, 1/m |
 | Signs | Left of the lane centre, pointing left and turning left are positive, as `PathTrackingState` in `policy/action_policy/mpc.py` |
-| Which colour is where | **Blue left, yellow right** (`lane_detection.left_colour: "BLUE"`) on the lab floor; to confirm with the Movement and Control groups |
+| Which colour is where | Found automatically (`lane_detection.left_colour: "AUTO"`): the edge further left is the left edge, and a single edge is the left edge when it is on the car's left. The lab floor has had blue on the left on some days and yellow on others. `"BLUE"` or `"YELLOW"` fixes it instead |
 | Edge shape | Both edges and the centre line are circular arcs around one centre point (concentric), or parallel straight lines when the curvature is 0. They stay one lane width apart however sharply the lane turns |
 
 The Stage 1 simulation cases ([stage1-test-cases.md](stage1-test-cases.md))
-assume yellow on the left. Set `left_colour: "YELLOW"` for them, or move them
-to blue on the left so simulation matches the floor.
+put yellow on the left, which `"AUTO"` handles too. With `"AUTO"`, the car
+follows any lane it sees, including one it has wandered into.
 
 ## `LaneDetection`
 
@@ -44,7 +47,7 @@ to blue on the left so simulation matches the floor.
 | `left_edge` | `LaneEdge \| None` | Left boundary | None |
 | `right_edge` | `LaneEdge \| None` | Right boundary | None |
 | `centre_line` | `LaneArc \| None` | Middle of the lane, starting at its point nearest the car | None |
-| `lane_width_m` | `float \| None` | Measured with both edges, else the configured width | None |
+| `lane_width_m` | `float \| None` | Measured with both edges, else the width `LaneDetector` remembers (the configured width until both edges are seen) | None |
 | `visible_until_m` | `float \| None` | Distance along the centre line to beside the farthest cone used. The lane is unknown beyond it; it falls near the lane end | None |
 | `lateral_error_m` | `float \| None` | Car's distance from the centre line; + when the car is left of centre | None |
 | `heading_error_rad` | `float \| None` | Car heading minus lane heading beside the car; + when the car points left of the lane | None |
@@ -70,10 +73,9 @@ state = PathTrackingState(lanes.lateral_error_m, lanes.heading_error_rad, lanes.
 | `BOTH_EDGES` | Both edges, with a plausible width | Halfway between the edges |
 | `LEFT_EDGE_ONLY` | Left edge only | Half of `lane_width_m` right of the left edge |
 | `RIGHT_EDGE_ONLY` | Right edge only | Half of `lane_width_m` left of the right edge |
-| `NO_LANE` | Nothing usable: too few cones, rows too short to give a direction, cones that still fit badly after dropping outliers, or a doubtful lane (width outside `[min_lane_width_m, max_lane_width_m]`, crossed edges, or an edge past the turning centre) | — |
+| `NO_LANE` | Nothing usable: too few cones, rows too short to give a direction, cones that still fit badly after dropping outliers, or a doubtful lane (width outside `[min_lane_width_m, max_lane_width_m]`, edges crossed when `left_colour` is fixed, or an edge past the turning centre) | — |
 
-With one edge, the centre line is only as good as the configured
-`lane_width_m`.
+With one edge, the centre line is only as good as the remembered width.
 
 ### `LaneEdge` and `LaneArc`
 
@@ -98,9 +100,10 @@ be logged and reloaded.
 
 ## How the edges are found
 
-1. Cones of `left_colour` are the left edge and the other colour the right
-   edge. An edge needs at least `min_cones_per_edge` cones, and at least one
-   edge needs two cones 0.25 m apart to give a direction.
+1. Each colour's cones are one edge. An edge needs at least
+   `min_cones_per_edge` cones, and at least one edge needs two cones 0.25 m
+   apart to give a direction. After the fit, the edge with the larger offset
+   to the left is the left edge (or `left_colour` fixes it).
 2. Both edges are fitted together as concentric arcs: a reference arc starts
    at the car with the lane's direction and curvature, and each edge is at its
    own sideways offset from it. The unknowns are that direction, the
@@ -130,10 +133,10 @@ noise a straight lane's median curvature is 0.04 1/m (a 25 m radius).
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `left_colour` | `"BLUE"` | Colour of the left edge's cones, `"BLUE"` or `"YELLOW"` |
-| `lane_width_m` | 1.0 | Places the centre line with one edge (shared default) |
+| `left_colour` | `"AUTO"` | `"AUTO"` finds each colour's side; `"BLUE"` or `"YELLOW"` fixes the left edge's colour |
+| `lane_width_m` | 1.0 | Places the centre line with one edge until both edges have been seen (shared default) |
 | `min_cones_per_edge` | 2 | Fewest cones for an edge to count |
-| `min_lane_width_m`, `max_lane_width_m` | 0.5, 1.5 | Plausible measured width; covers the 0.8-1.2 m test lanes |
+| `min_lane_width_m`, `max_lane_width_m` | 0.3, 3.0 | Plausible measured width; the car is about 0.2 m wide |
 | `max_curvature_per_m` | 0.0 | 0.0 straight edges (Stage 1); 2.0 for curved roads (0.5 m radius) |
 | `typical_curvature_per_m` | 0.5 | Curvature treated as ordinary (2 m radius); smaller pulls harder towards straight |
 | `outlier_distance_m` | 0.15 | Cones farther than this from their edge are left out |

@@ -41,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from policy.cone_filter.cone_filter import ConeFilterConfig, filter_cones  # noqa: E402
 from policy.input_output import (CarObservations, ConeBatch, ConeColour, ConeDetection,  # noqa: E402
                                  Position, SensorAge)
-from policy.lane_detection.lane_detection import LaneDetectionConfig, detect_lanes  # noqa: E402
+from policy.lane_detection.lane_detection import LaneDetectionConfig, LaneDetector  # noqa: E402
 from policy.lane_detection.lanes import LaneArc  # noqa: E402
 
 COLOURS = {
@@ -72,8 +72,8 @@ class LaneOverlayNode(Node):
     def __init__(self):
         super().__init__("lane_overlay")
         self.cone_filter_config = ConeFilterConfig(**self._read_parameters("cone_filter", ConeFilterConfig()))
-        self.lane_detection_config = LaneDetectionConfig(
-            **self._read_parameters("lane_detection", LaneDetectionConfig()))
+        self.lane_detector = LaneDetector(
+            LaneDetectionConfig(**self._read_parameters("lane_detection", LaneDetectionConfig())))
         self.marker_publisher = self.create_publisher(MarkerArray, "lane_overlay/markers", 10)
         self.value_publishers = {name: self.create_publisher(Float32, f"lane_overlay/{name}", 10)
                                  for name in ("lateral_error_m", "heading_error_deg", "lane_width_m")}
@@ -103,7 +103,7 @@ class LaneOverlayNode(Node):
         kept = filter_cones(batch, self.cone_filter_config)
         observations = CarObservations(cones=kept, fiducials=None, lidar_scan=None, lidar_cartesian=None, car=None,
                                        policy=None)
-        lane = detect_lanes(observations, self.lane_detection_config)
+        lane = self.lane_detector.detect(observations)
 
         markers = [Marker(header=msg.header, action=Marker.DELETEALL)]
         if lane.left_edge is not None:

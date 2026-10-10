@@ -12,7 +12,8 @@ import pytest
 
 from policy.cone_filter.cone_filter import ConeFilterConfig, filter_cones
 from policy.input_output import CarObservations, ConeBatch, ConeColour, ConeDetection, Position, SensorAge
-from policy.lane_detection.lane_detection import LaneDetectionConfig, detect_lanes
+from policy.lane_detection.lane_detection import LaneDetectionConfig, LaneDetector, detect_lanes
+from policy.input_output import PolicyState
 from policy.lane_detection.lanes import LaneArc, LaneDetection, LaneStatus
 from scenarios.scenario_wrapper import Scenario, ScenarioType
 
@@ -95,16 +96,55 @@ def test_one_edge_places_the_centre_half_a_lane_width_away(keep, status):
     assert lane.lane_width_m == CONFIG.lane_width_m
 
 
-def test_left_colour_setting_swaps_the_edges():
+@pytest.mark.parametrize("left, right", [(BLUE, YELLOW), (YELLOW, BLUE)])
+def test_sides_of_the_colours_are_found_automatically(left, right):
+    lane = detect_lanes(observe(lane_cones(offset_m=0.1, heading_deg=5.0, colours=(left, right))), CONFIG)
+    assert lane.status == LaneStatus.BOTH_EDGES
+    assert lane.left_edge.colour == left and lane.right_edge.colour == right
+    assert lane.lateral_error_m == pytest.approx(0.1, abs=1e-6)
+
+
+@pytest.mark.parametrize("keep, status", [(BLUE, LaneStatus.LEFT_EDGE_ONLY), (YELLOW, LaneStatus.RIGHT_EDGE_ONLY)])
+def test_side_of_a_single_edge_is_found_automatically_with_either_colour(keep, status):
+    # Yellow on the left this time: the edge on the car's left is the left edge, whatever its colour
+    cones = [cone for cone in lane_cones(offset_m=0.1, colours=(YELLOW, BLUE)) if cone.colour != keep]
+    lane = detect_lanes(observe(cones), CONFIG)
+    assert lane.status == status
+    assert lane.lateral_error_m == pytest.approx(0.1, abs=1e-6)
+
+
+def test_fixed_left_colour_rejects_the_other_way_round():
     cones = lane_cones(offset_m=0.1, heading_deg=5.0, colours=(YELLOW, BLUE))
     lane = detect_lanes(observe(cones), dataclasses.replace(CONFIG, left_colour="YELLOW"))
+    assert lane.status == LaneStatus.BOTH_EDGES and lane.left_edge.colour == YELLOW
+    # With the wrong fixed colour, the edges cross, so the lane is doubtful
+    assert detect_lanes(observe(cones), dataclasses.replace(CONFIG, left_colour="BLUE")).status == LaneStatus.NO_LANE
+
+
+@pytest.mark.parametrize("width_m", [0.4, 0.65, 1.35, 2.5])
+def test_lanes_of_any_plausible_width_are_found(width_m):
+    lane = detect_lanes(observe(lane_cones(offset_m=0.05, heading_deg=5.0, width_m=width_m)), CONFIG)
     assert lane.status == LaneStatus.BOTH_EDGES
-    assert lane.left_edge.colour == YELLOW and lane.lateral_error_m == pytest.approx(0.1, abs=1e-6)
-    # With the wrong setting, the edges cross, so the lane is doubtful
-    assert detect_lanes(observe(cones), CONFIG).status == LaneStatus.NO_LANE
+    assert lane.lane_width_m == pytest.approx(width_m)
+    assert lane.lateral_error_m == pytest.approx(0.05, abs=1e-6)
 
 
-@pytest.mark.parametrize("width_m", [0.3, 2.0])
+def test_detector_remembers_the_measured_width_for_a_single_edge():
+    detector = LaneDetector(CONFIG)
+    narrow = lane_cones(offset_m=0.05, width_m=0.5)
+    for step in range(30):
+        observations = dataclasses.replace(observe(narrow), policy=PolicyState(0.1, 0.1 * step, step == 0))
+        assert detector.detect(observations).status == LaneStatus.BOTH_EDGES
+    assert detector.lane_width_m == pytest.approx(0.5, abs=0.01)
+    left_only = [cone for cone in narrow if cone.colour == BLUE]
+    lane = detector.detect(dataclasses.replace(observe(left_only), policy=PolicyState(0.1, 3.0, False)))
+    assert lane.status == LaneStatus.LEFT_EDGE_ONLY and lane.lateral_error_m == pytest.approx(0.05, abs=0.01)
+    # A new run starts from the configured width again
+    detector.detect(dataclasses.replace(observe(left_only), policy=PolicyState(0.0, 0.0, True)))
+    assert detector.lane_width_m == CONFIG.lane_width_m
+
+
+@pytest.mark.parametrize("width_m", [0.2, 3.5])
 def test_implausible_width_gives_no_lane(width_m):
     lane = detect_lanes(observe(lane_cones(width_m=width_m)), CONFIG)
     assert lane.status == LaneStatus.NO_LANE and not lane.has_lane
@@ -214,9 +254,9 @@ def test_lane_detection_serialises_round_trip():
 
 
 @pytest.mark.parametrize("change", [
-    {"left_colour": "RED"}, {"left_colour": "blue"}, {"lane_width_m": 0.0}, {"lane_width_m": math.nan},
+    {"left_colour": "RED"}, {"left_colour": "blue"}, {"left_colour": "auto"}, {"lane_width_m": 0.0}, {"lane_width_m": math.nan},
     {"min_cones_per_edge": 0}, {"min_cones_per_edge": 2.0}, {"min_cones_per_edge": True},
-    {"min_lane_width_m": 1.6}, {"max_lane_width_m": math.inf}, {"max_curvature_per_m": -0.1},
+    {"min_lane_width_m": 3.5}, {"max_lane_width_m": math.inf}, {"max_curvature_per_m": -0.1},
     {"typical_curvature_per_m": 0.0}, {"outlier_distance_m": -0.1},
 ])
 def test_invalid_settings_are_rejected(change):

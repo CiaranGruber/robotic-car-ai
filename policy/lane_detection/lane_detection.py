@@ -3,8 +3,9 @@ lane_detection.py
 
 This file finds the lane edges, the lane centre line and where the car is in the lane from the filtered cones.
 
-Each cone colour is one lane edge, and config.left_colour says which colour is on the left. The edges are fitted
-together as circular arcs around one centre point (concentric arcs), which is what a lane of constant width and
+Each cone colour is one lane edge. By default the side of each colour is found from where its edge lies relative to
+the car (config.left_colour "AUTO"), so either colour may be on the left. The edges are fitted together as circular
+arcs around one centre point (concentric arcs), which is what a lane of constant width and
 curvature looks like. With curvature 0 they are parallel straight lines. Fitting both edges together lets a long row
 steady a short one, and an edge with too few cones to give a direction alone still gives its offset.
 
@@ -14,8 +15,10 @@ less, then drops cones farther than config.outlier_distance_m from their edge an
 curvature keeps detector noise on a straight lane from looking like a curve. By default the curvature is fixed at 0
 (config.max_curvature_per_m), for straight Stage 1 lanes.
 
-It keeps no state between policy steps, and its work is bounded by the batch size and a fixed number of solver
-iterations, so it is safe to run inside the real-time policy step.
+detect_lanes keeps no state between policy steps. LaneDetector wraps it and remembers only the lane width measured while
+both edges are seen, to place the centre line when one edge is seen, so lanes of any width work without setting their
+width. The work is bounded by the batch size and a fixed number of solver iterations, so it is safe to run inside the
+real-time policy step.
 """
 from __future__ import annotations
 
@@ -42,6 +45,9 @@ MAX_SOLVER_EVALUATIONS = 50
 MAX_REFITS = 2
 """Most times the fit is repeated after dropping outlier cones."""
 
+WIDTH_SMOOTHING = 0.2
+"""Fraction of the difference to each newly measured lane width that LaneDetector's remembered width moves by."""
+
 
 @dataclass(frozen=True)
 class LaneDetectionConfig:
@@ -50,25 +56,26 @@ class LaneDetectionConfig:
     These defaults are also the parameters' defaults in policy_node. Invalid settings raise a ValueError, which stops
     policy_node from starting.
     """
-    left_colour: str = "BLUE"
-    """Colour of the cones on the left edge of the lane, "BLUE" or "YELLOW". The other colour is the right edge.
+    left_colour: str = "AUTO"
+    """Colour of the cones on the left edge of the lane: "AUTO", "BLUE" or "YELLOW".
 
-    The default matches the lab floor and the recorded scenarios. The Stage 1 simulation cases in
-    docs/stage1-test-cases.md put yellow on the left instead, so set "YELLOW" for them.
+    "AUTO" takes the edge further left as the left edge, and a single edge as left when it is on the car's left. The
+    lab floor has had blue on the left on some days and yellow on others, and the Stage 1 simulation cases put yellow
+    on the left. "BLUE" or "YELLOW" fixes the sides instead; edges then found the wrong way round give NO_LANE.
     """
     lane_width_m: float = 1.0
-    """Distance between the lane edges in metres, used to place the centre line when only one edge is found.
-    Must be positive. The default is the shared lane width."""
+    """Lane width in metres used to place the centre line when only one edge is found, until both edges have been
+    seen. Must be positive. LaneDetector then uses the width it measured instead. The default is the shared width."""
     min_cones_per_edge: int = 2
     """Fewest cones of one colour for that edge to count as found. Must be an integer of at least 1.
 
     With 1, a single cone gives an edge's offset when the other edge gives the direction, but a single misdetected
     cone then moves the lane centre.
     """
-    min_lane_width_m: float = 0.5
+    min_lane_width_m: float = 0.3
     """Narrowest measured lane width in metres, with both edges found, that is still a plausible lane. Must be
-    positive. A narrower or crossed pair of edges gives NO_LANE, because the lane is doubtful."""
-    max_lane_width_m: float = 1.5
+    positive. A narrower pair of edges gives NO_LANE, because the lane is doubtful. The car is about 0.2 m wide."""
+    max_lane_width_m: float = 3.0
     """Widest measured lane width in metres that is still a plausible lane. Must be above min_lane_width_m."""
     max_curvature_per_m: float = 0.0
     """Largest lane curvature in 1/m the fit may find, in either direction. Must be at least 0.
@@ -89,8 +96,9 @@ class LaneDetectionConfig:
     positive. Keep it above the detector's position noise but well below half the lane width."""
 
     def __post_init__(self):
-        if self.left_colour not in ("BLUE", "YELLOW"):
-            raise ValueError(f"lane_detection.left_colour must be \"BLUE\" or \"YELLOW\", not {self.left_colour!r}")
+        if self.left_colour not in ("AUTO", "BLUE", "YELLOW"):
+            raise ValueError(f"lane_detection.left_colour must be \"AUTO\", \"BLUE\" or \"YELLOW\", "
+                             f"not {self.left_colour!r}")
         for name in ("lane_width_m", "min_lane_width_m", "max_lane_width_m", "typical_curvature_per_m",
                      "outlier_distance_m"):
             value = getattr(self, name)
@@ -106,12 +114,48 @@ class LaneDetectionConfig:
             raise ValueError(f"lane_detection.min_cones_per_edge must be an integer of at least 1, not {count}")
 
 
-def detect_lanes(observations: CarObservations, config: LaneDetectionConfig) -> LaneDetection | None:
+class LaneDetector:
+    """Detects the lane at each policy step, remembering the lane width measured while both edges are seen.
+
+    With one edge seen, the centre line is placed half the remembered width from it, so narrow and wide lanes both
+    work. Create one when the node starts and call detect once per policy step.
+    """
+
+    def __init__(self, config: LaneDetectionConfig):
+        """
+        :param config: The lane detection settings.
+        """
+        self.config = config
+        self.reset()
+
+    def reset(self):
+        """Forgets the measured width. This is done on the first step after entering the publishing-policy state."""
+        self.lane_width_m = self.config.lane_width_m
+        """Remembered lane width in metres, moved towards each width measured with both edges."""
+
+    def detect(self, observations: CarObservations) -> LaneDetection | None:
+        """Detects the lane from the cones, as detect_lanes does, then remembers its width if both edges were seen.
+
+        :param observations: The observations taken by the car at the current policy step, with the cones already
+            filtered.
+        :return: The detected lane, or None when there is no cone data.
+        """
+        if observations.policy is not None and observations.policy.is_first_policy_step:
+            self.reset()
+        lane = detect_lanes(observations, self.config, self.lane_width_m)
+        if lane is not None and lane.status == LaneStatus.BOTH_EDGES:
+            self.lane_width_m += WIDTH_SMOOTHING * (lane.lane_width_m - self.lane_width_m)
+        return lane
+
+
+def detect_lanes(observations: CarObservations, config: LaneDetectionConfig,
+                 lane_width_m: float | None = None) -> LaneDetection | None:
     """Detects the lane edges, centre line and the car's position in the lane from the cones.
 
     :param observations: The observations taken by the car at the current policy step, with the cones already
         filtered.
     :param config: The lane detection settings.
+    :param lane_width_m: Lane width in metres used when only one edge is found, or None for config.lane_width_m.
     :return: The detected lane, or None when there is no cone data (observations.cones is None). A lane with status
         NO_LANE means the cones were fresh but showed no plausible lane.
     """
@@ -119,25 +163,25 @@ def detect_lanes(observations: CarObservations, config: LaneDetectionConfig) -> 
     if cones is None:
         return None
     no_lane = LaneDetection(LaneStatus.NO_LANE, None, None, None, None, None, None, None, None, cones.sensor_age)
-    left_colour = ConeColour[config.left_colour]
-    right_colour = ConeColour.YELLOW if left_colour == ConeColour.BLUE else ConeColour.BLUE
-    rows = {colour: [cone for cone in cones if cone.colour == colour] for colour in (left_colour, right_colour)}
+    rows = {colour: [cone for cone in cones if cone.colour == colour] for colour in ConeColour}
     fit = _fit_concentric_edges(rows, config)
     if fit is None:
         return no_lane
     reference, offsets, rows = fit
+    left_colour, right_colour = _sides(offsets, config.left_colour)
+    one_edge_width = config.lane_width_m if lane_width_m is None else lane_width_m
 
-    if left_colour in offsets and right_colour in offsets:
+    if left_colour is not None and right_colour is not None:
         status = LaneStatus.BOTH_EDGES
         lane_width = offsets[left_colour] - offsets[right_colour]
         if not config.min_lane_width_m <= lane_width <= config.max_lane_width_m:
             return no_lane
         centre_offset = (offsets[left_colour] + offsets[right_colour]) / 2.0
-    elif left_colour in offsets:
-        status, lane_width = LaneStatus.LEFT_EDGE_ONLY, config.lane_width_m
+    elif left_colour is not None:
+        status, lane_width = LaneStatus.LEFT_EDGE_ONLY, one_edge_width
         centre_offset = offsets[left_colour] - lane_width / 2.0
     else:
-        status, lane_width = LaneStatus.RIGHT_EDGE_ONLY, config.lane_width_m
+        status, lane_width = LaneStatus.RIGHT_EDGE_ONLY, one_edge_width
         centre_offset = offsets[right_colour] + lane_width / 2.0
     # An edge or the centre line past the lane's turning centre is not a lane
     if any(reference.curvature_per_m * offset >= 0.9 for offset in (*offsets.values(), centre_offset)):
@@ -158,6 +202,24 @@ def detect_lanes(observations: CarObservations, config: LaneDetectionConfig) -> 
         path_curvature_per_m=centre_line.curvature_per_m,
         sensor_age=cones.sensor_age,
     )
+
+
+def _sides(offsets: dict[ConeColour, float], left_colour: str) -> tuple[ConeColour | None, ConeColour | None]:
+    """Decides which found edge is the lane's left edge and which its right.
+
+    :param offsets: Each found edge's sideways offset from the car in metres, positive to the left, keyed by colour.
+    :param left_colour: config.left_colour.
+    :return: The colour of the left edge and of the right edge, each None when that edge was not found.
+    """
+    if left_colour != "AUTO":
+        left = ConeColour[left_colour]
+        right = ConeColour.YELLOW if left == ConeColour.BLUE else ConeColour.BLUE
+        return (left if left in offsets else None), (right if right in offsets else None)
+    if len(offsets) == 2:
+        left, right = sorted(offsets, key=offsets.get, reverse=True)
+        return left, right
+    ((colour, offset),) = offsets.items()
+    return (colour, None) if offset > 0.0 else (None, colour)
 
 
 def _fit_concentric_edges(
