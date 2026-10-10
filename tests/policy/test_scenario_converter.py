@@ -477,4 +477,3 @@ def test_sync_reads_piped_descriptions(tmp_path):
     )
     assert code == 0
     assert _read_scenario(destination / "messy_cone_scenario.json")["description"] == "Piped"
-

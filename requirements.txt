@@ -5,4 +5,4 @@
 numpy
 scipy
 pytest
-matplotlib
+matplotlib  # Offline evaluation plots and scenario rendering.
