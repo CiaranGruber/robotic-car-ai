@@ -169,7 +169,7 @@
       # Distance from the lane centre, per m^2 at each predicted step, >= 0.
       lateral_error_weight: 10.0
       # Heading error relative to the lane, per rad^2 at each predicted step, >= 0.
-      heading_error_weight: 1.0
+      heading_error_weight: 5.0
       # Curvature beyond the lane's own curvature, per (1/m)^2, > 0.
       curvature_weight: 0.1
       # Curvature change between steps, per (1/m)^2, >= 0. Larger is smoother.
@@ -188,7 +188,7 @@
     cone_filter:
       # Keep cones with 0 < x <= this, metres ahead of base_link, positive
       # double. Default 4.0, the shared camera range.
-      max_forward_m: 4.0
+      max_forward_m: 2.5
       # Keep cones with |y| <= this, metres, positive double. Default 2.0: half
       # the 1.0 m lane, a 0.2 m start offset and a 15 degree heading error
       # seen 4 m ahead.
@@ -223,20 +223,20 @@
     # are fitted together as arcs around one centre point (straight lines when
     # the curvature is 0), giving the centre line and where the car is in it.
     lane_detection:
-      # Colour of the LEFT edge's cones, string "BLUE" or "YELLOW"; the other
-      # colour is the right edge. "BLUE" matches the lab floor.
-      left_colour: "BLUE"
+      # Colour of the LEFT edge's cones, string "AUTO", "BLUE" or "YELLOW".
+      # "AUTO" works out each colour's side from where its edge lies relative
+      # to the car, so either colour may be on the left.
+      left_colour: "AUTO"
       # Lane width, metres, positive double (shared default 1.0). Places the
-      # centre line when only one edge is found.
-      # Lane-following test run: set this to the tape-measured width of the lane
-      # on the floor; lane detection measured about 0.65 m there.
-      lane_width_m: 0.65
+      # centre line when only one edge is found, until both edges have been
+      # seen; the width measured with both edges is used after that.
+      lane_width_m: 1.0
       # Fewest cones of one colour for that edge to count, INTEGER >= 1.
       min_cones_per_edge: 2
       # Plausible measured lane width with both edges, metres, positive doubles
-      # with min below max. Outside it (or crossed edges) gives no lane.
-      min_lane_width_m: 0.5
-      max_lane_width_m: 1.5
+      # with min below max. Outside it gives no lane. The car is about 0.2 m wide.
+      min_lane_width_m: 0.3
+      max_lane_width_m: 3.0
       # Largest curvature the fit may find, 1/m, double >= 0.0. 0.0 fits
       # straight edges (Stage 1; fitting curves on straight lanes made the heading
       # worse). For curved roads set 2.0 (a 0.5 m radius) AND set

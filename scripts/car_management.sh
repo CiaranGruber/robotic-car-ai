@@ -114,7 +114,7 @@ copy_files_to_car() {
     fi
 
     rsync -av \
-        "${dry_run_flag[@]}" \
+        ${dry_run_flag[@]+"${dry_run_flag[@]}"} \
         -e "ssh -p $REMOTE_PORT" \
         --filter="merge ${EXCLUDE_FROM}" \
         "$ROOT_PATH/" "$REMOTE_USER@$REMOTE_HOST:$SRC_PATH"
