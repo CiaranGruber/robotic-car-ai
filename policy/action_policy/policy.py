@@ -5,8 +5,10 @@ This file is responsible for taking in the observations and detected lanes and c
 control module
 """
 
+import math
+
 from policy.action_policy.mpc import MpcConfig, MpcController
-from policy.action_policy.reference import reference_from_cones
+from policy.action_policy.reference import reference_from_cones, rotate_cones
 from policy.control.actions import DriveCommand, Instruction
 from policy.input_output import CarObservations
 from policy.lane_detection.lanes import LaneDetection
@@ -24,6 +26,10 @@ class MpcPolicy:
         """
         self.config = config
         self.controller = MpcController(config)
+        self.lane_offset_m = config.lane_offset_m
+        """Where in the lane to drive, in metres from the centre line, positive to the left. Starts at
+        mpc.lane_offset_m; a manoeuvre such as the hook turn may change it between steps. It is kept
+        mpc.edge_clearance_m from both lane edges and shrinks on curves (followed_offset_m)."""
         self.reset()
 
     def reset(self):
@@ -37,6 +43,20 @@ class MpcPolicy:
         self.last_solve_time_s = 0.0
         """Calculation time of the latest solve in seconds."""
 
+    def followed_offset_m(self, lane_width_m: float, path_curvature_per_m: float = 0.0) -> float:
+        """The offset from the lane centre actually followed: lane_offset_m, limited so the followed line stays
+        edge_clearance_m from both edges of a lane this wide, and shrunk in proportion to the path's curvature until
+        it is nothing at offset_fade_curvature_per_m.
+
+        :param lane_width_m: Width of the lane in metres.
+        :param path_curvature_per_m: Curvature of the lane's centre line in 1/m.
+        :return: The offset in metres, positive to the left; 0.0 when the lane is too narrow to move over at all.
+        """
+        config = self.config
+        room = max(0.0, lane_width_m / 2.0 - config.edge_clearance_m)
+        fade = max(0.0, 1.0 - abs(path_curvature_per_m) / config.offset_fade_curvature_per_m)
+        return min(max(self.lane_offset_m, -room), room) * fade
+
     def run_policy(self, observations: CarObservations, lanes: LaneDetection | None) -> list[Instruction]:
         """Chooses the instructions for the car to follow from the observations and detected lanes
 
@@ -48,12 +68,14 @@ class MpcPolicy:
         if observations.policy.is_first_policy_step:
             self.reset()
         cones = observations.cones
-        state = reference_from_cones(cones, self.config.lane_width_m)
+        corrected = None if cones is None else rotate_cones(cones, math.radians(self.config.camera_yaw_offset_deg))
+        state = reference_from_cones(corrected, self.config.lane_width_m)
         if cones is None or state is None:
             # No lane or a doubtful lane: stop. Task A7 decides how long to continue and how to slow down instead.
             self.previous_curvature_per_m = 0.0
             return [DriveCommand(0.0, 0.0)]
-        solution = self.controller.solve(state, self.previous_curvature_per_m, cones.sensor_age)
+        offset = self.followed_offset_m(self.config.lane_width_m, state.path_curvature_per_m)
+        solution = self.controller.solve(state, self.previous_curvature_per_m, cones.sensor_age, offset)
         self.solve_count += 1
         self.last_solve_time_s = solution.solve_time_s
         if solution.converged:
