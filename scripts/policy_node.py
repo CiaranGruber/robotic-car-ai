@@ -1163,7 +1163,10 @@ class PolicyNode(Node):
 
     def publish_state(self):
         self.state_publisher.publish(Int8(data=self.fsm_state))
-        self.state_text_publisher.publish(String(data=f"{STATE_NAMES[self.fsm_state]}: {self.state_reason}"))
+        reason = self.state_reason
+        if self.fsm_state == FSM_STATE_PUBLISHING_POLICY_ACTION:
+            reason += f"; {self.movement_policy.status_reason}"
+        self.state_text_publisher.publish(String(data=f"{STATE_NAMES[self.fsm_state]}: {reason}"))
         self._last_status_at = self._monotonic()
 
     def publish_zero_actions(self):

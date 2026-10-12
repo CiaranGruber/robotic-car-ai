@@ -1010,3 +1010,38 @@ def test_real_ros_graph_zero_handshake_sensor_qos_and_watchdog(mode):
         peer.destroy_node()
         executor.shutdown()
         context.shutdown()
+
+
+def test_ros_cone_to_mpc_chain_continues_and_reports_sensor_stop(make_node):
+    """Fresh cone callbacks drive past eight seconds; stale sensors still force zero."""
+    node = make_node(mode="cone_detection", required=("cone_detections", "wheel_speed"),
+                     **{"mpc.run_duration_s": 0.0})
+
+    def feed():
+        msg = cones(node, empty=True)
+        for colour, y in ((ConeDetection.COLOR_BLUE, 0.4), (ConeDetection.COLOR_YELLOW, -0.4)):
+            for x in (1.0, 1.5, 2.0):
+                cone = ConeDetection()
+                cone.position.x, cone.position.y = x, y
+                cone.classification_confidence = 0.9
+                cone.color = colour
+                msg.detections.append(cone)
+        node.wheel_speed_callback(Float32(data=0.5))
+        node.cone_detection_callback(msg)
+
+    feed()
+    node.fsm_transition_request_callback(UInt16(data=3))
+    for _ in range(120):
+        node.test_clock.advance(0.1)
+        feed()
+        assert node.fsm_state == 3
+        assert node.action_publisher.messages[-1].drive > 0.0
+    node.publish_state()
+    assert "Following cone lane" in node.state_text_publisher.messages[-1].data
+    assert "cones raw=6, kept=6" in node.state_text_publisher.messages[-1].data
+    node.test_clock.advance(0.6)
+    node.supervision_callback()
+    assert node.fsm_state == 2
+    assert node.action_publisher.messages[-1].drive == 0.0
+    assert "missing or stale" in node.state_text_publisher.messages[-1].data
+    assert "Following cone lane" not in node.state_text_publisher.messages[-1].data

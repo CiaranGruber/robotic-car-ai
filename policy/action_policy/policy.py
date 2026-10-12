@@ -34,6 +34,7 @@ class MpcPolicy:
 
     def reset(self):
         """Forgets the previous run. This is done on the first step after entering the publishing-policy state."""
+        self.status_reason = "Waiting for a usable cone lane"
         self.previous_curvature_per_m = 0.0
         """Curvature requested at the previous step in 1/m."""
         self.previous_speed_m_per_s = 0.0
@@ -96,8 +97,10 @@ class MpcPolicy:
         state = reference_from_cones(corrected, self.config.lane_width_m)
         self.lane_state = state
         run_duration_s = self.config.run_duration_s
-        if (self.stopped_for_lane_loss or self.stopped_for_solver_failure
-                or 0.0 < run_duration_s <= observations.policy.policy_elapsed_s):
+        if self.stopped_for_lane_loss or self.stopped_for_solver_failure:
+            return [self._command(0.0, 0.0)]
+        if 0.0 < run_duration_s <= observations.policy.policy_elapsed_s:
+            self.status_reason = "Stopped: configured run duration reached"
             return [self._command(0.0, 0.0)]
         measured_speed = observations.car.wheel_speed
         if measured_speed is not None and (not math.isfinite(measured_speed) or measured_speed < 0.0):
@@ -130,9 +133,11 @@ class MpcPolicy:
         else:
             # Never continue at target speed on an unvalidated optimisation result.
             self.fallback_count += 1
+            self.status_reason = "Stopped: MPC solver failed; explicit restart required"
             self.stopped_for_solver_failure = True
             self.plan_curvatures_per_m = None
             return [self._command(0.0, 0.0)]
+        self.status_reason = "Following cone lane"
         return [self._command(self.config.target_speed_m_per_s, curvature)]
 
     def _command_without_lane(self, observations: CarObservations) -> DriveCommand:
@@ -152,6 +157,7 @@ class MpcPolicy:
         """
         config = self.config
         if self.solve_count == 0:
+            self.status_reason = "Waiting for a usable cone lane"
             # No usable lane yet in this run
             return self._command(0.0, 0.0)
         self.lane_lost_s += observations.policy.dt
@@ -166,8 +172,14 @@ class MpcPolicy:
             speed = config.lane_loss_speed_fraction * config.target_speed_m_per_s
         if (stop or self.plan_curvatures_per_m is None or self.plan_step_distance_m <= 0.0
                 or self.distance_since_plan_m >= len(self.plan_curvatures_per_m) * self.plan_step_distance_m):
+            if stop:
+                cause = "inferred lane end" if lane_ended else "lane-loss timeout"
+            else:
+                cause = "cached MPC plan exhausted or stationary"
+            self.status_reason = f"Stopped: {cause}; explicit restart required"
             self.stopped_for_lane_loss = True
             return self._command(0.0, 0.0)
+        self.status_reason = "Approaching inferred lane end" if lane_ended else "Lane temporarily lost; using cached plan"
         self.lane_lost_step_count += 1
         # No extrapolation beyond the horizon by repeating the last curvature.
         step = int(self.distance_since_plan_m / self.plan_step_distance_m)

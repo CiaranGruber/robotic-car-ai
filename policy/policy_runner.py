@@ -40,6 +40,7 @@ class MovementPolicy:
         self.action_policy = MpcPolicy(mpc_config)
         self.open_space_policy = OpenSpacePolicy(open_space_config, control_config.positive_steering_turns_left)
         self.car_controller = CarController(control_config)
+        self.status_reason = "Waiting for first policy step"
 
     def step(self, observations: CarObservations) -> CarActions:
         """Runs the movement policy for the car using the observations provided to determine the actions to take
@@ -49,6 +50,7 @@ class MovementPolicy:
         """
         if self.action_policy_name == "open_space":
             return self._open_space_step(observations)
+        raw_count = None if observations.cones is None else len(observations.cones)
         # Remove the cone outliers, so every later stage uses the same plausible cones
         observations = dataclasses.replace(
             observations, cones=filter_cones(observations.cones, self.cone_filter_config))
@@ -58,6 +60,11 @@ class MovementPolicy:
         instructions = self.action_policy.run_policy(observations, road_map)
         # The car actions to determine
         car_actions = self.car_controller.step(observations, instructions)
+        kept_count = None if observations.cones is None else len(observations.cones)
+        reason = self.action_policy.status_reason
+        if observations.car.wheel_speed is None:
+            reason += "; wheel-speed feedback unavailable"
+        self.status_reason = f"{reason}; cones raw={raw_count}, kept={kept_count}"
         # Where the car is relative to the lane centre, to plot in Foxglove: debug1 is the lateral error in metres
         # (positive left of the centre) and debug2 the heading error in radians (positive pointing left of the lane).
         # Nothing is published on them when this step has no usable lane.
@@ -80,6 +87,7 @@ class MovementPolicy:
         car_actions = self.car_controller.step(observations, instructions)
         # To plot in Foxglove: debug1 is the chosen heading in degrees (positive left), even while stopped, and
         # nothing when there is none; debug2 is the OpenSpaceStatus number.
+        self.status_reason = f"Open-space: {self.open_space_policy.status.name}"
         heading = self.open_space_policy.heading_rad
         return dataclasses.replace(car_actions, debug1=None if heading is None else math.degrees(heading),
                                    debug2=float(self.open_space_policy.status))

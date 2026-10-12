@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import sys
 from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import IntEnum
@@ -27,6 +29,8 @@ ACTIONS_LOG_FILENAME_FORMAT = "%Y-%m-%d_%H-%M_actions.json"
 
 GENERAL_LOG_FILENAME_FORMAT = "%Y-%m-%d_%H-%M_logging.log"
 """strftime pattern for the general Python log filename."""
+
+_original_stderr_fd: int | None = None
 
 
 class LogLevel(IntEnum):
@@ -234,21 +238,34 @@ def _write_log_record(path: Path, entry: Any, record_name: str):
 
 
 def setup_logging(logging_params: LoggingParameters):
-    """Configure Python logging.
+    """Configure process-wide Python logging and stderr at startup.
 
     Always applies log_level via logging.basicConfig. When log_to_file is true, also writes to
-    logging_folder / get_general_log_filename().
+    logging_folder / get_general_log_filename(), redirecting file descriptor 2
+    there as well to capture native ROS messages and Python tracebacks. Files
+    are appended, not truncated. Disabling file logging restores stderr.
 
     :param logging_params: The parameters for logging.
     """
     if logging_params.log_to_file or logging_params.is_data_logging:
         Path(logging_params.logging_folder).mkdir(parents=True, exist_ok=True)
 
-    config: dict = {"level": logging_params.log_level}
+    global _original_stderr_fd
+    config: dict = {"level": logging_params.log_level, "force": True}
     if logging_params.log_to_file:
-        config["filename"] = str(
-            Path(logging_params.logging_folder) / _get_general_log_filename()
-        )
+        path = Path(logging_params.logging_folder) / _get_general_log_filename()
+        sys.stderr.flush()
+        with path.open("a", encoding="utf-8") as destination:
+            if _original_stderr_fd is None:
+                _original_stderr_fd = os.dup(2)
+            os.dup2(destination.fileno(), 2)
+        config["filename"] = str(path)
+        config["encoding"] = "utf-8"
+    elif _original_stderr_fd is not None:
+        sys.stderr.flush()
+        os.dup2(_original_stderr_fd, 2)
+        os.close(_original_stderr_fd)
+        _original_stderr_fd = None
     logging.basicConfig(**config)
 
 

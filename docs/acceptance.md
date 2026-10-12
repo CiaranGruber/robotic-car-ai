@@ -408,3 +408,26 @@ bash tools/verify_fast.sh` could not run because that pinned checkout is absent.
 No ROS build or physical driving was verified. Lane-end inference can mistake
 occlusion for a final pair; it is not a confirmed endpoint detector. Human diff
 review remains required before merge.
+
+### Continuous ROS–MPC following diagnostics, 2026-10-12
+
+On `12-10-integration`, based on `12b0b57`, the source YAML's eight-second demo
+limit was disabled (`mpc.run_duration_s: 0.0`). Sensor freshness, independent
+zero publication, explicit restart and pan hold were preserved. State-3 text
+now reports MPC stop/wait/continuation reasons, raw/kept cone counts and missing
+wheel feedback. State-2 text retains the ROS watchdog or operator reason.
+
+Local Python 3.12 policy tests: 316 passed, 3 optional tests skipped, 1 existing
+wet-floor test expected to fail. New checks cover continuous following beyond
+8 seconds, optional duration stopping, missing wheel feedback, cone range
+filtering and latched lane-loss recovery. Source compilation and whitespace
+checks passed. A real-ROS callback integration regression was added for 12
+seconds of fresh cone/wheel callbacks followed by sensor expiry; it is **not
+executed here**. The required pinned-interface fast gate remains blocked by the
+absent `.verification/dependencies/dream_interfaces` checkout and no local ROS
+verification is claimed. No live robot or detector configuration was changed.
+
+The recorded-cone diagnostic and replay counts are in
+[ros-mpc-integration.md](ros-mpc-integration.md). They do not establish the cause
+of the user's current detector symptoms or current vehicle disarm. A current
+run log and full `/car/policy_fsm_state_string` are still needed for that diagnosis.
