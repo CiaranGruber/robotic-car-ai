@@ -135,7 +135,8 @@ Commands:
                     Ctrl+C during a step asks whether to cancel the rest
                     or skip that step and continue.
   start_runtime [--debug-images <type>]
-                    Restart the usual dream runtime services on the car.
+                    Restart the usual dream runtime services on the car,
+                    including the lidar (rplidar_c1).
                     With --debug-images, oakd_cone_detector is restarted with
                     that flag (dream runtime restart oakd_cone_detector
                     --debug-images <type>).
@@ -188,9 +189,12 @@ start_runtime() {
     #
     # Args:
     #   optional --debug-images <type>: pass through to oakd_cone_detector only.
+    # rplidar_c1 is restarted too: ai4r_policy requires lidar_cartesian, and the lidar is not running after a
+    # reboot that interrupted it.
     local services=(
         foxglove_bridge
         traxxas_vehicle_interface
+        rplidar_c1
         oakd_cone_detector
         aruco_detector
         ai4r_policy
@@ -230,6 +234,10 @@ start_runtime() {
         restart_cmd="dream runtime restart ${service}"
         if [[ "$service" == "oakd_cone_detector" && -n "$debug_images_type" ]]; then
             restart_cmd+=$(printf ' --debug-images %q' "$debug_images_type")
+        fi
+        if [[ "$service" == "rplidar_c1" ]]; then
+            # An interrupted unit (left over from an earlier boot) may need start rather than restart
+            restart_cmd+=" || dream runtime start ${service}"
         fi
         remote_cmd+="${restart_cmd}; "
     done
