@@ -128,6 +128,8 @@ class MpcConfig:
             value = getattr(self, name)
             if not (math.isfinite(value) and value >= 0.0):
                 raise ValueError(f"mpc.{name} must be finite and at least 0, not {value}")
+        if not 0.0 <= self.lane_loss_speed_fraction <= 1.0:
+            raise ValueError(f"mpc.lane_loss_speed_fraction must be in [0, 1], not {self.lane_loss_speed_fraction}")
 
 
 @dataclass(frozen=True)
@@ -185,24 +187,14 @@ class MpcController:
         """
         self.config = config
         steps = config.horizon_steps
-        step_distance = config.target_speed_m_per_s * config.step_s
-        # One predicted step of the model, holding the curvature constant during the step
-        step_matrix = np.array([[1.0, step_distance], [0.0, 1.0]])
-        curvature_effect = np.array([step_distance ** 2 / 2.0, step_distance])
-        # The predicted states [lateral_error, heading_error] after steps 1..n, stacked, are:
-        #   free_response @ initial_state + forced_response @ (curvatures - path_curvature)
-        self._free_response = np.zeros((2 * steps, 2))
-        self._forced_response = np.zeros((2 * steps, steps))
-        for k in range(steps):
-            self._free_response[2 * k:2 * k + 2] = np.linalg.matrix_power(step_matrix, k + 1)
-            for j in range(k + 1):
-                self._forced_response[2 * k:2 * k + 2, j] = (
-                    np.linalg.matrix_power(step_matrix, k - j) @ curvature_effect)
+        self._step_numbers = np.arange(1, steps + 1)
+        separation = np.arange(steps)[:, None] - np.arange(steps)[None, :]
+        self._heading_effect = (separation >= 0).astype(float)
+        self._lateral_effect = np.where(separation >= 0, separation + 0.5, 0.0)
         self._state_weights = np.sqrt(np.tile([config.lateral_error_weight, config.heading_error_weight], steps))
         # Row k gives curvature k minus curvature k - 1; row 0 is compared with the previous curvature in c
         differences = np.eye(steps) - np.eye(steps, k=-1)
-        self._cost_matrix = np.vstack([
-            self._state_weights[:, None] * self._forced_response,
+        self._curvature_cost = np.vstack([
             math.sqrt(config.curvature_weight) * np.eye(steps),
             math.sqrt(config.curvature_change_weight) * differences,
         ])
@@ -233,7 +225,7 @@ class MpcController:
             state = offset_state(state, lateral_offset_m)
         path_curvature = state.path_curvature_per_m
         # Predict the current state from the delayed observation
-        delay_distance = config.target_speed_m_per_s * delay_s
+        delay_distance = speed * delay_s
         turn = previous_curvature_per_m - path_curvature
         initial_state = np.array([
             state.lateral_error_m + delay_distance * state.heading_error_rad + delay_distance ** 2 / 2.0 * turn,
@@ -243,7 +235,7 @@ class MpcController:
         previous = np.zeros(steps)
         previous[0] = previous_curvature_per_m
         targets = np.concatenate([
-            -self._state_weights * (self._free_response @ initial_state - self._forced_response @ path_curvatures),
+            -self._state_weights * (free_response @ initial_state - forced_response @ path_curvatures),
             math.sqrt(config.curvature_weight) * path_curvatures,
             math.sqrt(config.curvature_change_weight) * previous,
         ])

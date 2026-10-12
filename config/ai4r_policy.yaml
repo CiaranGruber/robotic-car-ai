@@ -23,7 +23,10 @@
     # Which observations MUST be present and fresh before/during your policy?
     # Valid names: cone_detections, fiducial_detections, lidar_scan,
     #              lidar_cartesian, wheel_speed,
-    #              imu_orientation, imu_angular_velocity, imu_specific_force.
+    #              imu_orientation, imu_angular_velocity, imu_specific_force,
+    #              rc_drive_and_steer.
+    # rc_drive_and_steer is the operator's RC sticks, published by the vehicle
+    # interface only while both RC channels are GOOD; it never triggers a step.
     # Each IMU field is independent: a new gyro message is not a new heading.
     # Missing/stale REQUIRED data stops the policy in publishing-zero state.
     # Recovery needs another explicit state-3 request. Optional missing/expired
@@ -54,6 +57,13 @@
     # ArUco marker observations, with no cone requirement:
     #   policy_update_mode: fiducial_detection
     #   required_sensors: [fiducial_detections]
+    # RC-assisted open-space driving (see open_space below): hold the RC drive
+    # forwards to go. Cones stay optional, because seeing no cone is normal here;
+    # without a fresh cone batch the policy stops the car but keeps running.
+    #   policy_update_mode: timer
+    #   policy_update_rate_hz: 20.0
+    #   required_sensors: [rc_drive_and_steer, wheel_speed]
+    #   action_policy: open_space
 
     # Maximum accepted age of each sensor in seconds (positive finite doubles).
     # Defaults are 0.5 s. Expiry occurs at age >= the value. Smaller values stop
@@ -74,6 +84,8 @@
       imu_orientation: 0.5
       imu_angular_velocity: 0.5
       imu_specific_force: 0.5
+      # RC sticks arrive at about 50 Hz (measured on car 20, 2026-10-06).
+      rc_drive_and_steer: 0.5
 
     # How long can required cone data contain NO cones? Seconds, positive finite
     # double, default 1.0. A valid empty frame refreshes stream freshness above,
@@ -123,6 +135,15 @@
     # speed_kp: 0.2
     # Explain its units/range here. A YAML entry alone does not declare a ROS
     # parameter. Use 0.2/0.0 for doubles; integer 0 has a different ROS type.
+
+    # Which policy chooses where to drive (MovementPolicy in
+    # policy/policy_runner.py, which checks it): a string,
+    #   mpc:        follow the lane between the yellow and blue cone rows.
+    #   open_space: drive into the open space between the cones, of any colour,
+    #               ONLY while the operator holds the RC drive forwards. Releasing
+    #               it stops the car; RC steering picks the preferred side. Use the
+    #               open-space exercise settings above.
+    action_policy: mpc
 
     # Logging settings (policy/data_logging/data_logging.py).
     logging:
