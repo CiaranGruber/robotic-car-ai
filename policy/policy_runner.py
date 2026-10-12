@@ -7,7 +7,7 @@ from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig, OpenSpacePolicy
 from policy.action_policy.policy import MpcPolicy
 from policy.cone_filter.cone_filter import ConeFilterConfig, filter_cones, remove_implausible_cones
-from policy.control.control import CarControl, ControlConfig
+from policy.control.control import CarController, ControlConfig
 from policy.input_output import CarActions, CarObservations
 from policy.lane_detection.lane_detection import detect_lanes
 
@@ -39,7 +39,7 @@ class MovementPolicy:
         self.action_policy_name = action_policy
         self.action_policy = MpcPolicy(mpc_config)
         self.open_space_policy = OpenSpacePolicy(open_space_config, control_config.positive_steering_turns_left)
-        self.control = CarControl(control_config)
+        self.car_controller = CarController(control_config)
 
     def step(self, observations: CarObservations) -> CarActions:
         """Runs the movement policy for the car using the observations provided to determine the actions to take
@@ -57,7 +57,7 @@ class MovementPolicy:
         # Determine the policy to take based upon the car location
         instructions = self.action_policy.run_policy(observations, road_map)
         # The car actions to determine
-        car_actions = self.control.determine_car_actions(observations, instructions)
+        car_actions = self.car_controller.step(observations, instructions)
         # Return final car actions
         return car_actions
 
@@ -70,7 +70,7 @@ class MovementPolicy:
         observations = dataclasses.replace(
             observations, cones=remove_implausible_cones(observations.cones, self.cone_filter_config))
         instructions = self.open_space_policy.run_policy(observations)
-        car_actions = self.control.determine_car_actions(observations, instructions)
+        car_actions = self.car_controller.step(observations, instructions)
         # To plot in Foxglove: debug1 is the chosen heading in degrees (positive left), even while stopped, and
         # nothing when there is none; debug2 is the OpenSpaceStatus number.
         heading = self.open_space_policy.heading_rad
