@@ -66,7 +66,7 @@ def test_turns_back_towards_the_lane_centre(offset_m, heading_rad):
 
 
 def test_curvature_stays_within_the_limit():
-    config = MpcConfig(max_curvature_per_m=0.5)
+    config = MpcConfig(max_curvature_per_m=0.5, max_right_curvature_per_m=0.0)
     result = command(MpcPolicy(config), lane_cones(0.4, 0.5))
     assert result.curvature_per_m == pytest.approx(-config.max_curvature_per_m)
 
@@ -182,7 +182,7 @@ def test_zero_run_duration_drives_until_the_lane_ends():
 
 def test_rolls_to_a_stop_just_past_the_lane_end():
     """The last cone pair is 1.0 m ahead when the lane is lost, so the rows have ended there."""
-    config = MpcConfig()
+    config = MpcConfig(target_speed_m_per_s=1.0, horizon_steps=20)
     policy = MpcPolicy(config)
     ending_lane = [cone for cone in lane_cones(0.0, 0.0) if cone.pos.x <= 1.0]
     command(policy, ending_lane)

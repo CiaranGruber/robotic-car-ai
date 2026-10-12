@@ -44,14 +44,15 @@ from policy.control.control import CarController, ControlConfig  # noqa: E402
 from policy.input_output import (  # noqa: E402
     CarActions, CarObservations, ConeBatch, ConeColour, ConeDetection, ObservedCarState, PolicyState, Position,
     SensorAge, WheelSpeed)
-from car_models import CARS, CarModel  # noqa: E402
+from tests.policy.car_models import CARS, CarModel  # noqa: E402
 
 # ---------------------------------------------------------------------------------------------------------------
 # Lane layout (Card 2.2). The world frame has its origin on the start line at the lane centre, +x along the lane
 # and +y to the left. The same numbers are used for the printed drawings in docs/.
 # ---------------------------------------------------------------------------------------------------------------
 LEFT_COLOUR = ConeColour.YELLOW
-"""Row on the left (+y). Not agreed yet (Task 1.4 with Long); the MPC's reference does not assume it."""
+"""Default row on the left (+y) of the Card 2 lanes. The lab tracks Ciaran recorded have blue on the left instead (see
+Lane.left_colour); the MPC's reference does not assume either."""
 RUN_UP_M = 1.0
 """Floor before the start line where the real car gets up to speed from rest."""
 STOP_ZONE_M = (0.0, 0.5)
@@ -75,6 +76,8 @@ class Lane:
     """Distance between the two cone rows in metres (shared default)."""
     cone_spacing_m: float = 0.5
     """Distance between neighbouring cones in a row in metres (shared default)."""
+    left_colour: ConeColour = LEFT_COLOUR
+    """Colour of the row on the left (+y); the other colour is on the right."""
 
     def __post_init__(self):
         for name in ("length_m", "width_m", "cone_spacing_m"):
@@ -92,8 +95,9 @@ class Lane:
 
     @property
     def name(self) -> str:
-        """Short name for file names and tables, such as 6.0x1.0m_0.5."""
-        return f"{self.length_m:g}x{self.width_m:g}m_{self.cone_spacing_m:g}"
+        """Short name for file names and tables, such as 6x1m_0.5, with _blue-left when blue is on the left."""
+        side = "" if self.left_colour == LEFT_COLOUR else f"_{self.left_colour.name.lower()}-left"
+        return f"{self.length_m:g}x{self.width_m:g}m_{self.cone_spacing_m:g}{side}"
 
     @property
     def floor_area_m(self) -> tuple[float, float]:
@@ -144,24 +148,102 @@ FLOOR_CONDITIONS = ("dry", "wet", "snow", "ice")
 
 
 @dataclass(frozen=True)
+class CarProfile:
+    """How the simulated car, its camera and its low-level control behave.
+
+    The defaults are the Card A2 shared defaults above, which the Card 2 cases use. LAB_CAR in
+    real_car_measurements.py replaces them with values measured on the real car.
+    """
+    name: str = "shared defaults"
+    """Short name for tables."""
+    detector_fov_deg: float = DETECTOR_FOV_DEG
+    """Camera view width in degrees."""
+    detector_min_range_m: float = 0.0
+    """Cones closer than this forwards distance in metres are not detected (below the camera's view)."""
+    detector_range_m: float = DETECTOR_RANGE_M
+    """Furthest forwards distance a cone is detected at in metres."""
+    detector_noise_m: float = DETECTOR_NOISE_M
+    """Standard deviation of the detected cone positions in metres, without the noise disturbance."""
+    camera_yaw_deg: float = 0.0
+    """How far left of the car's forwards direction the camera points in degrees, uncorrected: every detection is
+    rotated right by this much, so a straight lane ahead looks turned to the right."""
+    calibrated_camera_yaw_deg: float | None = None
+    """The camera yaw the team measured and sets in the MPC (mpc.camera_yaw_offset_deg). None: camera_yaw_deg,
+    a perfect measurement. Synthetic tracks vary camera_yaw_deg around a fixed measured value."""
+    detection_latency_s: float = DETECTION_AGE_S
+    """Age of every detection batch when the policy receives it, in seconds. A multiple of POLICY_PERIOD_S. The
+    delay disturbance adds to it."""
+    max_left_curvature_per_m: float = math.inf
+    """Largest curvature the car can drive to the left in 1/m; larger requests are clipped. inf: only the 45 degree
+    steering limit applies."""
+    max_right_curvature_per_m: float = math.inf
+    """Largest curvature the car can drive to the right in 1/m, as a positive number."""
+    straight_curvature_per_m: float = 0.0
+    """Curvature the car drives when it is asked to drive straight, from steering trim error; negative is right."""
+    speed_time_constant_s: float | None = None
+    """Time constant of the car's speed response to a requested speed in seconds. None: the stand-in control follows
+    the requested speed closely, as before (command_to_action)."""
+    speed_dead_time_s: float = 0.0
+    """Time before the speed starts to respond to a new requested speed in seconds. A multiple of POLICY_PERIOD_S."""
+    rolling_start: bool = True
+    """True: the car starts at the case's speed. False: it starts from rest, as on the floor."""
+
+    def __post_init__(self):
+        for name in ("detector_fov_deg", "detector_range_m", "max_left_curvature_per_m", "max_right_curvature_per_m"):
+            value = getattr(self, name)
+            if not (value > 0.0 and not math.isnan(value)):
+                raise ValueError(f"{name} must be positive, not {value}")
+        for name in ("detector_min_range_m", "detector_noise_m"):
+            value = getattr(self, name)
+            if not (math.isfinite(value) and value >= 0.0):
+                raise ValueError(f"{name} must be finite and at least 0, not {value}")
+        if self.detector_min_range_m >= self.detector_range_m:
+            raise ValueError("detector_min_range_m must be below detector_range_m")
+        for name in ("straight_curvature_per_m", "camera_yaw_deg"):
+            if not math.isfinite(getattr(self, name)):
+                raise ValueError(f"{name} must be finite")
+        if self.speed_time_constant_s is not None and not (math.isfinite(self.speed_time_constant_s)
+                                                           and self.speed_time_constant_s > 0.0):
+            raise ValueError(f"speed_time_constant_s must be None or positive, not {self.speed_time_constant_s}")
+        for name in ("detection_latency_s", "speed_dead_time_s"):
+            _check_policy_periods(name, getattr(self, name))
+
+
+def _check_policy_periods(name: str, value: float):
+    """Raises a ValueError unless value is a non-negative multiple of POLICY_PERIOD_S."""
+    steps = value / POLICY_PERIOD_S
+    if not (math.isfinite(steps) and steps >= 0.0 and abs(steps - round(steps)) < 1e-9):
+        raise ValueError(f"{name} must be a non-negative multiple of {POLICY_PERIOD_S} s, not {value}")
+
+
+SHARED_DEFAULT_CAR = CarProfile()
+"""The Card A2 shared defaults, used by every Card 2 tuning and unseen case."""
+
+
+@dataclass(frozen=True)
 class Disturbances:
     """Problems added to a case (Card 2.4).
 
     Cones are named (colour, index), where index 0 is the cone pair on the start line and the lane's
     cones_per_row - 1 is the last pair, which gives the same cone on the floor and in simulation.
     """
-    noise_m: float = DETECTOR_NOISE_M
-    """Standard deviation of the detected forwards and leftwards cone positions in metres."""
+    noise_m: float | None = None
+    """Standard deviation of the detected forwards and leftwards cone positions in metres. None: the car's
+    detector_noise_m."""
     delay_s: float = 0.0
-    """Extra detection delay on top of the nominal DETECTION_AGE_S, in seconds. A multiple of POLICY_PERIOD_S."""
+    """How old each detection batch is when the policy receives it, in seconds. A multiple of POLICY_PERIOD_S."""
+    moved_cones: tuple[tuple[ConeColour, int, float, float], ...] = ()
+    """Cones placed off their nominal position, as (colour, index, forwards, leftwards) offsets in metres, like the
+    staggered lab track. Their detections and the cone-touched check use the moved position."""
     missed_cones: tuple[tuple[ConeColour, int], ...] = ()
     """Cones that are never detected, like a missing or fallen cone, or glare on part of a row."""
     wrong_colour_cones: tuple[tuple[ConeColour, int], ...] = ()
     """Cones detected with the other colour, like a misclassification or a swapped cone."""
     extra_objects: tuple[tuple[float, float, ConeColour], ...] = ()
     """Objects that are not lane cones but are detected as cones, as world (x, y, colour)."""
-    detector_range_m: float = DETECTOR_RANGE_M
-    """Furthest forwards distance a cone is detected at in metres, shorter for glare or poor lighting."""
+    detector_range_m: float | None = None
+    """Furthest forwards distance a cone is detected at in metres, shorter for glare or poor lighting. None: the
+    car's detector_range_m."""
     car_mass_kg: float = CAR_MASS_KG
     """Car mass in kg, heavier for a battery or payload."""
     floor: str | None = None
@@ -173,14 +255,12 @@ class Disturbances:
     after losing the lane) instead of the stop zone (R5)."""
 
     def __post_init__(self):
-        if not (math.isfinite(self.noise_m) and self.noise_m >= 0.0):
+        if self.noise_m is not None and not (math.isfinite(self.noise_m) and self.noise_m >= 0.0):
             raise ValueError(f"noise_m must be finite and at least 0, not {self.noise_m}")
-        steps = self.delay_s / POLICY_PERIOD_S
-        if not (math.isfinite(steps) and steps >= 0.0 and abs(steps - round(steps)) < 1e-9):
-            raise ValueError(f"delay_s must be a non-negative multiple of {POLICY_PERIOD_S} s, not {self.delay_s}")
+        _check_policy_periods("delay_s", self.delay_s)
         for name in ("detector_range_m", "car_mass_kg"):
             value = getattr(self, name)
-            if not (math.isfinite(value) and value > 0.0):
+            if value is not None and not (math.isfinite(value) and value > 0.0):
                 raise ValueError(f"{name} must be positive and finite, not {value}")
         blackout = self.camera_blackout_from_m
         if blackout is not None and not (math.isfinite(blackout) and blackout >= 0.0):
@@ -210,11 +290,35 @@ class Stage1Case:
     """The lane's size."""
     seed: int = 0
     """Random seed for the detector noise, so a case gives the same result every time."""
+    car: CarProfile = SHARED_DEFAULT_CAR
+    """How the car, camera and low-level control behave."""
 
     def __post_init__(self):
-        for _, index in self.disturbances.missed_cones + self.disturbances.wrong_colour_cones:
+        disturbances = self.disturbances
+        indices = [index for _, index in disturbances.missed_cones + disturbances.wrong_colour_cones]
+        indices += [index for _, index, _, _ in disturbances.moved_cones]
+        for index in indices:
             if not 0 <= index < self.lane.cones_per_row:
                 raise ValueError(f"{self.name}: cone index {index} is outside 0..{self.lane.cones_per_row - 1}")
+
+    @property
+    def noise_m(self) -> float:
+        """Detector position noise for this case in metres."""
+        noise = self.disturbances.noise_m
+        return self.car.detector_noise_m if noise is None else noise
+
+    @property
+    def detector_range_m(self) -> float:
+        """Furthest forwards detection distance for this case in metres: the shorter of the car's and the
+        disturbance's."""
+        limit = self.disturbances.detector_range_m
+        return self.car.detector_range_m if limit is None else min(limit, self.car.detector_range_m)
+
+    @property
+    def delay_s(self) -> float:
+        """Age of each detection batch when the policy receives it, in seconds: the car's latency plus the delay
+        disturbance."""
+        return self.car.detection_latency_s + self.disturbances.delay_s
 
 
 @dataclass(frozen=True)
@@ -269,6 +373,8 @@ class Stage1Result:
     """Time and command of each policy step."""
     calc_times_s: list[float]
     """Calculation time of each policy step in seconds."""
+    steps: list[tuple[CarObservations, CarActions]] = field(default_factory=list)
+    """The observations and simulated actions of each policy step, as in a recorded scenario."""
     metrics: dict[str, float] = field(default_factory=dict)
     failures: list[str] = field(default_factory=list)
     """Metrics that missed their threshold, as readable messages. Empty when the case passed."""
@@ -288,7 +394,7 @@ def cone_world_position(colour: ConeColour, index: int, lane: Lane = STAGE1_LANE
     :param lane: The lane.
     :return: The cone's (x, y) world position in metres.
     """
-    side = 1.0 if colour == LEFT_COLOUR else -1.0
+    side = 1.0 if colour == lane.left_colour else -1.0
     return index * lane.cone_spacing_m, side * lane.width_m / 2.0
 
 
@@ -298,6 +404,19 @@ def all_cones(lane: Lane = STAGE1_LANE) -> list[tuple[ConeColour, int, float, fl
     """
     return [(colour, i, *cone_world_position(colour, i, lane))
             for colour in ConeColour for i in range(lane.cones_per_row)]
+
+
+def case_cones(case: Stage1Case) -> list[tuple[ConeColour, int, float, float]]:
+    """
+    :return: Every cone of the case's lane as (colour, index, x, y), with the case's moved cones at their moved
+        positions.
+    """
+    offsets = {(colour, index): (dx, dy) for colour, index, dx, dy in case.disturbances.moved_cones}
+    cones = []
+    for colour, index, x, y in all_cones(case.lane):
+        dx, dy = offsets.get((colour, index), (0.0, 0.0))
+        cones.append((colour, index, x + dx, y + dy))
+    return cones
 
 
 def road_spec(lane: Lane = STAGE1_LANE) -> dict:
@@ -344,14 +463,16 @@ def make_env(case: Stage1Case):
         "mass_properties": {"mass_kg": mass, "yaw_moment_of_inertia_kg_m2": (1.0 / 12.0) * mass * (0.40 ** 2 + 0.25 ** 2)},
         "longitudinal_force_model": {"normalized_motor_command_force_gain_n": MOTOR_FORCE_GAIN_N,
                                      "quadratic_aerodynamic_drag_coefficient_kg_per_m": DRAG_KG_PER_M},
-        "steering": {"physical_front_wheel_angle_offset_from_request_rad": 0.0,
+        # The steering trim error: the wheels point this far left of the requested angle
+        "steering": {"physical_front_wheel_angle_offset_from_request_rad":
+                     math.atan(WHEELBASE_M * case.car.straight_curvature_per_m),
                      "requested_front_wheel_angle_magnitude_limit_rad": MAX_STEERING_RAD,
                      "physical_front_wheel_angle_rate_bounds_rad_per_s": {"lower": -math.pi / 2, "upper": math.pi / 2}},
         "kinematic_dynamic_transition": {"body_longitudinal_speed_range_mps": transition},
         "body_geometry": {"front_extent_from_center_of_mass_m": CAR_FRONT_M,
                           "rear_extent_from_center_of_mass_m": CAR_REAR_M, "width_m": CAR_WIDTH_M},
     }
-    noise = {"noise_standard_deviation_m": disturbances.noise_m}
+    noise = {"noise_standard_deviation_m": case.noise_m}
     observation_config = {
         "ground_truth_world_position_x_m": {"destination": "info"},
         "ground_truth_world_position_y_m": {"destination": "info"},
@@ -360,8 +481,8 @@ def make_env(case: Stage1Case):
         # Stands in for the wheel speed sensor
         "body_longitudinal_velocity_mps": {"destination": "observation", "noise_standard_deviation_mps": 0.0},
         "cone_detections": {
-            "acquisition": {"horizontal_field_of_view_deg": DETECTOR_FOV_DEG,
-                            "forward_position_upper_bound_m": disturbances.detector_range_m,
+            "acquisition": {"horizontal_field_of_view_deg": case.car.detector_fov_deg,
+                            "forward_position_upper_bound_m": case.detector_range_m,
                             "position_error_in_body_frame": {"forward": noise, "left": noise}},
             "positions_in_body_frame_m": {"destination": "observation"},
             "color_ids": {"destination": "observation"},
@@ -371,7 +492,8 @@ def make_env(case: Stage1Case):
     initial_state_config = {"bounds": {
         "world_pose": {"x_m": fixed(0.0), "y_m": fixed(case.start_left_m),
                        "heading_rad": fixed(math.radians(case.start_heading_deg))},
-        "body_motion": {"longitudinal_velocity_mps": fixed(case.speed_m_per_s), "lateral_velocity_mps": fixed(0.0),
+        "body_motion": {"longitudinal_velocity_mps": fixed(case.speed_m_per_s if case.car.rolling_start else 0.0),
+                        "lateral_velocity_mps": fixed(0.0),
                         "yaw_rate_rad_per_s": fixed(0.0)},
         "front_wheel_steering_angle_rad": fixed(0.0),
     }}
@@ -425,31 +547,47 @@ def disturbed_detections(observation: dict, pose: tuple[float, float, float], ca
     xs = observation["cone_detections_forward_positions_in_body_frame_m"][:count]
     ys = observation["cone_detections_left_positions_in_body_frame_m"][:count]
     ids = observation["cone_detections_color_ids"][:count]
-    special = {key: "missed" for key in disturbances.missed_cones}
-    special.update({key: "wrong" for key in disturbances.wrong_colour_cones})
-    special_body = [(kind, *to_body_frame(*cone_world_position(*key, case.lane), *pose))
-                    for key, kind in special.items()]
+    special = {key: ["missed"] for key in disturbances.missed_cones}
+    for key in disturbances.wrong_colour_cones:
+        special.setdefault(key, []).append("wrong")
+    cos_h, sin_h = math.cos(pose[2]), math.sin(pose[2])
+    for colour, index, dx, dy in disturbances.moved_cones:
+        # The offset in the body frame, so it can be added to the detection of the nominal cone
+        special.setdefault((colour, index), []).append(("moved", cos_h * dx + sin_h * dy, -sin_h * dx + cos_h * dy))
+    special_body = [(kinds, *to_body_frame(*cone_world_position(*key, case.lane), *pose))
+                    for key, kinds in special.items()]
     # Anything closer than this to a cone is that cone, even with detector noise
     match_radius = min(0.2, 0.4 * case.lane.cone_spacing_m)
     detections = []
     for x, y, colour_id in zip(xs, ys, ids):
         colour = ConeColour(int(colour_id))
-        kind = None
-        for key_kind, bx, by in special_body:
+        x, y = float(x), float(y)
+        kinds = []
+        for key_kinds, bx, by in special_body:
             if math.hypot(x - bx, y - by) < match_radius:
-                kind = key_kind
-        if kind == "missed":
+                kinds = key_kinds
+        if "missed" in kinds:
             continue
-        if kind == "wrong":
+        if "wrong" in kinds:
             colour = ConeColour.BLUE if colour == ConeColour.YELLOW else ConeColour.YELLOW
-        detections.append(ConeDetection(Position(float(x), float(y), 0.1), colour, 0.9))
+        for kind in kinds:
+            if isinstance(kind, tuple):
+                x, y = x + kind[1], y + kind[2]
+        detections.append(ConeDetection(Position(x, y, 0.1), colour, 0.9))
     for ox, oy, colour in disturbances.extra_objects:
         bx, by = to_body_frame(ox, oy, *pose)
-        if 0.0 < bx <= disturbances.detector_range_m and abs(math.atan2(by, bx)) <= math.radians(DETECTOR_FOV_DEG / 2):
-            if rng is not None and disturbances.noise_m > 0.0:
-                bx, by = bx + rng.normal(0.0, disturbances.noise_m), by + rng.normal(0.0, disturbances.noise_m)
+        if (0.0 < bx <= case.detector_range_m
+                and abs(math.atan2(by, bx)) <= math.radians(case.car.detector_fov_deg / 2)):
+            if rng is not None and case.noise_m > 0.0:
+                bx, by = bx + rng.normal(0.0, case.noise_m), by + rng.normal(0.0, case.noise_m)
             detections.append(ConeDetection(Position(bx, by, 0.1), colour, 0.9))
-    return detections
+    if case.car.camera_yaw_deg != 0.0:
+        yaw = math.radians(case.car.camera_yaw_deg)
+        cos_y, sin_y = math.cos(yaw), math.sin(yaw)
+        detections = [ConeDetection(Position(cos_y * d.pos.x + sin_y * d.pos.y, -sin_y * d.pos.x + cos_y * d.pos.y,
+                                             d.pos.z), d.colour, d.confidence) for d in detections]
+    # Nothing is reported closer than the camera can see; the recordings show this cut in the reported positions
+    return [d for d in detections if d.pos.x >= case.car.detector_min_range_m]
 
 
 def command_to_action(command: DriveCommand, measured_speed_m_per_s: float) -> np.ndarray:
@@ -493,6 +631,54 @@ def car_model_action(actions: CarActions, speed_m_per_s: float, car: CarModel, m
     return np.clip(np.array([force / MOTOR_FORCE_GAIN_N, steering], dtype=np.float32), -1.0, 1.0)
 
 
+class StandInControl:
+    """The stand-in for Car Control and the car's response, for one run with one CarProfile.
+
+    With the shared defaults it is command_to_action. With a measured car it also applies what the real car does
+    that the policy cannot change: the requested curvature is clipped to the curvatures the car can drive, and the
+    speed responds to a new requested speed after the dead time, with the measured time constant (first order).
+    That speed response is the one measured with a fixed drive effort; Car Control's speed controller may make it
+    faster, so the response here is the slower, cautious case.
+    """
+    SPEED_GAIN = 2.0
+    """Drive per m/s of error between the simulated car and the modelled speed, to make the car follow it."""
+
+    def __init__(self, car: CarProfile, initial_speed_m_per_s: float):
+        """
+        :param car: The car profile.
+        :param initial_speed_m_per_s: The car's speed at the start of the run in m/s.
+        """
+        self.car = car
+        self.modelled_speed_m_per_s = initial_speed_m_per_s
+        """The speed the real car would have now, from the requested speeds so far."""
+        dead_steps = round(car.speed_dead_time_s / POLICY_PERIOD_S)
+        self._requested: list[float] = [initial_speed_m_per_s] * dead_steps
+
+    def action(self, command: DriveCommand, measured_speed_m_per_s: float) -> np.ndarray:
+        """Converts a DriveCommand into dream-gym's [drive, steering] action. Called once per policy step.
+
+        :param command: The policy's command.
+        :param measured_speed_m_per_s: The wheel speed in m/s.
+        :return: The normalised [drive, steering] action, held until the next policy step.
+        """
+        car = self.car
+        curvature = min(max(command.curvature_per_m, -car.max_right_curvature_per_m), car.max_left_curvature_per_m)
+        command = DriveCommand(command.speed_m_per_s, curvature)
+        if car.speed_time_constant_s is None:
+            return command_to_action(command, measured_speed_m_per_s)
+        self._requested.append(command.speed_m_per_s)
+        requested = self._requested.pop(0)
+        self.modelled_speed_m_per_s += ((requested - self.modelled_speed_m_per_s)
+                                        * (1.0 - math.exp(-POLICY_PERIOD_S / car.speed_time_constant_s)))
+        modelled = self.modelled_speed_m_per_s
+        steering = math.atan(WHEELBASE_M * curvature) / MAX_STEERING_RAD
+        if command.speed_m_per_s == 0.0 and measured_speed_m_per_s < STOPPED_SPEED_M_PER_S:
+            drive = 0.0  # stopped: hold still rather than creep backwards
+        else:
+            drive = 0.1 * modelled ** 2 + self.SPEED_GAIN * (modelled - measured_speed_m_per_s)
+        return np.clip(np.array([drive, steering], dtype=np.float32), -1.0, 1.0)
+
+
 # ---------------------------------------------------------------------------------------------------------------
 # Running a case
 # ---------------------------------------------------------------------------------------------------------------
@@ -516,13 +702,14 @@ def run_case(case: Stage1Case, policy, thresholds: Thresholds = Thresholds(), ca
     rng = np.random.default_rng(case.seed)
     end_x = case.lane.length_m + SIM_RUN_OUT_M - 0.5
     steps_per_policy = round(POLICY_PERIOD_S / ENV_STEP_S)
-    detection_age_s = DETECTION_AGE_S + case.disturbances.delay_s
-    delay_steps = round(detection_age_s / POLICY_PERIOD_S)
+    delay_steps = round(case.delay_s / POLICY_PERIOD_S)
+    control = StandInControl(case.car, case.speed_m_per_s if case.car.rolling_start else 0.0)
     pending: list[list[ConeDetection]] = []
     log = {"t": [], "x": [], "y": [], "heading": [], "speed": []}
-    commands, calc_times = [], []
+    commands, calc_times, steps = [], [], []
     action = np.zeros(2, dtype=np.float32)
     stopped_since = None
+    moved = False  # a standing start only counts as stopped once the car has moved
     step = 0
 
     def record(info):
@@ -541,7 +728,7 @@ def run_case(case: Stage1Case, policy, thresholds: Thresholds = Thresholds(), ca
             speed = scalar(observation["body_longitudinal_velocity_mps"])
             first = step == 0
             observations = CarObservations(
-                cones=None if cones is None else ConeBatch(cones, SensorAge(detection_age_s, None),
+                cones=None if cones is None else ConeBatch(cones, SensorAge(case.delay_s, None),
                                                            acquisition_to_publish_latency_s=0.0),
                 fiducials=None,
                 lidar_scan=None,
@@ -556,15 +743,20 @@ def run_case(case: Stage1Case, policy, thresholds: Thresholds = Thresholds(), ca
             command = next(i for i in instructions if isinstance(i, DriveCommand))
             commands.append((step * ENV_STEP_S, command))
             if controller is None:
-                action = command_to_action(command, abs(speed))
+                action = control.action(command, abs(speed))
+                logged_actions = CarActions(float(action[0]), float(action[1]), None, None, None)
             else:
                 car_actions = controller.step(observations, instructions)
+                logged_actions = car_actions
+            steps.append((observations, logged_actions))
         if car_actions is not None:
-            action = car_model_action(car_actions, log["speed"][-1], car, case.disturbances.car_mass_kg)
+            mass = CAR_MASS_KG if case.disturbances.car_mass_kg is None else case.disturbances.car_mass_kg
+            action = car_model_action(car_actions, log["speed"][-1], car, mass)
         observation, _, terminated, truncated, info = env.step(action)
         step += 1
         record(info)
-        if abs(log["speed"][-1]) < STOPPED_SPEED_M_PER_S:
+        moved = moved or abs(log["speed"][-1]) >= 5 * STOPPED_SPEED_M_PER_S
+        if moved and abs(log["speed"][-1]) < STOPPED_SPEED_M_PER_S:
             stopped_since = step if stopped_since is None else stopped_since
             if (step - stopped_since) * ENV_STEP_S >= 0.5:
                 break
@@ -574,7 +766,7 @@ def run_case(case: Stage1Case, policy, thresholds: Thresholds = Thresholds(), ca
             break
     env.close()
     result = Stage1Result(case, *(np.array(log[k]) for k in ("t", "x", "y", "heading", "speed")),
-                          commands=commands, calc_times_s=calc_times)
+                          commands=commands, calc_times_s=calc_times, steps=steps)
     result.metrics = compute_metrics(result, getattr(policy, "fallback_count", 0))
     result.failures = check_thresholds(result.metrics, thresholds)
     return result
@@ -613,7 +805,7 @@ def compute_metrics(result: Stage1Result, fallback_count: int) -> dict[str, floa
     lane = result.case.lane
     x, y, heading, speed = result.x_m, result.y_m, result.heading_rad, result.speed_m_per_s
     beside = (x >= 0.0) & (x <= lane.length_m)
-    cones = all_cones(lane)
+    cones = case_cones(result.case)
     touched = set()
     outside = 0.0
     for i in np.flatnonzero(x <= lane.length_m + CAR_REAR_M):
@@ -697,7 +889,7 @@ def _draw_cones(ax, lane: Lane, case: Stage1Case | None = None):
 
     missed = case.disturbances.missed_cones if case else ()
     wrong = case.disturbances.wrong_colour_cones if case else ()
-    for colour, index, cx, cy in all_cones(lane):
+    for colour, index, cx, cy in (case_cones(case) if case else all_cones(lane)):
         face = "none" if (colour, index) in missed else ("gold" if colour == ConeColour.YELLOW else "royalblue")
         special = (colour, index) in missed or (colour, index) in wrong
         ax.add_patch(plt.Circle((cx, cy), CONE_RADIUS_M, facecolor=face, edgecolor="red" if special else "k",
@@ -773,8 +965,10 @@ def _draw_floor_layout(ax, lane: Lane):
     ax.grid(linestyle=":", linewidth=0.4)
     ax.set_xlabel("x along lane from the start line [m]")
     ax.set_ylabel("y left of lane centre [m]")
-    ax.set_title(f"Stage 1 lane {lane.name}: {lane.cones_per_row} {LEFT_COLOUR.name.lower()} cones left, "
-                 f"{lane.cones_per_row} blue cones right; floor area {length:g} m x {width:.2g} m")
+    right_colour = next(colour for colour in ConeColour if colour != lane.left_colour)
+    ax.set_title(f"Stage 1 lane {lane.name}: {lane.cones_per_row} {lane.left_colour.name.lower()} cones left, "
+                 f"{lane.cones_per_row} {right_colour.name.lower()} cones right; "
+                 f"floor area {length:g} m x {width:.2g} m")
 
 
 def plot_layout(folder: Path, lane: Lane = STAGE1_LANE):
@@ -857,12 +1051,13 @@ class ConeFilteredPolicy:
 
 
 def mpc_config_for(case: Stage1Case, car: CarModel | None = None, **changes):
-    """The MPC settings for a case: the shipped defaults, set to the case's speed and lane width, as the team would
-    configure them for that lane in config/ai4r_policy.yaml. With a car model, the curvature limit is the car's,
-    and changes then replace any other setting."""
-    config = MpcConfig(target_speed_m_per_s=case.speed_m_per_s, lane_width_m=case.lane.width_m)
+    """MPC settings for the case's speed, lane, camera calibration and optional measured car model."""
+    yaw = case.car.calibrated_camera_yaw_deg
+    config = MpcConfig(target_speed_m_per_s=case.speed_m_per_s, lane_width_m=case.lane.width_m,
+                       camera_yaw_offset_deg=case.car.camera_yaw_deg if yaw is None else yaw)
     if car is not None:
-        config = dataclasses.replace(config, max_curvature_per_m=car.max_curvature_per_m)
+        config = dataclasses.replace(config, max_curvature_per_m=car.max_left_curvature_per_m,
+                                     max_right_curvature_per_m=car.max_right_curvature_per_m)
     return dataclasses.replace(config, **changes)
 
 

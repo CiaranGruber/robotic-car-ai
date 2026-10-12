@@ -37,14 +37,14 @@ Starting values from dream-gym's cone-following example
 | Item | Default | Confirmed by |
 | --- | --- | --- |
 | Car model | 1/10 Traxxas Slash parameters from that example | Chris |
-| Maximum steering angle | 45 degrees (likely larger than the real car) | Chris |
-| Lane width | 1.0 m (also 0.8 m and 1.2 m test lanes) | Task 2.2: drawn in `docs/stage1-test-cases.md`; lab fit still to check |
-| Cone spacing | 0.5 m (also 0.75 m test lane) | Task 2.2: drawn in `docs/stage1-test-cases.md`; lab fit still to check |
-| Which colour is on which side | Yellow left, blue right, as seen on the lab lane on 2026-10-06; to confirm | Long |
-| Camera view | 80 degrees wide, 4 m range, 0.01 m position noise | Task A1 |
-| Target speed | 1.0 m/s | Chris |
-| Cone detection rate and age | 10 Hz; detections about 0.2 s old when the policy receives them | Task 1.5, measured on car 20 |
-| Time allowed per policy update | 20 ms (99th percentile) | Task 1.5, [stage1-approach.md](stage1-approach.md) |
+| Maximum steering angle | 45 degrees (likely larger than the real car) | Chris: car 20 drives at most 0.48 1/m left, 0.92 1/m right (the MPC uses both; [mpc-lab-calibration.md](mpc-lab-calibration.md)) |
+| Lane width | 1.0 m (also 0.8 m and 1.2 m test lanes) | Task 2.2: drawn in `docs/stage1-test-cases.md`; Ciaran's lab tracks measure 0.73-0.85 m (MPC uses 0.8) |
+| Cone spacing | 0.5 m (also 0.75 m test lane) | Task 2.2: drawn in `docs/stage1-test-cases.md`; Ciaran's lab tracks use about 0.2 m |
+| Which colour is on which side | No default; dream-gym treats colours as labels per road | Long; Ciaran's lab tracks have blue on the left |
+| Camera view | 80 degrees wide, 4 m range, 0.01 m position noise | Task A1; recordings: 86 degrees, 0.4-2.5 m, about 0.03 m, 0.2 s latency, camera 6-10 degrees left with the pan never commanded, to recheck now the pan is held at zero ([mpc-lab-calibration.md](mpc-lab-calibration.md)) |
+| Target speed | 1.0 m/s | Chris; MPC now 0.5 m/s, where Chris checked the speed controller on car 20 |
+| Cone detection rate and age | 10 Hz; about 0.2 s | Task 1.5, measured on car 20 |
+| Time allowed per policy update | 20 ms (99th percentile) | Task 1.5, stage1-approach.md |
 
 ## Log-book entries
 

@@ -129,3 +129,24 @@ def test_movement_policy_stops_without_a_lane():
     assert actions.drive_action == 0.0
     assert actions.steering_action == CONFIG.steering_centre_action
     assert actions.debug1 is None and actions.debug2 is None
+
+
+@pytest.mark.parametrize("curvature", [float("nan"), float("inf"), -float("inf")])
+def test_invalid_curvature_is_rejected_before_clipping(curvature):
+    with pytest.raises(ValueError):
+        CarController(CONFIG).step(observations(0.5), [DriveCommand(0.5, curvature)])
+
+
+@pytest.mark.parametrize("target, measured, dt", [
+    (float("inf"), 0.5, 0.1), (float("nan"), 0.5, 0.1),
+    (0.5, float("nan"), 0.1), (0.5, float("inf"), 0.1), (0.5, -0.1, 0.1),
+    (0.5, 0.5, float("nan")), (0.5, 0.5, float("inf")), (0.5, 0.5, -0.1),
+    (0.1, float("nan"), 0.1),
+])
+def test_invalid_speed_inputs_clear_integral_and_are_rejected(target, measured, dt):
+    controller = SpeedController(CONFIG)
+    controller.step(0.6, 0.5, 0.1)
+    assert controller.integral > 0.0
+    with pytest.raises(ValueError):
+        controller.step(target, measured, dt)
+    assert controller.integral == 0.0

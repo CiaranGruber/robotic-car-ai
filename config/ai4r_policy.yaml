@@ -168,38 +168,58 @@
     # shared defaults in docs/movement-policy-tasks.md where one exists; record
     # tuning in the Task A4 log-book.
     mpc:
-      # Requested speed, m/s, positive double. MPC predicts with fresh wheel
-      # speed when available; without it, the model falls back to this value.
-      # 0.5 for the first car runs; the shared default is 1.0.
+      # Speed to drive at, m/s, positive double. The prediction assumes it.
+      # Default 0.5: Car Control's speed controller was checked at 0.5 on car
+      # 20 and may not start the car below 0.4.
       target_speed_m_per_s: 0.5
       # Number of predicted steps: INTEGER >= 1. More steps cost more calculation
       # time (Task A6). Keep target_speed_m_per_s * step_s * horizon_steps within
-      # the camera range (shared default 4 m); the default predicts 1.2 m ahead.
-      # 30 predicts 1.5 m at 0.5 m/s: the test cones on 2026-10-05 were seen up
-      # to about 1.6 m ahead. Scale it with target_speed_m_per_s. Task A4: keep
-      # at least 20 steps (2 s); 12 failed a tuning case, 30 matched 20.
-      horizon_steps: 30
+      # the camera range (measured about 2.5 m); the default predicts 0.6 m ahead.
+      horizon_steps: 12
       # Duration of one predicted step, seconds, positive double.
       step_s: 0.1
-      # Largest curvature (1 / turning radius) in either direction, 1/m, positive
-      # double. 0.48 is car 20's left-turn limit from the 5 Oct calibration
-      # (steering saturates beyond -0.75, radius about 2.1 m); its right turn
-      # reaches about 0.92, but the MPC uses one limit for both directions.
+      # Largest curvature (1 / turning radius) to the left, and to the right
+      # unless max_right_curvature_per_m is set, 1/m, positive double. Default
+      # 0.48: car 20's measured left limit (2.1 m radius). Re-measure for
+      # another car.
       max_curvature_per_m: 0.48
-      # Cost weights, finite doubles; only their ratios matter. Task A4 chose
-      # 3 / 1 / 0.1 / 3 (docs/stage1-design.md).
+      # Largest curvature to the right, 1/m, double >= 0.0; 0.0 uses
+      # max_curvature_per_m. Default 0.92: car 20's measured right limit, which
+      # lets the MPC plan the 1.25-1.5 m radius right curves car 20 can drive.
+      max_right_curvature_per_m: 0.92
+      # Cost weights, finite doubles; only their ratios matter.
       # Distance from the lane centre, per m^2 at each predicted step, >= 0.
-      lateral_error_weight: 3.0
+      lateral_error_weight: 10.0
       # Heading error relative to the lane, per rad^2 at each predicted step, >= 0.
+      # Default 1.0: with car 20's limits it kept every simulated curve; 3.0 and
+      # 5.0 (the car 20 test run) lost curves (docs/mpc-lab-calibration.md).
       heading_error_weight: 1.0
       # Curvature beyond the lane's own curvature, per (1/m)^2, > 0.
       curvature_weight: 0.1
       # Curvature change between steps, per (1/m)^2, >= 0. Larger is smoother.
-      curvature_change_weight: 3.0
-      # Lane width, metres, positive double (shared default 1.0). Used to find the
-      # centre when only one cone row is visible. 0.75 was measured from the
-      # test cones on 2026-10-05; confirm it with a tape measure.
-      lane_width_m: 0.75
+      # Default 2.0: about a quarter to a third less steering activity than 1.0
+      # with the same lane keeping on simulated curves and straights.
+      curvature_change_weight: 2.0
+      # Lane width, metres, positive double. Default 0.8, the lab tracks' measured
+      # 0.73-0.85 m. Used to find the centre when only one cone row is visible.
+      lane_width_m: 0.8
+      # Where in the lane to drive, metres from the centre line, + left, finite
+      # double. Default 0.0, the centre. Towards the hook turn: the car keeps to
+      # one side, at least edge_clearance_m from each edge.
+      lane_offset_m: 0.0
+      # Smallest distance from the followed line to either lane edge, metres,
+      # positive double. Default 0.30: half the car, a cone and room for
+      # tracking error, so 0.1 m of offset in a 0.8 m lane.
+      edge_clearance_m: 0.30
+      # Path curvature at which the offset has faded to nothing, 1/m, positive
+      # double; it shrinks in proportion below that. Default 0.3 (3.3 m radius).
+      offset_fade_curvature_per_m: 0.3
+      # How far left of the car's forwards direction the camera points, degrees,
+      # finite double. The cones are rotated back by this much before the lane is
+      # fitted. Default 0.0. The recordings showed 6-10 degrees, but with the
+      # camera pan never commanded; the policy now holds it at zero. Measure it
+      # with a cone 2 m straight ahead before setting it.
+      camera_yaw_offset_deg: 0.0
       # LANE LOSS: what happens when no lane can be found (no cone row can be
       # fitted, or both rows are on one side of the car). Before the first
       # usable lane of a run, the car waits stopped. After it, the car follows
@@ -216,8 +236,9 @@
       # [0.0, 1.0].
       lane_loss_speed_fraction: 0.5
       # LANE END (Task A7): if the lane is lost while the farthest cone last seen
-      # is at most lane_end_distance_m ahead, the rows have ended there (the
-      # camera loses the last pair before the car reaches it). The car keeps its
+      # is at most lane_end_distance_m ahead, infer that the rows ended there.
+      # Occlusion can look identical; this does not confirm the final pair.
+      # The camera loses the last pair before reaching it. The car keeps its
       # speed and requests the stop so that it rolls to a stop
       # lane_end_stop_past_m past that cone (Stage 1 stop zone: 0.0 to 0.5 m).
       # Otherwise the loss is unexpected and the timeout above applies.
