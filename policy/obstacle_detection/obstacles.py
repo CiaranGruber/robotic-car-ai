@@ -1,9 +1,10 @@
 """
 obstacles.py
 
-This file holds the type the obstacle detection module produces from the lidar.
+This file holds the types the obstacle detection module produces from the lidar.
 
-Everything is in the car's body frame (base_link) when the lidar scanned: +x forwards, +y left, metres and radians.
+ObstacleDetection is in the car's body frame (base_link) when the lidar scanned: +x forwards, +y left, metres and
+radians. LaneObstacle is in lane coordinates instead: distance along the lane's centre line and distance left of it.
 """
 from __future__ import annotations
 
@@ -57,3 +58,27 @@ class ObstacleDetection(Serialisable):
         :return: True when no obstacle is in the corridor.
         """
         return math.isinf(self.in_path_distance_m)
+
+
+@dataclass(frozen=True)
+class LaneObstacle(Serialisable):
+    """One object inside the lane ahead of the car, made of neighbouring lidar returns that are not on the lane's edges.
+
+    Positions are in the lane coordinates of the step's LaneDetection: distance along its centre line, and distance
+    left of it. The edges and the centre line are concentric arcs, so the edges are half the lane width either side of
+    the centre line all along the lane, and an object's place across the lane does not depend on the curve.
+    """
+    distance_m: float
+    """Distance in metres along the lane from beside the car's front to the object's nearest return."""
+    far_distance_m: float
+    """Distance in metres along the lane from beside the car's front to the object's farthest return.
+
+    The lidar only sees the faces turned towards it, so this is a lower bound on how far the object reaches.
+    """
+    right_m: float
+    """Position across the lane of the object's rightmost return, in metres left of the centre line (negative when it
+    is right of the centre line)."""
+    left_m: float
+    """Position across the lane of the object's leftmost return, in metres left of the centre line."""
+    point_count: int
+    """Number of lidar returns in the object."""

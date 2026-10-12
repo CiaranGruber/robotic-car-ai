@@ -5,6 +5,7 @@ This file is responsible for taking in the observations and detected lanes and c
 control module
 """
 
+import logging
 import math
 
 from policy.action_policy.mpc import MpcConfig, MpcController, PathTrackingState
@@ -12,6 +13,8 @@ from policy.action_policy.reference import reference_from_cones, rotate_cones
 from policy.control.actions import DriveCommand, Instruction
 from policy.input_output import CarObservations
 from policy.lane_detection.lanes import LaneDetection
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class MpcPolicy:
@@ -64,6 +67,11 @@ class MpcPolicy:
         """True after a failed solve; only the first step of a new explicitly started run resets it."""
         self.lane_lost_step_count = 0
         """Number of steps in this run driven along the plan because the lane was lost."""
+        self.obstacle_steps = 0
+        """Consecutive steps up to now that saw an obstacle in the car's way within the stopping distance."""
+        self.stopped_for_obstacle = False
+        """True once obstacle_confirm_steps consecutive steps saw an obstacle within the stopping distance. The car
+        then stays stopped for the rest of the run, even if the obstacle goes."""
         self.last_solve_time_s = 0.0
         """Calculation time of the latest solve in seconds."""
 
@@ -81,13 +89,18 @@ class MpcPolicy:
         fade = max(0.0, 1.0 - abs(path_curvature_per_m) / config.offset_fade_curvature_per_m)
         return min(max(self.lane_offset_m, -room), room) * fade
 
-    def run_policy(self, observations: CarObservations, lanes: LaneDetection | None) -> list[Instruction]:
+    def run_policy(self, observations: CarObservations, lanes: LaneDetection | None,
+                   obstacle_distance_m: float | None = None) -> list[Instruction]:
         """Chooses the instructions for the car to follow from the observations and detected lanes
 
         :param observations: The observations taken by the car at the current policy step
         :param lanes: The lanes detected by the lane detection module, followed when given. When None (no cone
             data, or a caller without lane detection such as the Stage 1 simulation harness), the reference path is
             built from the cones with reference_from_cones instead.
+        :param obstacle_distance_m: Distance in metres from the car's front to the nearest obstacle in its way,
+            math.inf when its way is clear, or None when it is unknown (no fresh lidar) or not checked. Once
+            obstacle_confirm_steps consecutive steps give one within the stopping distance (see
+            mpc.obstacle_stop_margin_m), the car stops for the rest of the run.
         :return: The instructions for the control module to convert into car actions
         """
         if observations.policy.is_first_policy_step:
@@ -105,7 +118,7 @@ class MpcPolicy:
             state = reference_from_cones(corrected, lane_width_m)
         self.lane_state = state
         run_duration_s = self.config.run_duration_s
-        if (self.stopped_for_lane_loss or self.stopped_for_solver_failure
+        if (self.stopped_for_lane_loss or self.stopped_for_solver_failure or self.stopped_for_obstacle
                 or 0.0 < run_duration_s <= observations.policy.policy_elapsed_s):
             return [self._command(0.0, 0.0)]
         measured_speed = observations.car.wheel_speed
@@ -118,6 +131,12 @@ class MpcPolicy:
             self.distance_since_plan_m += travelled_speed * observations.policy.dt
             if self.farthest_cone_ahead_m is not None:
                 self.farthest_cone_ahead_m -= self._conservative_speed(observations) * observations.policy.dt
+        if self._obstacle_within_stopping_distance(observations, obstacle_distance_m):
+            # Coast to a stop before the obstacle, and stay stopped for the rest of the run
+            self.stopped_for_obstacle = True
+            _LOGGER.info("Obstacle %.2f m ahead of the car's front: stopping for the rest of the run",
+                         obstacle_distance_m)
+            return [self._command(0.0, 0.0)]
         if cones is None or state is None:
             # No lane or a doubtful lane
             return [self._command_without_lane(observations)]
@@ -181,6 +200,31 @@ class MpcPolicy:
         # No extrapolation beyond the horizon by repeating the last curvature.
         step = int(self.distance_since_plan_m / self.plan_step_distance_m)
         return self._command(speed, float(self.plan_curvatures_per_m[step]))
+
+    def _obstacle_within_stopping_distance(self, observations: CarObservations,
+                                           obstacle_distance_m: float | None) -> bool:
+        """Counts the consecutive steps that see an obstacle in the car's way within the stopping distance.
+
+        The stopping distance is how far the car rolls after a stop request (stop_distance_per_speed_s), plus how far
+        it drove since the lidar scan, plus obstacle_stop_margin_m. It uses the larger of the target speed and the
+        car's speed (_conservative_speed), so a car about to start does not drive towards a near obstacle either.
+
+        :param observations: The observations at this step.
+        :param obstacle_distance_m: As in run_policy.
+        :return: True once obstacle_confirm_steps consecutive steps have seen one.
+        """
+        config = self.config
+        if not config.obstacle_stop_enabled or obstacle_distance_m is None:
+            self.obstacle_steps = 0
+            return False
+        if math.isnan(obstacle_distance_m):
+            raise ValueError("MPC obstacle distance must not be NaN")
+        speed = max(config.target_speed_m_per_s, self._conservative_speed(observations))
+        lidar = observations.lidar_cartesian
+        lidar_age_s = 0.0 if lidar is None else float(lidar.sensor_age)
+        stopping_m = (config.stop_distance_per_speed_s + lidar_age_s) * speed + config.obstacle_stop_margin_m
+        self.obstacle_steps = self.obstacle_steps + 1 if obstacle_distance_m <= stopping_m else 0
+        return self.obstacle_steps >= config.obstacle_confirm_steps
 
     def _conservative_speed(self, observations: CarObservations) -> float:
         """

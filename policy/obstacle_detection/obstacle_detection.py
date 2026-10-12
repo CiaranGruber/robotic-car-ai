@@ -11,13 +11,18 @@ the lidar's scan plane is low enough to hit the lane's cones, which the notebook
 It uses the body-frame Cartesian points (lidar_cartesian), not the raw scan. The raw scan is in the lidar's own frame,
 which is mounted turned 180 degrees by default, so its ray order does not match the notebook's beams.
 
-Each scan gives:
+Each scan gives, from detect_obstacles:
 1. A forwards fan of ranges laid out like the notebook's beams, so policies written in the notebook can be ported.
-2. The returns in a corridor along the car's path: an arc of the curvature the car is steering along, as wide as the
-   car plus a margin. The distance along the path to the nearest of them is the obstacle in the way. A fixed
-   forwards corridor would take the cones ahead for an obstacle whenever the car turns.
+2. The returns in a corridor along a path from the car: an arc of a given curvature, as wide as the car plus a margin.
+   The distance along the path to the nearest of them is the obstacle in the way.
 
-It keeps no state between policy steps, and its loop is bounded by the number of lidar points, so it is safe to run
+When a lane is detected, detect_lane_obstacles gives the objects inside it instead, in lane coordinates. Returns on or
+outside the lane's edges are the cones or the lane's surroundings, so they are left out, and neighbouring returns are
+grouped into objects with their extent across the lane. A policy can then check the part of the lane the car will
+drive through (nearest_in_band), and find room beside an object. A corridor in the car's own frame would take the
+cones ahead for an obstacle whenever the car points away from the lane or the lane turns.
+
+It keeps no state between policy steps, and its loops are bounded by the number of lidar points, so it is safe to run
 inside the real-time policy step.
 """
 from __future__ import annotations
@@ -26,7 +31,8 @@ import math
 from dataclasses import dataclass
 
 from policy.input_output import CarObservations
-from policy.obstacle_detection.obstacles import ObstacleDetection
+from policy.lane_detection.lanes import LaneDetection
+from policy.obstacle_detection.obstacles import LaneObstacle, ObstacleDetection
 
 STRAIGHT_CURVATURE_PER_M = 1e-3
 """Path curvatures smaller than this in 1/m give a straight corridor. Over 2 m, that moves the path by 2 mm."""
@@ -55,21 +61,37 @@ class ObstacleDetectionConfig:
     measure the real car.
     """
     corridor_half_width_m: float = 0.20
-    """Half the corridor's width in metres: half the car's width plus a margin. Must be positive.
+    """Half the width in metres of the way the car drives through: half the car's width plus a margin. Must be
+    positive. Used for the corridor and for the band across the lane a policy checks with nearest_in_band.
 
-    The default suits the notebook car's 0.25 m width. Keep it well below half the lane width (0.5 m), or the cones
-    beside the lane count as obstacles.
+    The default suits the notebook car's 0.25 m width. In the corridor, keep it well below half the lane width (0.4 m
+    for the lab's 0.8 m lanes), or the cones beside the lane count as obstacles.
     """
     corridor_length_m: float = 1.5
-    """Corridor length in metres along the path ahead of the car's front. Must be positive.
+    """Length in metres ahead of the car's front that is searched for obstacles, along the corridor or along the lane.
+    Must be positive.
 
     Longer sees obstacles sooner, but the path is less certain farther ahead, and a heading error brings the cones
-    into a long corridor.
+    into a long corridor. A policy that stops for obstacles needs its stopping distance to fit within it.
     """
     min_points: int = 3
-    """Fewest returns in the corridor that make an obstacle. Must be an integer of at least 1.
+    """Fewest returns that make an obstacle, in the corridor or in one object in the lane. Must be an integer of at
+    least 1.
 
     A scan of 720 rays spaces them 0.5 degrees apart, so an object 0.1 m wide and 1.5 m away gives about 7 returns.
+    """
+    lane_edge_margin_m: float = 0.10
+    """Returns this close in metres inside either lane edge, or outside the lane, are not obstacles in the lane. Must
+    be finite and at least 0.
+
+    It covers a cone's radius at the lidar's height and the error of the fitted edges. Larger misses objects close to
+    the cones; smaller lets the cones count as obstacles.
+    """
+    cluster_gap_m: float = 0.15
+    """Neighbouring returns, in scan order, closer than this in metres belong to one object in the lane. Must be
+    positive.
+
+    Returns on one face are a few centimetres apart, while separate objects at different distances leave a jump.
     """
 
     def __post_init__(self):
@@ -80,11 +102,11 @@ class ObstacleDetectionConfig:
         if not (math.isfinite(self.field_of_view_deg) and 0.0 < self.field_of_view_deg <= 360.0):
             raise ValueError(f"obstacle_detection.field_of_view_deg must be within (0, 360], "
                              f"not {self.field_of_view_deg}")
-        for name in ("min_range_m", "car_front_m"):
+        for name in ("min_range_m", "car_front_m", "lane_edge_margin_m"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value >= 0.0):
                 raise ValueError(f"obstacle_detection.{name} must be finite and at least 0, not {value}")
-        for name in ("max_range_m", "corridor_half_width_m", "corridor_length_m"):
+        for name in ("max_range_m", "corridor_half_width_m", "corridor_length_m", "cluster_gap_m"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value > 0.0):
                 raise ValueError(f"obstacle_detection.{name} must be positive and finite, not {value}")
@@ -129,6 +151,61 @@ def detect_obstacles(observations: CarObservations, config: ObstacleDetectionCon
     else:
         distance_m, nearest = math.inf, None
     return ObstacleDetection(ranges, distance_m, nearest, len(in_path), path_curvature_per_m, lidar.sensor_age)
+
+
+def detect_lane_obstacles(observations: CarObservations, lane: LaneDetection | None,
+                          config: ObstacleDetectionConfig) -> list[LaneObstacle] | None:
+    """Finds the objects inside the lane ahead of the car, in lane coordinates.
+
+    Only returns ahead of the car's front, at most corridor_length_m along the lane, and more than lane_edge_margin_m
+    inside both edges count. Neighbouring returns in scan order, closer than cluster_gap_m, form one object, and an
+    object needs at least min_points returns, so stray returns do not count.
+
+    :param observations: The observations taken by the car at the current policy step.
+    :param lane: The lane detected at this step, or None.
+    :param config: The obstacle detection settings.
+    :return: The objects, nearest first, or None when there are no fresh Cartesian lidar points or no detected lane
+        (lane is None or has no centre line). An empty list means the lane ahead is clear.
+    """
+    lidar = observations.lidar_cartesian
+    if lidar is None or lane is None or not lane.has_lane:
+        return None
+    centre_line = lane.centre_line
+    inside_m = lane.lane_width_m / 2.0 - config.lane_edge_margin_m
+    returns = []
+    for point in lidar.points:
+        x, y = point.pos.x, point.pos.y
+        along = centre_line.project(x, y) - config.car_front_m
+        left = centre_line.signed_distance(x, y)
+        if 0.0 < along <= config.corridor_length_m and abs(left) < inside_m:
+            returns.append((point.scan_index, x, y, along, left))
+    returns.sort()
+    groups = []
+    for item in returns:
+        if groups and math.dist(groups[-1][-1][1:3], item[1:3]) < config.cluster_gap_m:
+            groups[-1].append(item)
+        else:
+            groups.append([item])
+    # The scan's first and last rays point the same way, straight ahead with the default mounting (turned around), so
+    # an object there is split between the first and last groups
+    if len(groups) > 1 and math.dist(groups[-1][-1][1:3], groups[0][0][1:3]) < config.cluster_gap_m:
+        groups[0] = groups.pop() + groups[0]
+    obstacles = [LaneObstacle(min(item[3] for item in group), max(item[3] for item in group),
+                              min(item[4] for item in group), max(item[4] for item in group), len(group))
+                 for group in groups if len(group) >= config.min_points]
+    return sorted(obstacles, key=lambda obstacle: obstacle.distance_m)
+
+
+def nearest_in_band(obstacles: list[LaneObstacle], right_m: float, left_m: float) -> float:
+    """
+    :param obstacles: Objects in the lane, from detect_lane_obstacles.
+    :param right_m: Right side of a band along the lane, in metres left of the centre line.
+    :param left_m: Left side of the band, in metres left of the centre line; at least right_m.
+    :return: Distance in metres along the lane from beside the car's front to the nearest object that reaches into
+        the band, or math.inf when none does.
+    """
+    return min((obstacle.distance_m for obstacle in obstacles
+                if obstacle.right_m <= left_m and obstacle.left_m >= right_m), default=math.inf)
 
 
 def _path_coordinates(x: float, y: float, curvature_per_m: float) -> tuple[float, float]:

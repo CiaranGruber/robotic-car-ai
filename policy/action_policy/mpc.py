@@ -146,10 +146,32 @@ class MpcConfig:
 
     Must be finite and at least 0. 0.0 drives until the lane ends.
     """
+    obstacle_stop_enabled: bool = True
+    """Whether an obstacle in the car's way stops the car for the rest of the run (MpcPolicy.run_policy's
+    obstacle_distance_m). Must be true or false. Without an obstacle distance (no lidar), nothing is checked."""
+    obstacle_stop_margin_m: float = 0.2
+    """Distance in metres the car should stay short of an obstacle in its way. Must be finite and at least 0.
+
+    The stop is requested once the obstacle is within the stopping distance of the car's front:
+    (stop_distance_per_speed_s + lidar age) * speed + this margin, with the larger of target_speed_m_per_s and the
+    car's speed. The car then coasts to a stop about this far before the obstacle. MovementPolicy checks that the
+    stopping distance at the target speed fits within obstacle_detection.corridor_length_m.
+    """
+    obstacle_confirm_steps: int = 2
+    """Consecutive policy steps that must see an obstacle within the stopping distance before the car stops. Must be
+    an integer of at least 1.
+
+    The stop lasts for the rest of the run, so one step with stray returns should not cause it. Each extra step lets
+    the car drive on for one more policy step, about 0.05 m at 0.5 m/s with cones at 10 Hz.
+    """
 
     def __post_init__(self):
-        if isinstance(self.horizon_steps, bool) or not isinstance(self.horizon_steps, int) or self.horizon_steps < 1:
-            raise ValueError("mpc.horizon_steps must be an integer of at least 1")
+        for name in ("horizon_steps", "obstacle_confirm_steps"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"mpc.{name} must be an integer of at least 1")
+        if not isinstance(self.obstacle_stop_enabled, bool):
+            raise ValueError(f"mpc.obstacle_stop_enabled must be true or false, not {self.obstacle_stop_enabled}")
         for name in ("target_speed_m_per_s", "step_s", "max_curvature_per_m", "curvature_weight", "lane_width_m"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value > 0.0):
@@ -163,7 +185,7 @@ class MpcConfig:
                 raise ValueError(f"mpc.{name} must be positive and finite, not {value}")
         for name in ("lateral_error_weight", "heading_error_weight", "curvature_change_weight",
                      "max_right_curvature_per_m", "lane_loss_timeout_s", "run_duration_s", "lane_end_distance_m",
-                     "lane_end_stop_past_m", "stop_distance_per_speed_s"):
+                     "lane_end_stop_past_m", "stop_distance_per_speed_s", "obstacle_stop_margin_m"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value >= 0.0):
                 raise ValueError(f"mpc.{name} must be finite and at least 0, not {value}")
