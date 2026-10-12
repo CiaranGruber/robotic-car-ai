@@ -12,10 +12,24 @@ import math
 import numpy as np
 
 from policy.action_policy.mpc import PathTrackingState
-from policy.input_output import ConeColour, ConeDetection
+from policy.input_output import ConeColour, ConeDetection, Position
 
 MIN_ROW_LENGTH_M = 0.25
 """Smallest forwards distance in metres between the nearest and farthest cone of a row for it to be fitted."""
+
+
+def rotate_cones(cones: list[ConeDetection], angle_rad: float) -> list[ConeDetection]:
+    """Rotates cone positions about base_link's z axis, to correct a camera that points to one side.
+
+    :param cones: The cone detections.
+    :param angle_rad: Rotation in radians, positive to the left (anticlockwise seen from above).
+    :return: The rotated detections, in the same order.
+    """
+    if angle_rad == 0.0:
+        return list(cones)
+    cos_a, sin_a = math.cos(angle_rad), math.sin(angle_rad)
+    return [ConeDetection(Position(cos_a * c.pos.x - sin_a * c.pos.y, sin_a * c.pos.x + cos_a * c.pos.y, c.pos.z),
+                          c.colour, c.confidence) for c in cones]
 
 
 def reference_from_cones(cones: list[ConeDetection] | None, lane_width_m: float) -> PathTrackingState | None:

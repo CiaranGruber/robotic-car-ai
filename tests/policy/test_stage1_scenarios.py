@@ -208,8 +208,9 @@ def driving_failures(result):
 
 DYNAMIC_MODEL_XFAIL = pytest.mark.xfail(
     reason="Unexplained: on dream-gym's dynamic tyre model the car holds a steady heading error (3 degrees dry, "
-           "6 degrees wet) without turning, so it ends about 0.15 m off centre. Check the tyre model against the 1:10 car "
-           "(Task A2) before tuning on T11.", strict=False)
+           "6 degrees wet) without turning. Within car 20's curvature limits the MPC keeps it in the lane but ends "
+           "0.18 m off centre. Check the tyre model against the 1:10 car (Task A2) before tuning on T11.",
+    strict=False)
 
 
 @pytest.mark.parametrize("case", [pytest.param(case, marks=DYNAMIC_MODEL_XFAIL) if case.disturbances.floor

@@ -27,8 +27,12 @@ class MpcConfig:
     docs/movement-policy-tasks.md where one exists, and are starting guesses otherwise. Invalid settings raise a
     ValueError, which stops policy_node from starting.
     """
-    target_speed_m_per_s: float = 1.0
-    """Requested speed in m/s; also the prediction fallback without wheel speed. Must be positive."""
+    target_speed_m_per_s: float = 0.5
+    """Speed to drive at in m/s, which the prediction also assumes. Must be positive.
+
+    The default is the speed Car Control's speed controller was checked at on car 20; below 0.4 m/s it may not start
+    the car (docs/mpc-lab-calibration.md).
+    """
     horizon_steps: int = 12
     """Number of predicted steps. Must be an integer of at least 1."""
     step_s: float = 0.1
@@ -37,25 +41,74 @@ class MpcConfig:
     The predicted distance (target_speed_m_per_s * step_s * horizon_steps) should stay within the camera's range,
     because the path is unknown beyond it.
     """
-    max_curvature_per_m: float = 3.0
-    """Largest curvature the car can drive in 1/m, in either direction. Must be positive.
+    max_curvature_per_m: float = 0.48
+    """Largest curvature the car can drive to the left in 1/m, and to the right too unless max_right_curvature_per_m
+    is set. Must be positive.
 
-    The default is tan(45 degrees) / 0.335 m, the shared steering default with an approximate wheelbase. It is
-    likely larger than the real car's; replace it with the control module's measured value.
+    The default is car 20's measured left limit, a 2.1 m turning circle radius (docs/mpc-lab-calibration.md).
+    Re-measure it for another car.
+    """
+    max_right_curvature_per_m: float = 0.92
+    """Largest curvature the car can drive to the right in 1/m, as a positive number. 0.0 uses max_curvature_per_m.
+    Must be finite and at least 0.
+
+    The default is car 20's measured right limit: it turns right about twice as sharply as left. With the left limit
+    both ways, the MPC could not plan the 1.25-1.5 m radius right curves car 20 can drive, and the hook turn is a
+    right turn (docs/mpc-lab-calibration.md).
     """
     lateral_error_weight: float = 10.0
     """Cost per m^2 of distance from the path at each predicted step. Must be at least 0."""
     heading_error_weight: float = 1.0
-    """Cost per rad^2 of heading error relative to the path at each predicted step. Must be at least 0."""
+    """Cost per rad^2 of heading error relative to the path at each predicted step. Must be at least 0.
+
+    With car 20's limits, 1.0 kept every simulated curve of 1.5-3 m radius when Car Control compensates the steering
+    trim; 3.0 lost S-bends and straight lanes, and 5.0, the car 20 test run's value, lost more curves
+    (docs/mpc-lab-calibration.md).
+    """
     curvature_weight: float = 0.1
     """Cost per (1/m)^2 of curvature beyond the path's own curvature at each predicted step.
 
     Must be positive, which keeps the best curvatures unique.
     """
-    curvature_change_weight: float = 1.0
-    """Cost per (1/m)^2 of curvature change between consecutive steps, for smooth steering. Must be at least 0."""
-    lane_width_m: float = 1.0
-    """Distance between the lane boundaries in metres, used when only one boundary is visible. Must be positive."""
+    curvature_change_weight: float = 2.0
+    """Cost per (1/m)^2 of curvature change between consecutive steps, for smooth steering. Must be at least 0.
+
+    2.0 steers about a quarter to a third less than 1.0 with the same lane keeping on simulated curves, and kept more
+    simulated straight lanes; 3.0 drifted further from the centre on straights and on the wet-floor case
+    (docs/mpc-lab-calibration.md)."""
+    lane_width_m: float = 0.8
+    """Distance between the lane boundaries in metres, used when only one boundary is visible. Must be positive.
+
+    The default is the lab tracks' measured width, 0.73-0.85 m.
+    """
+    lane_offset_m: float = 0.0
+    """Where in the lane to drive, in metres from the centre line, positive to the left. Must be finite.
+
+    The hook turn needs the car to keep to one side of the lane before it turns. The MPC follows the line this far
+    from the centre, kept at least edge_clearance_m from both edges, so a lane narrower than the car plus that
+    clearance is still driven along its centre. On curves the offset shrinks (offset_fade_curvature_per_m).
+    MpcPolicy.lane_offset_m can change it between policy steps.
+    """
+    edge_clearance_m: float = 0.30
+    """Smallest distance in metres from the followed line to either lane edge when lane_offset_m moves it. Must be
+    positive. The default is half the car's 0.25 m width, a 0.05 m cone radius and 0.125 m for tracking error: with
+    0.25 the car touched cones on simulated curves (docs/mpc-lab-calibration.md). It leaves 0.1 m of offset in a
+    0.8 m lane."""
+    offset_fade_curvature_per_m: float = 0.3
+    """Path curvature in 1/m at which the lane offset has shrunk to nothing; it shrinks in proportion below that.
+    Must be positive. The default fades it out on curves tighter than about a 3.3 m radius, where the car's own
+    tracking error uses up the room beside it."""
+    camera_yaw_offset_deg: float = 0.0
+    """How far left of the car's forwards direction the camera points, in degrees, beyond what base_link assumes.
+    Must be finite.
+
+    The cone positions are rotated back by this much before the lane is fitted. Without it, a camera that points
+    left makes a straight lane look turned to the right, and the MPC steers right to follow it. Ciaran's recordings
+    show 6-10 degrees (docs/mpc-lab-calibration.md), but the camera pan was never commanded in them; the policy
+    now holds the pan at zero, which may remove it. So the default is 0.0 until it is measured again with the pan
+    held: put a cone 2 m straight ahead and read its detected sideways position.
+    """
+
     lane_loss_timeout_s: float = 0.5
     """Seconds to keep driving after the last usable lane before stopping. Must be finite and at least 0.
 
@@ -79,8 +132,15 @@ class MpcConfig:
             value = getattr(self, name)
             if not (math.isfinite(value) and value > 0.0):
                 raise ValueError(f"mpc.{name} must be positive and finite, not {value}")
-        for name in ("lateral_error_weight", "heading_error_weight", "curvature_change_weight", "lane_loss_timeout_s",
-                     "run_duration_s"):
+        for name in ("camera_yaw_offset_deg", "lane_offset_m"):
+            if not math.isfinite(getattr(self, name)):
+                raise ValueError(f"mpc.{name} must be finite, not {getattr(self, name)}")
+        for name in ("edge_clearance_m", "offset_fade_curvature_per_m"):
+            value = getattr(self, name)
+            if not (math.isfinite(value) and value > 0.0):
+                raise ValueError(f"mpc.{name} must be positive and finite, not {value}")
+        for name in ("lateral_error_weight", "heading_error_weight", "curvature_change_weight",
+                     "max_right_curvature_per_m", "lane_loss_timeout_s", "run_duration_s"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value >= 0.0):
                 raise ValueError(f"mpc.{name} must be finite and at least 0, not {value}")
@@ -99,6 +159,25 @@ class PathTrackingState:
     """Curvature of the path near the car in 1/m, positive turning left. It is assumed constant over the horizon."""
 
 
+def offset_state(state: PathTrackingState, offset_m: float) -> PathTrackingState:
+    """Where the car is relative to the line offset_m to the left of the path (right when negative).
+
+    On a curve the offset line is concentric with the path: inside the curve it turns more sharply. The heading
+    error is unchanged, because concentric lines are parallel at the points beside each other.
+
+    :param state: Where the car is relative to the path.
+    :param offset_m: Distance of the line from the path in metres, positive to the left. On a curve it must stay on
+        the path's side of the turning centre.
+    :return: Where the car is relative to the offset line.
+    """
+    remaining = 1.0 - state.path_curvature_per_m * offset_m
+    if remaining <= 0.0:
+        raise ValueError(f"an offset of {offset_m} m is past the turning centre of a {state.path_curvature_per_m} "
+                         f"1/m path")
+    return PathTrackingState(state.lateral_error_m - offset_m, state.heading_error_rad,
+                             state.path_curvature_per_m / remaining)
+
+
 @dataclass(frozen=True)
 class MpcSolution:
     """The result of solving the MPC problem for one policy step."""
@@ -114,8 +193,8 @@ class MpcController:
     """Solves the MPC problem for one policy step.
 
     The problem is a least-squares cost ||M u - c||^2 over the planned curvatures u, with each curvature limited to
-    +-max_curvature_per_m. The motion matrices are rebuilt for the current measured speed; the
-    curvature penalties are constant. Speed is held constant across this solve's horizon.
+    the car's right and left limits. Motion matrices use the current measured speed; curvature penalties
+    are constant. Speed is held constant across the prediction horizon.
     """
 
     def __init__(self, config: MpcConfig):
@@ -136,8 +215,15 @@ class MpcController:
             math.sqrt(config.curvature_change_weight) * differences,
         ])
 
+    @property
+    def curvature_bounds(self) -> tuple[float, float]:
+        """The most right (negative) and left curvature the MPC may plan, in 1/m."""
+        config = self.config
+        right = config.max_right_curvature_per_m or config.max_curvature_per_m
+        return -right, config.max_curvature_per_m
+
     def solve(self, state: PathTrackingState, previous_curvature_per_m: float, delay_s: float,
-              speed_m_per_s: float | None = None) -> MpcSolution:
+              speed_m_per_s: float | None = None, *, lateral_offset_m: float = 0.0) -> MpcSolution:
         """Chooses the curvatures that best follow the path from the car's state.
 
         :param state: Where the car was relative to the path when the observation was taken.
@@ -147,6 +233,7 @@ class MpcController:
         :param speed_m_per_s: Current finite, nonnegative wheel speed. None retains the nominal-speed model
             for callers without feedback. Zero is a real measurement, not missing data. Delay propagation assumes
             this speed and the previous curvature throughout the delay; it is not motion-history reconstruction.
+        :param lateral_offset_m: Metres left of the path to follow, using its concentric line on curves.
         :return: The planned curvatures and whether they can be driven.
         """
         start = time.perf_counter()
@@ -168,6 +255,10 @@ class MpcController:
         forced_response[0::2] = self._lateral_effect * distance ** 2
         forced_response[1::2] = self._heading_effect * distance
         cost_matrix = np.vstack([self._state_weights[:, None] * forced_response, self._curvature_cost])
+        if not math.isfinite(lateral_offset_m):
+            raise ValueError("MPC lateral offset must be finite")
+        if lateral_offset_m:
+            state = offset_state(state, lateral_offset_m)
         path_curvature = state.path_curvature_per_m
         # Predict the current state from the delayed observation
         delay_distance = speed * delay_s
@@ -187,12 +278,13 @@ class MpcController:
         # max_iter limits iterations, not wall-clock time; the node still enforces its calculation budget.
         try:
             result = lsq_linear(cost_matrix, targets,
-                                bounds=(-config.max_curvature_per_m, config.max_curvature_per_m),
+                                bounds=self.curvature_bounds,
                                 method="bvls", max_iter=4 * steps)
             plan = np.asarray(result.x, dtype=float)
             converged = (result.status > 0 and plan.shape == (steps,)
                          and bool(np.all(np.isfinite(plan)))
-                         and bool(np.all(np.abs(plan) <= config.max_curvature_per_m)))
+                         and bool(np.all(plan >= self.curvature_bounds[0]))
+                         and bool(np.all(plan <= self.curvature_bounds[1])))
         except (ValueError, np.linalg.LinAlgError):
             converged = False
         # Failed plans must not leak arbitrary solver iterates to a caller.
