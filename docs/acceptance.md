@@ -375,3 +375,36 @@ camera TF is needed before physical pan motion. GUI workflow remains a separate
 follow-up. Release publication requires promotion, final-tag CI, immutable
 assets and recorded human review; their completion is recorded in GitLab MRs
 and the release record.
+
+### MPC and CarController integration review, 2026-10-12
+
+PR #16 was integrated with `dev` at `2fb92f0`, preserving the calibrated MPC
+settings, asymmetric curvature limits, camera-yaw correction and lane offsets
+from #15, alongside CarController, lane-end inference and lane-state debug
+outputs. The Stage 1 simulator retains both the calibrated camera/car profiles
+and the optional measured CarController response models. Non-finite control
+inputs are now rejected before clipping, so they cannot become full drive or
+steering actions; speed-input rejection also clears the integral.
+
+On macOS/Python 3.12 with dreamgym 0.2.2, the merged policy suite passed
+310 tests, with 3 optional RL tests skipped and 1 existing dynamic wet-floor
+case expected to fail. The stop-zone test checks stopping separately from the
+lane-tracking test; the latter retains that known failure. The yaw-correction
+regression disables lane-end inference to isolate tracking from the new stop
+behavior. Historical tuning tables are not evidence for the merged defaults.
+
+The Stage 1 CLI ran T1–T12 with `--speed 0.5`, the shipped car 22 control
+settings (`speed_ff_offset=0.25`, `speed_ff_gain=12.0`, `speed_kp=0.2`,
+`speed_ki=0.15`, `speed_i_band=0.5`, `max_drive_action=0.45`) and
+`--mpc stop_distance_per_speed_s=2.1`, with the new MPC defaults and no run-time
+limit. Car22a passed 12/12; car22b passed 11/12. Car22b T11 still failed:
+6 cone contacts, 0.394 m outside the lane, 0.461 m endpoint lateral error and
+stopping 1.28 m before the last cone. No tuning or threshold relaxation was
+applied to hide this failure. These models reuse car 20's steering map;
+car 22 steering calibration remains unresolved.
+
+The required `AI4R_INTERFACES_SOURCE="$PWD/.verification/dependencies/dream_interfaces"
+bash tools/verify_fast.sh` could not run because that pinned checkout is absent.
+No ROS build or physical driving was verified. Lane-end inference can mistake
+occlusion for a final pair; it is not a confirmed endpoint detector. Human diff
+review remains required before merge.

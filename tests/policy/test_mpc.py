@@ -13,7 +13,8 @@ from policy.action_policy.policy import MpcPolicy
 from policy.action_policy.reference import reference_from_cones
 from policy.control.actions import DriveCommand
 from policy.input_output import (
-    CarObservations, ConeBatch, ConeColour, ConeDetection, ObservedCarState, PolicyState, Position, SensorAge)
+    CarObservations, ConeBatch, ConeColour, ConeDetection, ObservedCarState, PolicyState, Position, SensorAge,
+    WheelSpeed)
 
 LANE_WIDTH_M = 1.0
 
@@ -34,19 +35,19 @@ def lane_cones(offset_m, heading_rad, colours=(ConeColour.YELLOW, ConeColour.BLU
     return cones
 
 
-def observe(cones, first_step=False, cone_age_s=0.0):
+def observe(cones, first_step=False, cone_age_s=0.0, elapsed_s=0.0):
     return CarObservations(
         cones=(None if cones is None else ConeBatch(cones, SensorAge(cone_age_s, None), acquisition_to_publish_latency_s=0.0)),
         fiducials=None,
         lidar_scan=None,
         lidar_cartesian=None,
         car=ObservedCarState(None, None, None, None),
-        policy=PolicyState(dt=0.0 if first_step else 0.1, policy_elapsed_s=0.0, is_first_policy_step=first_step),
+        policy=PolicyState(dt=0.0 if first_step else 0.1, policy_elapsed_s=elapsed_s, is_first_policy_step=first_step),
     )
 
 
-def command(policy, cones, first_step=True, cone_age_s=0.0):
-    instructions = policy.run_policy(observe(cones, first_step, cone_age_s), None)
+def command(policy, cones, first_step=True, cone_age_s=0.0, elapsed_s=0.0):
+    instructions = policy.run_policy(observe(cones, first_step, cone_age_s, elapsed_s), None)
     assert len(instructions) == 1 and isinstance(instructions[0], DriveCommand)
     return instructions[0]
 
@@ -165,6 +166,53 @@ def test_stops_for_the_rest_of_the_run_after_the_lane_loss_timeout(timeout_s, dr
     assert command(policy, lane_cones(0.0, 0.0), first_step=True).speed_m_per_s == config.target_speed_m_per_s
 
 
+def test_stops_for_the_rest_of_the_run_after_the_run_duration():
+    config = MpcConfig(run_duration_s=5.0)
+    policy = MpcPolicy(config)
+    assert command(policy, lane_cones(0.0, 0.0), elapsed_s=0.0).speed_m_per_s == config.target_speed_m_per_s
+    assert command(policy, lane_cones(0.0, 0.0), first_step=False, elapsed_s=4.9).speed_m_per_s > 0.0
+    assert command(policy, lane_cones(0.0, 0.0), first_step=False, elapsed_s=5.0) == DriveCommand(0.0, 0.0)
+    # A new run starts the time again
+    assert command(policy, lane_cones(0.0, 0.0), first_step=True, elapsed_s=0.0).speed_m_per_s > 0.0
+
+
+def test_zero_run_duration_drives_until_the_lane_ends():
+    assert command(MpcPolicy(MpcConfig()), lane_cones(0.0, 0.0), elapsed_s=1e6).speed_m_per_s > 0.0
+
+
+def test_rolls_to_a_stop_just_past_the_lane_end():
+    """The last cone pair is 1.0 m ahead when the lane is lost, so the rows have ended there."""
+    config = MpcConfig(target_speed_m_per_s=1.0, horizon_steps=20)
+    policy = MpcPolicy(config)
+    ending_lane = [cone for cone in lane_cones(0.0, 0.0) if cone.pos.x <= 1.0]
+    command(policy, ending_lane)
+    speeds = [command(policy, [], first_step=False).speed_m_per_s for _ in range(8)]
+    # 1.25 m to the stop point at 1 m/s and 0.1 m per step: the stop is requested at the first step within 0.6 m
+    # of it (the car's roll-out at 1 m/s), after 0.7 m, and kept
+    assert speeds == [config.target_speed_m_per_s] * 6 + [0.0] * 2
+    assert command(policy, ending_lane, first_step=False) == DriveCommand(0.0, 0.0)
+
+
+def test_a_loss_far_from_the_lane_end_is_unexpected():
+    """The cones were seen 4 m ahead, so losing them is not the lane end: reduced speed and the timeout apply."""
+    config = MpcConfig()
+    policy = MpcPolicy(config)
+    command(policy, lane_cones(0.0, 0.0))
+    speeds = [command(policy, [], first_step=False).speed_m_per_s for _ in range(6)]
+    reduced = config.lane_loss_speed_fraction * config.target_speed_m_per_s
+    assert speeds == pytest.approx([reduced] * 4 + [0.0] * 2)
+
+
+def test_a_stuck_wheel_speed_counts_the_requested_speed_for_the_lane_end():
+    """The lane-end distance never uses less than the requested speed, so a stuck wheel speed stops the car early."""
+    policy = MpcPolicy(MpcConfig())
+    observations = observe(lane_cones(0.0, 0.0), first_step=True)
+    stuck_wheel = WheelSpeed(0.0, SensorAge(0.0, None))
+    stuck = dataclasses.replace(observations, car=dataclasses.replace(observations.car, wheel_speed=stuck_wheel))
+    policy.run_policy(stuck, None)
+    assert policy._conservative_speed(stuck) == MpcConfig().target_speed_m_per_s
+
+
 def test_waits_stopped_until_the_first_usable_lane():
     policy = MpcPolicy(MpcConfig())
     # Longer than the lane loss timeout, which only applies after the first usable lane
@@ -187,8 +235,9 @@ def test_run_duration_stops_with_fresh_lane_and_resets_on_new_run():
 @pytest.mark.parametrize("change", [
     {"horizon_steps": 0}, {"horizon_steps": 2.0}, {"step_s": 0.0}, {"curvature_weight": 0.0},
     {"lateral_error_weight": -1.0}, {"target_speed_m_per_s": math.nan}, {"max_curvature_per_m": math.inf},
+    {"lane_end_distance_m": -0.1}, {"lane_end_stop_past_m": math.nan}, {"stop_distance_per_speed_s": -0.1},
     {"lane_loss_timeout_s": -0.1}, {"lane_loss_timeout_s": math.inf}, {"lane_loss_speed_fraction": 1.5},
-    {"run_duration_s": -0.1}, {"run_duration_s": math.inf},
+    {"run_duration_s": -1.0}, {"run_duration_s": -0.1}, {"run_duration_s": math.inf},
 ])
 def test_invalid_settings_are_rejected(change):
     with pytest.raises(ValueError):
@@ -236,14 +285,15 @@ def test_solver_failure_stops_and_requires_explicit_new_run(monkeypatch):
     assert policy.fallback_count == 0
 
 
-@pytest.mark.parametrize("bad_plan", [np.full(12, math.nan), np.full(12, 4.0), np.zeros(2)])
+@pytest.mark.parametrize("bad_plan", [np.full(MpcConfig().horizon_steps, math.nan),
+                                      np.full(MpcConfig().horizon_steps, 4.0), np.zeros(2)])
 def test_invalid_solver_result_is_rejected(monkeypatch, bad_plan):
     from types import SimpleNamespace
     monkeypatch.setattr("policy.action_policy.mpc.lsq_linear",
                         lambda *args, **kwargs: SimpleNamespace(status=1, x=bad_plan))
     result = MpcController(MpcConfig()).solve(PathTrackingState(0, 0, 0), 0, 0)
     assert not result.converged
-    np.testing.assert_array_equal(result.curvatures_per_m, np.zeros(12))
+    np.testing.assert_array_equal(result.curvatures_per_m, np.zeros(MpcConfig().horizon_steps))
 
 
 def test_exhausted_plan_stops_even_before_lane_loss_timeout():

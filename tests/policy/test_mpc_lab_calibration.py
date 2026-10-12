@@ -134,8 +134,9 @@ def lab_result(settings: dict, case=LAB_CASE):
 
 def test_camera_yaw_correction_reduces_tracking_error():
     """Correcting the recorded 7 degree yaw more than halves the endpoint tracking error."""
-    uncorrected = lab_result(mpc_tuning.MEASURED_SETTINGS)
-    corrected = lab_result({**mpc_tuning.MEASURED_SETTINGS, "camera_yaw_offset_deg": rc.LAB_CAR.camera_yaw_deg})
+    uncorrected = lab_result({**mpc_tuning.MEASURED_SETTINGS, "lane_end_distance_m": 0.0})
+    corrected = lab_result({**mpc_tuning.MEASURED_SETTINGS, "lane_end_distance_m": 0.0,
+                            "camera_yaw_offset_deg": rc.LAB_CAR.camera_yaw_deg})
     assert corrected.metrics["lateral_error_at_lane_end_m"] < 0.5 * uncorrected.metrics["lateral_error_at_lane_end_m"]
     assert corrected.metrics["lateral_error_at_lane_end_m"] < 0.05
     assert mpc_tuning.lane_keeping_passed(corrected)

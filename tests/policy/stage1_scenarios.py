@@ -8,13 +8,18 @@ The simulator's ground truth is only used to place the car, to create the distur
 policy only receives cone detections, the wheel speed and timing, as on the car.
 
 Any policy with run_policy(observations, lanes) -> list[Instruction] can be run, so MPC and RL designs are tested
-on the same cases (Card 1.3). Its DriveCommand is converted into drive and steering actions by a simple stand-in
-for Car Control (see command_to_action), until Car Control's conversion is available.
+on the same cases (Card 1.3). By default its DriveCommand is converted into drive and steering actions by a simple
+stand-in for Car Control (see command_to_action), which the tuning results in docs/stage1-design.md use. With a car
+model (car_models.py), the command goes through the real CarController instead, and dream-gym's car follows that
+car's measured response to CarController's actions (see car_model_action).
 
 Print the metrics table for every tuning case from the repository root with:
     python3 tests/policy/stage1_scenarios.py
 Add --unseen for the unseen cases (only for the final comparison, M1), and --figures DIR to save trajectories.
 --layout docs/figures redraws the printable floor drawings and the simulated lanes beside them.
+--car NAME runs through CarController and a car model; --speed, --control and --mpc then set the speed and settings
+as on that car, for example:
+    python3 tests/policy/stage1_scenarios.py --car car22a --speed 0.5 --control speed_ff_offset=0.32
 """
 from __future__ import annotations
 
@@ -35,9 +40,11 @@ from policy.action_policy.mpc import MpcConfig  # noqa: E402
 from policy.action_policy.policy import MpcPolicy  # noqa: E402
 from policy.cone_filter.cone_filter import ConeFilterConfig, filter_cones  # noqa: E402
 from policy.control.actions import DriveCommand  # noqa: E402
+from policy.control.control import CarController, ControlConfig  # noqa: E402
 from policy.input_output import (  # noqa: E402
     CarActions, CarObservations, ConeBatch, ConeColour, ConeDetection, ObservedCarState, PolicyState, Position,
     SensorAge, WheelSpeed)
+from tests.policy.car_models import CARS, CarModel  # noqa: E402
 
 # ---------------------------------------------------------------------------------------------------------------
 # Lane layout (Card 2.2). The world frame has its origin on the start line at the lane centre, +x along the lane
@@ -109,6 +116,10 @@ WHEELBASE_M = 0.33
 """Front to rear axle distance in metres."""
 CAR_MASS_KG = 3.0
 """Car mass in kg."""
+MOTOR_FORCE_GAIN_N = 10.0
+"""dream-gym motor force in N per unit of its normalised drive."""
+DRAG_KG_PER_M = 1.0
+"""dream-gym drag force per (m/s)^2 of speed, in N."""
 MAX_STEERING_RAD = math.radians(45.0)
 """Largest front wheel angle in radians (shared default, likely larger than the real car's)."""
 CAR_FRONT_M, CAR_REAR_M, CAR_WIDTH_M = 0.6 * WHEELBASE_M * 1.5, 0.4 * WHEELBASE_M * 1.5, 0.25
@@ -122,9 +133,12 @@ DETECTOR_NOISE_M = 0.01
 ENV_STEP_S = 0.05
 """Simulation step in seconds."""
 POLICY_PERIOD_S = 0.1
-"""Time between policy steps in seconds, i.e. one cone detection batch per step. Replace with Task 1.5's rate."""
-TIME_BUDGET_S = 0.05
-"""Calculation time allowed per policy step in seconds (shared default, Task 1.5)."""
+"""Time between policy steps in seconds, i.e. one cone detection batch per step (10 Hz on car 20, Task 1.5)."""
+DETECTION_AGE_S = 0.2
+"""Age of every detection batch when the policy receives it, in seconds: on car 20 the detector's own
+acquisition-to-publication latency is 0.197 s (Task 1.5). A multiple of POLICY_PERIOD_S."""
+TIME_BUDGET_S = 0.02
+"""Calculation time allowed per policy step in seconds (99th percentile, Task 1.5): a fifth of the detection gap."""
 MAX_DURATION_S = 20.0
 """A run ends after this long even if the car has not stopped."""
 STOPPED_SPEED_M_PER_S = 0.02
@@ -156,7 +170,7 @@ class CarProfile:
     calibrated_camera_yaw_deg: float | None = None
     """The camera yaw the team measured and sets in the MPC (mpc.camera_yaw_offset_deg). None: camera_yaw_deg,
     a perfect measurement. Synthetic tracks vary camera_yaw_deg around a fixed measured value."""
-    detection_latency_s: float = 0.0
+    detection_latency_s: float = DETECTION_AGE_S
     """Age of every detection batch when the policy receives it, in seconds. A multiple of POLICY_PERIOD_S. The
     delay disturbance adds to it."""
     max_left_curvature_per_m: float = math.inf
@@ -235,6 +249,10 @@ class Disturbances:
     floor: str | None = None
     """Floor grip: None for the nominal kinematic car, or one of FLOOR_CONDITIONS for dream-gym's dynamic car with
     that tyre grip (it uses the dynamic model above 0.2-0.4 m/s)."""
+    camera_blackout_from_m: float | None = None
+    """From this distance past the start line in metres, every detection batch is empty, like a covered or blinded
+    camera; None for no blackout. The lane is then lost before its end, so the case is scored on R7 (stop request
+    after losing the lane) instead of the stop zone (R5)."""
 
     def __post_init__(self):
         if self.noise_m is not None and not (math.isfinite(self.noise_m) and self.noise_m >= 0.0):
@@ -244,6 +262,9 @@ class Disturbances:
             value = getattr(self, name)
             if value is not None and not (math.isfinite(value) and value > 0.0):
                 raise ValueError(f"{name} must be positive and finite, not {value}")
+        blackout = self.camera_blackout_from_m
+        if blackout is not None and not (math.isfinite(blackout) and blackout >= 0.0):
+            raise ValueError(f"camera_blackout_from_m must be None or finite and at least 0, not {blackout}")
         if self.floor is not None and self.floor not in FLOOR_CONDITIONS:
             raise ValueError(f"floor must be None or one of {FLOOR_CONDITIONS}, not {self.floor!r}")
 
@@ -304,7 +325,7 @@ class Stage1Case:
 class Thresholds:
     """Pass thresholds on the Stage 1 metrics (Card 2.1). Every one must hold for a case to pass.
 
-    PROVISIONAL until the Card 1.1 requirement and metric table is agreed; keep the two in step.
+    These are the Card 1.1 requirements and metrics in docs/stage1-approach.md; keep the two in step.
     """
     max_cones_touched: int = 0
     """R2 no cone touched."""
@@ -325,6 +346,13 @@ class Thresholds:
     """R6 real time: steps where the solver did not converge."""
     max_p99_calc_time_s: float = TIME_BUDGET_S
     """R6 real time: 99th-percentile calculation time per policy step. Only meaningful on the car computer."""
+    check_calc_time: bool = False
+    """Whether max_p99_calc_time_s fails a run. Off in simulation, where the time depends on the host and its load
+    (parallel runs exceed 20 ms); R6a is checked on the car computer instead (Task A6)."""
+    max_lane_lost_to_stop_request_s: float = 0.8
+    """R7 safe stop when the lane is lost: time from a camera blackout to the policy's stop request, including the
+    0.2 s detection age and one detection gap. The car must still stay in the lane and touch no cone (R1a, R2);
+    these cases are not scored on the stop zone (R5)."""
 
 
 @dataclass
@@ -433,8 +461,8 @@ def make_env(case: Stage1Case):
         "axle_geometry": {"front_axle_distance_from_center_of_mass_m": 0.60 * WHEELBASE_M,
                           "rear_axle_distance_from_center_of_mass_m": 0.40 * WHEELBASE_M},
         "mass_properties": {"mass_kg": mass, "yaw_moment_of_inertia_kg_m2": (1.0 / 12.0) * mass * (0.40 ** 2 + 0.25 ** 2)},
-        "longitudinal_force_model": {"normalized_motor_command_force_gain_n": 10.0,
-                                     "quadratic_aerodynamic_drag_coefficient_kg_per_m": 1.0},
+        "longitudinal_force_model": {"normalized_motor_command_force_gain_n": MOTOR_FORCE_GAIN_N,
+                                     "quadratic_aerodynamic_drag_coefficient_kg_per_m": DRAG_KG_PER_M},
         # The steering trim error: the wheels point this far left of the requested angle
         "steering": {"physical_front_wheel_angle_offset_from_request_rad":
                      math.atan(WHEELBASE_M * case.car.straight_curvature_per_m),
@@ -513,6 +541,8 @@ def disturbed_detections(observation: dict, pose: tuple[float, float, float], ca
     :return: The detections the policy receives.
     """
     disturbances = case.disturbances
+    if disturbances.camera_blackout_from_m is not None and pose[0] >= disturbances.camera_blackout_from_m:
+        return []
     count = int(observation["cone_detections_count"][0])
     xs = observation["cone_detections_forward_positions_in_body_frame_m"][:count]
     ys = observation["cone_detections_left_positions_in_body_frame_m"][:count]
@@ -581,6 +611,26 @@ def command_to_action(command: DriveCommand, measured_speed_m_per_s: float) -> n
     return np.clip(np.array([drive, steering], dtype=np.float32), -1.0, 1.0)
 
 
+def car_model_action(actions: CarActions, speed_m_per_s: float, car: CarModel, mass_kg: float) -> np.ndarray:
+    """Converts the actions CarController publishes into the dream-gym action that makes the simulated car respond
+    as the real car does (car_models.py). Called every simulation step with the car's true speed: this models the
+    car, not the policy, so the ground truth is allowed here.
+
+    The drive gives the motor force for the car model's acceleration plus the simulated drag, and the steering
+    gives the front wheel angle for the car model's curvature with the kinematic bicycle model.
+
+    :param actions: The latest actions from CarController.
+    :param speed_m_per_s: The car's true forwards speed in m/s.
+    :param car: The car model.
+    :param mass_kg: The simulated car's mass in kg.
+    :return: The normalised [drive, steering] action.
+    """
+    acceleration = car.acceleration_m_per_s2(actions.drive_action, speed_m_per_s, ENV_STEP_S)
+    force = mass_kg * acceleration + DRAG_KG_PER_M * speed_m_per_s * abs(speed_m_per_s)
+    steering = math.atan(WHEELBASE_M * car.curvature_per_m(actions.steering_action)) / MAX_STEERING_RAD
+    return np.clip(np.array([force / MOTOR_FORCE_GAIN_N, steering], dtype=np.float32), -1.0, 1.0)
+
+
 class StandInControl:
     """The stand-in for Car Control and the car's response, for one run with one CarProfile.
 
@@ -632,15 +682,21 @@ class StandInControl:
 # ---------------------------------------------------------------------------------------------------------------
 # Running a case
 # ---------------------------------------------------------------------------------------------------------------
-def run_case(case: Stage1Case, policy, thresholds: Thresholds = Thresholds()) -> Stage1Result:
+def run_case(case: Stage1Case, policy, thresholds: Thresholds = Thresholds(), car: CarModel | None = None,
+             control_config: ControlConfig | None = None) -> Stage1Result:
     """Runs a policy on one case and scores it.
 
     :param case: The case to run.
     :param policy: The policy, with run_policy(observations, lanes) returning a list holding one DriveCommand. It
         is not reset here; it receives is_first_policy_step on the first step, as on the car.
     :param thresholds: The pass thresholds.
+    :param car: None to convert each DriveCommand with command_to_action. Otherwise CarController converts it, and
+        the simulated car responds to CarController's actions as this car does.
+    :param control_config: CarController's settings when car is given; None for the ControlConfig defaults.
     :return: The trajectory, metrics and pass/fail result.
     """
+    controller = None if car is None else CarController(control_config or ControlConfig())
+    car_actions = None
     env = make_env(case)
     observation, info = env.reset(seed=case.seed)
     rng = np.random.default_rng(case.seed)
@@ -686,8 +742,16 @@ def run_case(case: Stage1Case, policy, thresholds: Thresholds = Thresholds()) ->
             calc_times.append(time.perf_counter() - start)
             command = next(i for i in instructions if isinstance(i, DriveCommand))
             commands.append((step * ENV_STEP_S, command))
-            action = control.action(command, abs(speed))
-            steps.append((observations, CarActions(float(action[0]), float(action[1]), None, None, None)))
+            if controller is None:
+                action = control.action(command, abs(speed))
+                logged_actions = CarActions(float(action[0]), float(action[1]), None, None, None)
+            else:
+                car_actions = controller.step(observations, instructions)
+                logged_actions = car_actions
+            steps.append((observations, logged_actions))
+        if car_actions is not None:
+            mass = CAR_MASS_KG if case.disturbances.car_mass_kg is None else case.disturbances.car_mass_kg
+            action = car_model_action(car_actions, log["speed"][-1], car, mass)
         observation, _, terminated, truncated, info = env.step(action)
         step += 1
         record(info)
@@ -764,6 +828,13 @@ def compute_metrics(result: Stage1Result, fallback_count: int) -> dict[str, floa
     stopped = abs(speed[-1]) < STOPPED_SPEED_M_PER_S
     # At the last cone pair, or where the car stopped if that is before it
     end_index = int(np.flatnonzero(x <= lane.length_m)[-1])
+    # R7: time from a camera blackout to the first stop request after it (nan when the case has no blackout)
+    lost_to_stop = math.nan
+    blackout = result.case.disturbances.camera_blackout_from_m
+    if blackout is not None and (x >= blackout).any():
+        lost_s = float(result.time_s[np.flatnonzero(x >= blackout)[0]])
+        later_stops = [t for t in stop_requests if t >= lost_s]
+        lost_to_stop = later_stops[0] - lost_s if later_stops else math.inf
     return {
         "cones_touched": float(len(touched)),
         "body_outside_lane_m": max(outside, 0.0),
@@ -773,6 +844,7 @@ def compute_metrics(result: Stage1Result, fallback_count: int) -> dict[str, floa
         "rms_curvature_rate_per_m_s": float(np.sqrt(np.mean(rates ** 2))),
         "stopped": float(stopped),
         "stop_past_last_cone_m": float(x[-1] - lane.length_m) if stopped else math.nan,
+        "lane_lost_to_stop_request_s": lost_to_stop,
         "fallback_count": float(fallback_count),
         "p99_calc_time_s": float(np.percentile(result.calc_times_s, 99)),
         "duration_s": float(result.time_s[-1]),
@@ -794,9 +866,15 @@ def check_thresholds(metrics: dict[str, float], thresholds: Thresholds) -> list[
                 + at_most("lateral_error_at_lane_end_m", thresholds.max_lateral_error_at_lane_end_m)
                 + at_most("mean_speed_error_m_per_s", thresholds.max_mean_speed_error_m_per_s)
                 + at_most("rms_curvature_rate_per_m_s", thresholds.max_rms_curvature_rate_per_m_s)
-                + at_most("fallback_count", thresholds.max_fallback_count)
-                + at_most("p99_calc_time_s", thresholds.max_p99_calc_time_s))
-    if not metrics["stopped"]:
+                + at_most("fallback_count", thresholds.max_fallback_count))
+    if thresholds.check_calc_time:
+        failures += at_most("p99_calc_time_s", thresholds.max_p99_calc_time_s)
+    if not math.isnan(metrics["lane_lost_to_stop_request_s"]):
+        # Lane lost mid-lane: R7 instead of the stop zone
+        failures += at_most("lane_lost_to_stop_request_s", thresholds.max_lane_lost_to_stop_request_s)
+        if not metrics["stopped"]:
+            failures.append("did not stop")
+    elif not metrics["stopped"]:
         failures.append("did not stop")
     elif not stop_low <= stop <= stop_high:
         failures.append(f"stop_past_last_cone_m = {stop:.3g} outside [{stop_low}, {stop_high}]")
@@ -933,14 +1011,17 @@ def format_table(results: list[Stage1Result]) -> str:
     :return: A Markdown table of the main metrics of each run, for the log-book.
     """
     rows = ["| Case | Lane | Touched | Outside lane [m] | Lat. err. at end [m] | Speed err. [m/s] | Curv. rate RMS "
-            "[1/(m s)] | Stop past last cone [m] | Fallbacks | p99 calc [ms] | Result |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+            "[1/(m s)] | Stop past last cone [m] | Lane lost to stop [s] | Fallbacks | p99 calc [ms] | Result |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for r in results:
         m = r.metrics
+        lost_to_stop = m["lane_lost_to_stop_request_s"]
         rows.append(f"| {r.case.name} | {r.case.lane.name} | {m['cones_touched']:.0f} | "
                     f"{m['body_outside_lane_m']:.3f} | {m['lateral_error_at_lane_end_m']:.3f} | "
                     f"{m['mean_speed_error_m_per_s']:.3f} | {m['rms_curvature_rate_per_m_s']:.2f} | "
-                    f"{m['stop_past_last_cone_m']:.2f} | {m['fallback_count']:.0f} | "
+                    f"{m['stop_past_last_cone_m']:.2f} | "
+                    f"{'' if math.isnan(lost_to_stop) else format(lost_to_stop, '.2f')} | "
+                    f"{m['fallback_count']:.0f} | "
                     f"{1000 * m['p99_calc_time_s']:.1f} | "
                     f"{'PASS' if r.passed else 'FAIL: ' + '; '.join(r.failures)} |")
     return "\n".join(rows)
@@ -949,7 +1030,7 @@ def format_table(results: list[Stage1Result]) -> str:
 class ConeFilteredPolicy:
     """Runs the cone filter before a policy, as MovementPolicy.step in policy/policy_runner.py does on the car.
 
-    Lane detection is skipped (it does not produce lanes yet) and control is replaced by command_to_action.
+    Lane detection is skipped (it does not produce lanes yet); run_case does the control step.
     """
 
     def __init__(self, policy, cone_filter_config):
@@ -969,17 +1050,32 @@ class ConeFilteredPolicy:
         return self.policy.run_policy(filtered, lanes)
 
 
-def mpc_config_for(case: Stage1Case):
-    """The MPC settings for a case: the shipped defaults, set to the case's speed, lane width and the car's measured
-    camera yaw, as the team would configure them for that lane and car in config/ai4r_policy.yaml."""
+def mpc_config_for(case: Stage1Case, car: CarModel | None = None, **changes):
+    """MPC settings for the case's speed, lane, camera calibration and optional measured car model."""
     yaw = case.car.calibrated_camera_yaw_deg
-    return MpcConfig(target_speed_m_per_s=case.speed_m_per_s, lane_width_m=case.lane.width_m,
-                     camera_yaw_offset_deg=case.car.camera_yaw_deg if yaw is None else yaw)
+    config = MpcConfig(target_speed_m_per_s=case.speed_m_per_s, lane_width_m=case.lane.width_m,
+                       camera_yaw_offset_deg=case.car.camera_yaw_deg if yaw is None else yaw)
+    if car is not None:
+        config = dataclasses.replace(config, max_curvature_per_m=car.max_left_curvature_per_m,
+                                     max_right_curvature_per_m=car.max_right_curvature_per_m)
+    return dataclasses.replace(config, **changes)
 
 
-def shipped_mpc_policy(case: Stage1Case) -> ConeFilteredPolicy:
+def shipped_mpc_policy(case: Stage1Case, car: CarModel | None = None, **changes) -> ConeFilteredPolicy:
     """The team's current pipeline for a case: the shipped cone filter settings, then the MPC (mpc_config_for)."""
-    return ConeFilteredPolicy(MpcPolicy(mpc_config_for(case)), ConeFilterConfig())
+    return ConeFilteredPolicy(MpcPolicy(mpc_config_for(case, car, **changes)), ConeFilterConfig())
+
+
+def parse_settings(pairs: list[str], config_type) -> dict:
+    """Converts NAME=VALUE pairs from the command line into settings of config_type, with each default's type."""
+    defaults = dataclasses.asdict(config_type())
+    settings = {}
+    for pair in pairs:
+        name, _, value = pair.partition("=")
+        if name not in defaults:
+            raise SystemExit(f"{config_type.__name__} has no setting {name!r}")
+        settings[name] = type(defaults[name])(value)
+    return settings
 
 
 def main():
@@ -991,7 +1087,16 @@ def main():
     parser.add_argument("--figures", type=Path, help="folder to save a trajectory figure of each case in")
     parser.add_argument("--layout", type=Path, help="save the floor drawings and simulated lanes of the tuning "
                                                     "lanes in this folder, then stop")
+    parser.add_argument("--car", choices=sorted(CARS), help="run through CarController and this car model")
+    parser.add_argument("--speed", type=float, help="run every case at this target speed in m/s")
+    parser.add_argument("--control", action="append", default=[], metavar="NAME=VALUE",
+                        help="CarController setting with --car, for example speed_ff_offset=0.32 (repeatable)")
+    parser.add_argument("--mpc", action="append", default=[], metavar="NAME=VALUE",
+                        help="MPC setting, for example lane_loss_speed_fraction=0.0 (repeatable)")
     args = parser.parse_args()
+    car = CARS[args.car] if args.car else None
+    control_config = ControlConfig(**parse_settings(args.control, ControlConfig))
+    mpc_changes = parse_settings(args.mpc, MpcConfig)
     if args.layout:
         for lane in dict.fromkeys(case.lane for case in TUNING_CASES):
             plot_layout(args.layout, lane)
@@ -1001,9 +1106,13 @@ def main():
         sys.path.insert(0, str(Path(__file__).resolve().parent / "unseen"))
         from stage1_unseen_cases import UNSEEN_CASES
         cases = UNSEEN_CASES
+    if args.speed is not None:
+        cases = [dataclasses.replace(case, speed_m_per_s=args.speed) for case in cases]
+    if car is not None:
+        print(f"Car model {car.name}: {car.source}\nControl: {control_config}\n")
     results = []
     for case in cases:
-        result = run_case(case, shipped_mpc_policy(case))
+        result = run_case(case, shipped_mpc_policy(case, car, **mpc_changes), car=car, control_config=control_config)
         results.append(result)
         if args.figures:
             args.figures.mkdir(parents=True, exist_ok=True)

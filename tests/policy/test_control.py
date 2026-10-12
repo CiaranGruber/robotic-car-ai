@@ -119,7 +119,36 @@ def test_movement_policy_turns_back_to_the_lane_centre_within_the_drive_limit():
     assert actions.camera_pan_action is None
 
 
+def test_movement_policy_publishes_the_lane_state_on_debug1_and_debug2():
+    """debug1 is the lateral error in metres and debug2 the heading error in radians, for Foxglove."""
+    actions = MovementPolicy(MpcConfig(), ConeFilterConfig(), CONFIG).step(
+        observations(0.3, dt=0.0, first=True, cones=lane_cones(0.3, 0.1)))
+    assert actions.debug1 == pytest.approx(0.3) and actions.debug2 == pytest.approx(0.1)
+
+
 def test_movement_policy_stops_without_a_lane():
     actions = MovementPolicy(MpcConfig(), ConeFilterConfig(), CONFIG).step(observations(0.5, dt=0.0, first=True, cones=[]))
     assert actions.drive_action == 0.0
     assert actions.steering_action == CONFIG.steering_centre_action  # the MPC asks to stop, steering straight
+    assert actions.debug1 is None and actions.debug2 is None
+
+
+@pytest.mark.parametrize("curvature", [float("nan"), float("inf"), -float("inf")])
+def test_invalid_curvature_is_rejected_before_clipping(curvature):
+    with pytest.raises(ValueError):
+        CarController(CONFIG).step(observations(0.5), [DriveCommand(0.5, curvature)])
+
+
+@pytest.mark.parametrize("target, measured, dt", [
+    (float("inf"), 0.5, 0.1), (float("nan"), 0.5, 0.1),
+    (0.5, float("nan"), 0.1), (0.5, float("inf"), 0.1), (0.5, -0.1, 0.1),
+    (0.5, 0.5, float("nan")), (0.5, 0.5, float("inf")), (0.5, 0.5, -0.1),
+    (0.1, float("nan"), 0.1),
+])
+def test_invalid_speed_inputs_clear_integral_and_are_rejected(target, measured, dt):
+    controller = SpeedController(CONFIG)
+    controller.step(0.6, 0.5, 0.1)
+    assert controller.integral > 0.0
+    with pytest.raises(ValueError):
+        controller.step(target, measured, dt)
+    assert controller.integral == 0.0

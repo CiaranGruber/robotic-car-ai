@@ -43,7 +43,8 @@ Starting values from dream-gym's cone-following example
 | Which colour is on which side | No default; dream-gym treats colours as labels per road | Long; Ciaran's lab tracks have blue on the left |
 | Camera view | 80 degrees wide, 4 m range, 0.01 m position noise | Task A1; recordings: 86 degrees, 0.4-2.5 m, about 0.03 m, 0.2 s latency, camera 6-10 degrees left with the pan never commanded, to recheck now the pan is held at zero ([mpc-lab-calibration.md](mpc-lab-calibration.md)) |
 | Target speed | 1.0 m/s | Chris; MPC now 0.5 m/s, where Chris checked the speed controller on car 20 |
-| Time allowed per policy update | 50 ms | Task 1.5 |
+| Cone detection rate and age | 10 Hz; about 0.2 s | Task 1.5, measured on car 20 |
+| Time allowed per policy update | 20 ms (99th percentile) | Task 1.5, stage1-approach.md |
 
 ## Log-book entries
 
