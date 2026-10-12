@@ -205,8 +205,7 @@ def test_movement_policy_open_space_drives_round_a_cone_within_the_drive_limit()
     movement = MovementPolicy(MpcConfig(), ConeFilterConfig(), control_config, OpenSpaceConfig(), "open_space")
     actions = movement.step(observe(cones=[cone(1.0, 0.1, ConeColour.BLUE)], first_step=True, wheel_speed=0.3))
     assert 0.0 < actions.drive_action <= control_config.max_drive_action
-    # Right, away from the cone: positive steering turns right with the default (car 20) steering map
-    assert actions.steering_action > control_config.steering_centre_action
+    assert actions.steering_action > control_config.steering_centre_action  # right, away from the cone (car 20 map)
     assert actions.debug1 < 0.0  # the chosen heading in degrees
     assert actions.debug2 == float(OpenSpaceStatus.DRIVING)
 

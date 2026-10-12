@@ -313,7 +313,6 @@
       # is the same cone and is replaced by it.
       memory_merge_distance_m: 0.25
 
-
     # CONE OUTLIER FILTER SETTINGS (ConeFilterConfig in
     # policy/cone_filter/cone_filter.py, which checks them; invalid values stop
     # the node from starting). The detector only applies its own confidence and

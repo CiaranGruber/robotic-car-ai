@@ -38,9 +38,7 @@ class MovementPolicy:
         self.cone_filter_config = cone_filter_config
         self.action_policy_name = action_policy
         self.action_policy = MpcPolicy(mpc_config)
-        # A positive steering action turns left when the steering map's left slope is positive
-        self.open_space_policy = OpenSpacePolicy(open_space_config,
-                                                 control_config.steering_left_action_per_curvature > 0.0)
+        self.open_space_policy = OpenSpacePolicy(open_space_config, control_config.positive_steering_turns_left)
         self.car_controller = CarController(control_config)
 
     def step(self, observations: CarObservations) -> CarActions:
