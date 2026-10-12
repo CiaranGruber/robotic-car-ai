@@ -34,6 +34,7 @@
 - .gitlab-ci.yml
 - .gitattributes
 - *.md
+- *.ipynb
 - ci/
 - tools/record_run.ps1
 - tools/sysid_analyze.py

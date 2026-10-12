@@ -55,6 +55,10 @@
     # ArUco marker observations, with no cone requirement:
     #   policy_update_mode: fiducial_detection
     #   required_sensors: [fiducial_detections]
+    # Lane following that must stop when the lidar obstacle observation is
+    # missing (see obstacle_detection below):
+    #   policy_update_mode: cone_detection
+    #   required_sensors: [cone_detections, wheel_speed, lidar_cartesian]
 
     # Maximum accepted age of each sensor in seconds (positive finite doubles).
     # Defaults are 0.5 s. Expiry occurs at age >= the value. Smaller values stop
@@ -150,9 +154,9 @@
     # tuning in the Task A4 log-book.
     mpc:
       # Speed to drive at, m/s, positive double. The prediction assumes it.
-      # Lane-following test run: 0.5, the speed Chris's car 20 PI was tuned at
-      # (feedback works from 0.4 m/s up).
-      target_speed_m_per_s: 0.5
+      # Lane-following test run: 0.4 on car 9 (car 20 PI was tuned at 0.5;
+      # feedback works from 0.4 m/s up, so do not go lower).
+      target_speed_m_per_s: 0.4
       # Number of predicted steps: INTEGER >= 1. More steps cost more calculation
       # time (Task A6). Keep target_speed_m_per_s * step_s * horizon_steps within
       # the camera range (shared default 4 m); the default predicts 1.2 m ahead.
@@ -274,8 +278,8 @@
       # speed lags by seconds). Car 20 may not start below about 0.4 m/s.
       speed_feedback_min_m_per_s: 0.4
       # Drive action upper limit, double in (0, 1]. Car 20 open-loop 0.75
-      # passes 1.5 m/s in about 3 s.
-      max_drive_action: 0.75
+      # passes 1.5 m/s in about 3 s; lowered to 0.6 for car 9.
+      max_drive_action: 0.6
       # Steering map: steering = centre + slope * curvature, with a separate
       # slope for left (curvature > 0) and right. Measured with the vehicle
       # interface steering trim at -0.18 on car 20; the trim resets to 0.0 when
@@ -288,3 +292,40 @@
       # saturates beyond -0.75 (radius about 2.1 m); right reaches about 1.1 m
       # at 1.0.
       max_steering_action: 1.0
+
+    # LIDAR OBSTACLE OBSERVATION SETTINGS (ObstacleDetectionConfig in
+    # policy/obstacle_detection/obstacle_detection.py, which checks them;
+    # invalid values stop the node from starting). Each policy step turns the
+    # body-frame lidar points (lidar_cartesian) into the obstacle observation
+    # of the dream-gym system-project notebook, section 8. It needs rplidar_c1
+    # running and its mounting TF; without fresh lidar_cartesian there is no
+    # observation, and the car still drives unless lidar_cartesian is in
+    # required_sensors. Nothing acts on it yet: debug1 shows the distance from
+    # the car's front to the obstacle in its path (corridor_length_m when
+    # clear) and debug2 the nearest return in the forwards fan. The lidar's
+    # scan plane also hits the lane's cones, so debug2 often shows a cone.
+    obstacle_detection:
+      # Forwards fan, like the notebook's obstacle_lidar_ranges_m: INTEGER >= 2
+      # beams spread evenly across field_of_view_deg (double in (0, 360]),
+      # index 0 pointing right, the middle index forwards and the last left.
+      beam_count: 61
+      field_of_view_deg: 180.0
+      # Fan ranges, metres from base_link's origin, doubles with 0 <= min < max.
+      # Closer returns read min_range_m; a beam with no return reads
+      # max_range_m, as in the notebook.
+      min_range_m: 0.05
+      max_range_m: 4.0
+      # Distance from base_link's origin forwards to the car's front, metres,
+      # double >= 0. 0.30 is the notebook car's; measure your car.
+      car_front_m: 0.30
+      # The corridor the car drives through follows the curvature it is
+      # steering along. Half its width, metres, positive double: half the car's
+      # width plus a margin (0.20 suits a 0.25 m wide car). Keep it well below
+      # half the lane width (0.5 m), or the cones beside the lane count.
+      corridor_half_width_m: 0.20
+      # Corridor length ahead of the car's front, metres, positive double.
+      # Longer sees obstacles sooner, but a heading error brings cones into it.
+      corridor_length_m: 1.5
+      # Fewest lidar returns in the corridor that make an obstacle, INTEGER
+      # >= 1, so one or two stray returns do not count.
+      min_points: 3

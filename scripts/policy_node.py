@@ -75,6 +75,7 @@ from policy.data_logging.data_logging import (
 )
 from policy.control.control import ControlConfig
 from policy.input_output import ConeColour, convert_observations, convert_actions
+from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
 from policy.policy_runner import MovementPolicy
 
 # These values and the request/status topics match the previous AI4R policy.
@@ -261,8 +262,17 @@ class PolicyNode(Node):
             self.declare_parameter(f"control.{name}", default, ParameterDescriptor(read_only=True))
         control_config = ControlConfig(**{
             name: self.get_parameter(f"control.{name}").value for name in control_defaults})
+        # Lidar obstacle observation settings: see obstacle_detection in ai4r_policy.yaml.
+        # ObstacleDetectionConfig in policy/obstacle_detection/obstacle_detection.py holds
+        # their defaults and checks them.
+        obstacle_detection_defaults = asdict(ObstacleDetectionConfig())
+        for name, default in obstacle_detection_defaults.items():
+            self.declare_parameter(f"obstacle_detection.{name}", default, ParameterDescriptor(read_only=True))
+        obstacle_detection_config = ObstacleDetectionConfig(**{
+            name: self.get_parameter(f"obstacle_detection.{name}").value
+            for name in obstacle_detection_defaults})
         self.movement_policy = MovementPolicy(mpc_config, cone_filter_config, lane_detection_config,
-                                             control_config)
+                                             control_config, obstacle_detection_config)
 
         self.fsm_state = FSM_STATE_PUBLISHING_ZERO_ACTIONS
         self.state_reason = "Startup: waiting for an explicit policy request"
