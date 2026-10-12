@@ -5,6 +5,8 @@ This file is responsible for taking in the observations and detected lanes and c
 control module
 """
 
+import math
+
 from policy.action_policy.mpc import MpcConfig, MpcController
 from policy.action_policy.reference import reference_from_cones
 from policy.control.actions import DriveCommand, Instruction
@@ -36,21 +38,26 @@ class MpcPolicy:
         """Curvatures in 1/m planned by the latest converged solve, followed while the lane is lost. None before
         the first one in this run."""
         self.distance_since_plan_m = 0.0
-        """Distance in metres the car drove since the plan was made, which gives its step of the plan."""
+        """Estimated distance since the plan, using current wheel speed over each elapsed step when available.
+        Otherwise uses the previous requested speed; this is approximate odometry, not measured pose."""
+        self.plan_step_distance_m = 0.0
+        """Spatial spacing of the cached plan, using the speed of its solve. Zero means no reusable moving plan."""
         self.farthest_cone_ahead_m = None
         """Distance in metres from the car to the farthest cone seen at the latest usable lane, less the distance
-        driven since. None before the first usable lane in this run."""
+        driven since (estimated with _conservative_speed). None before the first usable lane in this run."""
+        self.lane_state = None
+        """Where the car was relative to the lane centre in this step's observation, or None when this step had no
+        usable lane. It is found even while stopped, so the lane estimate can be checked with the car held still."""
         self.lane_lost_s = 0.0
         """Seconds since the last usable lane; 0.0 while the lane is usable."""
         self.stopped_for_lane_loss = False
         """True once the lane was lost for lane_loss_timeout_s. The car then stays stopped for the rest of the run."""
-        self.lane_state = None
-        """Where the car was relative to the lane centre in this step's observation, or None when this step had no
-        usable lane. It is found even while stopped, so the lane estimate can be checked with the car held still."""
         self.solve_count = 0
         """Number of times the MPC problem was solved in this run."""
         self.fallback_count = 0
-        """Number of steps in this run where the solver did not converge and the previous curvature was reused."""
+        """Number of failed solves in this run. The fallback is a latched zero command, not continued driving."""
+        self.stopped_for_solver_failure = False
+        """True after a failed solve; only the first step of a new explicitly started run resets it."""
         self.lane_lost_step_count = 0
         """Number of steps in this run driven along the plan because the lane was lost."""
         self.last_solve_time_s = 0.0
@@ -66,36 +73,46 @@ class MpcPolicy:
         """
         if observations.policy.is_first_policy_step:
             self.reset()
-        else:
-            distance_m = self._speed_estimate(observations) * observations.policy.dt
-            self.distance_since_plan_m += distance_m
-            if self.farthest_cone_ahead_m is not None:
-                self.farthest_cone_ahead_m -= distance_m
         cones = observations.cones
         state = reference_from_cones(cones, self.config.lane_width_m)
         self.lane_state = state
         run_duration_s = self.config.run_duration_s
-        if self.stopped_for_lane_loss or 0.0 < run_duration_s <= observations.policy.policy_elapsed_s:
-            # Stopped for the rest of the run
+        if (self.stopped_for_lane_loss or self.stopped_for_solver_failure
+                or 0.0 < run_duration_s <= observations.policy.policy_elapsed_s):
             return [self._command(0.0, 0.0)]
+        measured_speed = observations.car.wheel_speed
+        if measured_speed is not None and (not math.isfinite(measured_speed) or measured_speed < 0.0):
+            raise ValueError("MPC wheel speed must be finite and nonnegative")
+        if not math.isfinite(observations.policy.dt) or observations.policy.dt < 0.0:
+            raise ValueError("MPC policy dt must be finite and nonnegative")
+        if not observations.policy.is_first_policy_step:
+            travelled_speed = self.previous_speed_m_per_s if measured_speed is None else measured_speed
+            self.distance_since_plan_m += travelled_speed * observations.policy.dt
+            if self.farthest_cone_ahead_m is not None:
+                self.farthest_cone_ahead_m -= self._conservative_speed(observations) * observations.policy.dt
         if cones is None or state is None:
             # No lane or a doubtful lane
             return [self._command_without_lane(observations)]
         self.lane_lost_s = 0.0
         # The cones were seen sensor_age ago, so the car has driven on since
         self.farthest_cone_ahead_m = (max(cone.pos.x for cone in cones)
-                                      - self._speed_estimate(observations) * cones.sensor_age)
-        solution = self.controller.solve(state, self.previous_curvature_per_m, cones.sensor_age)
+                                      - self._conservative_speed(observations) * cones.sensor_age)
+        prediction_speed = self.config.target_speed_m_per_s if measured_speed is None else float(measured_speed)
+        solution = self.controller.solve(state, self.previous_curvature_per_m, cones.sensor_age,
+                                         speed_m_per_s=prediction_speed)
         self.solve_count += 1
         self.last_solve_time_s = solution.solve_time_s
         if solution.converged:
             curvature = float(solution.curvatures_per_m[0])
             self.plan_curvatures_per_m = solution.curvatures_per_m
             self.distance_since_plan_m = 0.0
+            self.plan_step_distance_m = prediction_speed * self.config.step_s
         else:
-            # Fallback: keep the previous curvature, and count it for the Task 1.1 metrics
+            # Never continue at target speed on an unvalidated optimisation result.
             self.fallback_count += 1
-            curvature = self.previous_curvature_per_m
+            self.stopped_for_solver_failure = True
+            self.plan_curvatures_per_m = None
+            return [self._command(0.0, 0.0)]
         return [self._command(self.config.target_speed_m_per_s, curvature)]
 
     def _command_without_lane(self, observations: CarObservations) -> DriveCommand:
@@ -107,7 +124,8 @@ class MpcPolicy:
           so it rolls to a stop there.
         - Otherwise the lane was lost unexpectedly. The car drives at lane_loss_speed_fraction of the target speed for
           up to lane_loss_timeout_s, in case the lane comes back.
-        Either way it then stops for the rest of the run.
+        Either way it stops early if the plan's remaining distance runs out, and then stops for the rest of the run.
+        A plan solved at zero speed cannot be followed while moving.
 
         :param observations: The observations at this step.
         :return: The command for this step.
@@ -121,25 +139,26 @@ class MpcPolicy:
                       and self.farthest_cone_ahead_m <= config.lane_end_distance_m)
         if lane_ended:
             to_go_m = self.farthest_cone_ahead_m + config.lane_end_stop_past_m
-            stop = to_go_m <= config.stop_distance_per_speed_s * self._speed_estimate(observations)
+            stop = to_go_m <= config.stop_distance_per_speed_s * self._conservative_speed(observations)
             speed = config.target_speed_m_per_s
         else:
             stop = self.lane_lost_s >= config.lane_loss_timeout_s
             speed = config.lane_loss_speed_fraction * config.target_speed_m_per_s
-        if stop or self.plan_curvatures_per_m is None:
+        if (stop or self.plan_curvatures_per_m is None or self.plan_step_distance_m <= 0.0
+                or self.distance_since_plan_m >= len(self.plan_curvatures_per_m) * self.plan_step_distance_m):
             self.stopped_for_lane_loss = True
             return self._command(0.0, 0.0)
         self.lane_lost_step_count += 1
-        step_distance = config.target_speed_m_per_s * config.step_s
-        step = min(int(self.distance_since_plan_m / step_distance), config.horizon_steps - 1)
+        # No extrapolation beyond the horizon by repeating the last curvature.
+        step = int(self.distance_since_plan_m / self.plan_step_distance_m)
         return self._command(speed, float(self.plan_curvatures_per_m[step]))
 
-    def _speed_estimate(self, observations: CarObservations) -> float:
+    def _conservative_speed(self, observations: CarObservations) -> float:
         """
         :param observations: The observations at this step.
-        :return: The car's speed in m/s for dead reckoning: the larger of the measured wheel speed and the speed
-            requested at the previous step. A missing or stuck wheel speed then overestimates the distance driven,
-            so the car stops early rather than late.
+        :return: The car's speed in m/s for the lane-end distance: the larger of the measured wheel speed and the
+            speed requested at the previous step. A missing or stuck wheel speed then overestimates the distance
+            driven and the roll-out, so the car stops early rather than late.
         """
         wheel_speed = observations.car.wheel_speed
         return max(self.previous_speed_m_per_s, 0.0 if wheel_speed is None else float(wheel_speed))

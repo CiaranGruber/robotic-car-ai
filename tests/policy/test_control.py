@@ -17,7 +17,7 @@ from policy.control.control import (CarController, ControlConfig, SpeedControlle
 from policy.input_output import (  # noqa: E402
     CarActions, CarObservations, ConeBatch, ObservedCarState, PolicyState, SensorAge, WheelSpeed)
 from policy.policy_runner import MovementPolicy  # noqa: E402
-from test_mpc import lane_cones  # noqa: E402
+from tests.policy.test_mpc import lane_cones  # noqa: E402
 
 CONFIG = ControlConfig()
 

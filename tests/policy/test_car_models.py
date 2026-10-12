@@ -4,10 +4,14 @@ Run from the repository root with: python3 -m pytest tests/policy/test_car_model
 """
 import dataclasses
 import math
+from pathlib import Path
+import sys
 
 import pytest
 
 pytest.importorskip("dreamgym")
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import stage1_scenarios as scenarios  # noqa: E402
 from car_models import CAR_20, CAR_22A, CARS  # noqa: E402

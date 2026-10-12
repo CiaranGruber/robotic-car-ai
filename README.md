@@ -138,6 +138,7 @@ sensor modes reuse the same cached representations and freshness handling.
 | `scan` | `sensor_msgs/LaserScan` | Input; best effort, depth 1 |
 | `wheel_speed_m_per_sec` | `std_msgs/Float32` | Input; reliable, depth 1; unsigned m/s |
 | `imu/data` | `sensor_msgs/Imu` | Input; best effort, depth 5 |
+| `rc_drive_and_steer_normalized` | `dream_interfaces/DriveAndSteer` | Input; reliable, depth 1; operator RC sticks, normalized; stored only, never a trigger |
 | `policy_fsm_transition_request` | `std_msgs/UInt16` | Input; reliable, depth 10; states 1/2/3 |
 | `drive_and_steer_set_point_normalized` | `dream_interfaces/DriveAndSteer` | Output; reliable, depth 1; explicit normalized units |
 | `pan_set_point_normalized` | `std_msgs/Float32` | Output; reliable, depth 1; optional normalized target |

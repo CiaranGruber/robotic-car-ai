@@ -151,6 +151,12 @@ def request(node, state):
     node.fsm_transition_request_callback(UInt16(data=state))
 
 
+def rc(drive=0.6, steer=-0.3, units=DriveAndSteer.UNITS_NORMALIZED):
+    msg = DriveAndSteer()
+    msg.units, msg.drive, msg.steer = units, drive, steer
+    return msg
+
+
 def driving_policy(*args):
     return 0.4, -0.2, None, None, None
 
@@ -806,8 +812,46 @@ def test_invalid_sensor_content_and_runtime_parameter_changes(make_node):
     assert not node.set_parameters_atomically([Parameter("policy_update_mode", value="lidar")]).successful
 
 
+def test_rc_sticks_are_validated_unstamped_and_never_trigger(make_node):
+    node = make_node("timer", ["rc_drive_and_steer"])
+    seen = []
+
+    def record(values, ages, stamps, *rest):
+        seen.append((values["rc_drive_and_steer"], ages["rc_drive_and_steer"], stamps["rc_drive_and_steer"]))
+        return 0.0, 0.0, None, None, None
+
+    node.calculate_policy_actions = record
+    for bad in (rc(units=DriveAndSteer.UNITS_PERCENT), rc(drive=math.nan), rc(steer=1.5)):
+        node.rc_callback(bad)
+    assert node.observations["rc_drive_and_steer"] is None
+    node.rc_callback(rc())
+    request(node, 3)
+    assert node.fsm_state == 3 and not seen
+    node.run_policy_step()
+    values, age, stamp_ns = seen[-1]
+    assert values == pytest.approx((0.6, -0.3)) and age == 0.0 and stamp_ns is None
+    node.test_clock.advance(0.5)
+    node.run_policy_step()
+    assert node.fsm_state == 2 and len(seen) == 1
+
+
+def test_open_space_policy_drives_only_while_rc_is_held_forwards(make_node):
+    node = make_node("timer", ["rc_drive_and_steer", "wheel_speed"], action_policy="open_space")
+    node.wheel_speed_callback(Float32(data=0.0))
+    node.cone_detection_callback(cones(node, empty=True))
+    node.rc_callback(rc(drive=0.0, steer=0.0))
+    request(node, 3)
+    node.run_policy_step()
+    assert node.action_publisher.messages[-1].drive == 0.0
+    node.rc_callback(rc(drive=0.6, steer=0.0))
+    node.run_policy_step()
+    assert node.action_publisher.messages[-1].drive > 0.0
+    assert node.debug2_publisher.messages[-1].data == 3.0
+
+
 @pytest.mark.parametrize("mode,required,extra", [
     ("automatic", [], {}), ("lidar", [], {}), ("cone_detection", [], {}),
+    ("timer", [], {"action_policy": "follow_the_gap"}),
     ("fiducial_detection", [], {}),
     ("timer", ["unknown"], {}), ("timer", ["lidar_scan", "lidar_scan"], {}),
     ("lidar", ["lidar"], {}),
