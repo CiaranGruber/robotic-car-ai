@@ -78,6 +78,11 @@ class ControlConfig:
     Car 20's left turn saturates beyond about -0.75 (radius about 2.1 m); right reaches radius about 1.1 m at 1.0.
     """
 
+    @property
+    def positive_steering_turns_left(self) -> bool:
+        """Whether a positive steering action turns the car left, from the sign of the steering map."""
+        return self.steering_left_action_per_curvature > 0.0
+
     def __post_init__(self):
         for name in ("speed_ff_gain", "speed_i_band"):
             value = getattr(self, name)
