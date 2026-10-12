@@ -154,7 +154,11 @@
     logging:
       # When true, record CarObservations and CarActions each policy step as JSON
       # arrays in logging_folder. A new pair is named when the state becomes
-      # "Publishing policy actions".
+      # "Publishing policy actions", with the local time to the second, e.g.
+      # 2026-10-12_14-03-27_observations.json. A pair started in the same
+      # second gets _2, _3, ..., so no earlier run is replaced. Beside each pair,
+      # <same stem>_config.json saves every parameter value the node was
+      # running with, so a recording keeps its settings after the YAML changes.
       # Lane-following test run: true, to record each run for analysis.
       is_data_logging: true
       # Directory for drive and general log files. Empty or unusable paths fall

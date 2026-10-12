@@ -260,6 +260,13 @@ class PolicyNode(Node):
             settings["mpc"], settings["cone_filter"], settings["control"], settings["open_space"],
             self.get_parameter("action_policy").value, lane_detection_config=settings["lane_detection"],
             obstacle_detection_config=settings["obstacle_detection"])
+        # Every parameter value this node runs with, saved beside each drive data log
+        # (<stem>_config.json). Settings are startup-only, so reading them once is enough.
+        self.parameter_values = {
+            parameter.name: (parameter.value
+                             if isinstance(parameter.value, (bool, int, float, str, type(None)))
+                             else list(parameter.value))
+            for parameter in self.get_parameters(sorted(self.get_parameters_by_prefix("")))}
 
         self.fsm_state = FSM_STATE_PUBLISHING_ZERO_ACTIONS
         self.state_reason = "Startup: waiting for an explicit policy request"
@@ -1153,7 +1160,7 @@ class PolicyNode(Node):
         self.state_reason = reason
         _LOGGER.info("Changing state to %s", self._state_name(state))
         if state == FSM_STATE_PUBLISHING_POLICY_ACTION:
-            self.logging_params = start_data_log(self.logging_params)
+            self.logging_params = start_data_log(self.logging_params, self.parameter_values)
         if state == FSM_STATE_PUBLISHING_ZERO_ACTIONS:
             self.publish_zero_actions()
         self.get_logger().info(f"{STATE_NAMES[state]}: {reason}")
