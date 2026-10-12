@@ -132,12 +132,11 @@ def lab_result(settings: dict, case=LAB_CASE):
     return s1.run_case(case, s1.ConeFilteredPolicy(MpcPolicy(MpcConfig(**settings)), ConeFilterConfig()))
 
 
-def test_camera_as_recorded_needs_the_yaw_correction():
-    """With the 7 degree yaw seen in Ciaran's recordings (pan never commanded), the lab lane fails unless
-    mpc.camera_yaw_offset_deg corrects it."""
+def test_camera_yaw_correction_reduces_tracking_error():
+    """Correcting the recorded 7 degree yaw more than halves the endpoint tracking error."""
     uncorrected = lab_result(mpc_tuning.MEASURED_SETTINGS)
     corrected = lab_result({**mpc_tuning.MEASURED_SETTINGS, "camera_yaw_offset_deg": rc.LAB_CAR.camera_yaw_deg})
-    assert uncorrected.metrics["lateral_error_at_lane_end_m"] > 0.10
+    assert corrected.metrics["lateral_error_at_lane_end_m"] < 0.5 * uncorrected.metrics["lateral_error_at_lane_end_m"]
     assert corrected.metrics["lateral_error_at_lane_end_m"] < 0.05
     assert mpc_tuning.lane_keeping_passed(corrected)
 

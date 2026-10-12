@@ -141,13 +141,21 @@ def test_dev_pipeline_keeps_a_straight_lane():
     assert result.lane_kept and result.metrics["max_lateral_m"] < 0.05
 
 
-def test_dev_pipeline_drifts_into_the_cones_on_a_curve():
-    """The reported drift on curved roads: the straight-row cone filter and the straight lane fit treat a 3 m
-    radius curve as straight, and the car touches cones although car 20 can steer it. Lane detection's curved fit
-    with the straight-row check off fixes it (docs/mpc-lab-calibration.md). Update this test when the MPC's cone
-    path is replaced by LaneDetection."""
+def test_measured_speed_pipeline_keeps_the_three_metre_curve():
+    """The measured-speed MPC completes this curve without leaving the lane or touching cones."""
     lane = cl.CurvedLane(pieces=(("straight", 1.5), ("arc", 1.0 / 3.0, 90.0), ("straight", 1.5)))
     policy = ConeFilteredPolicy(MpcPolicy(MpcConfig()), ConeFilterConfig())
     result = cl.run_curve(cl.CurveCase(lane, car=PAN_HELD_CAR), policy)
-    assert not result.lane_kept
-    assert result.metrics["cones_touched"] > 0
+    assert result.lane_kept
+    assert result.metrics["cones_touched"] == 0
+    assert result.metrics["max_lateral_m"] < 0.05
+
+
+@pytest.mark.parametrize("speed", [0.0, 0.2, 0.8])
+def test_offset_and_measured_speed_use_the_same_prediction_model(speed):
+    controller = MpcController(MpcConfig())
+    state = PathTrackingState(0.05, 0.1, 0.2)
+    actual = controller.solve(state, 0.1, 0.2, speed_m_per_s=speed, lateral_offset_m=0.1)
+    expected = controller.solve(offset_state(state, 0.1), 0.1, 0.2, speed_m_per_s=speed)
+    assert actual.converged and expected.converged
+    np.testing.assert_allclose(actual.curvatures_per_m, expected.curvatures_per_m)

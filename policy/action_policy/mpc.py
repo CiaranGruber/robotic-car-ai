@@ -109,6 +109,22 @@ class MpcConfig:
     held: put a cone 2 m straight ahead and read its detected sideways position.
     """
 
+    lane_loss_timeout_s: float = 0.5
+    """Seconds to keep driving after the last usable lane before stopping. Must be finite and at least 0.
+
+    While the lane is lost, the car follows the curvatures planned at the last usable lane, at
+    lane_loss_speed_fraction of the target speed. After this time it stops for the rest of the run. 0.0 stops at the
+    first step without a usable lane. A starting value for Task A7; keep it short, because the plan only covers the
+    horizon.
+    """
+    lane_loss_speed_fraction: float = 0.5
+    """Fraction of target_speed_m_per_s to drive at while the lane is lost. Must be in [0, 1]."""
+    run_duration_s: float = 0.0
+    """Seconds after entering the publishing-policy state before the car stops for the rest of the run.
+
+    Must be finite and at least 0. 0.0 drives until the lane ends.
+    """
+
     def __post_init__(self):
         if isinstance(self.horizon_steps, bool) or not isinstance(self.horizon_steps, int) or self.horizon_steps < 1:
             raise ValueError("mpc.horizon_steps must be an integer of at least 1")
@@ -124,7 +140,7 @@ class MpcConfig:
             if not (math.isfinite(value) and value > 0.0):
                 raise ValueError(f"mpc.{name} must be positive and finite, not {value}")
         for name in ("lateral_error_weight", "heading_error_weight", "curvature_change_weight",
-                     "max_right_curvature_per_m"):
+                     "max_right_curvature_per_m", "lane_loss_timeout_s", "run_duration_s"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value >= 0.0):
                 raise ValueError(f"mpc.{name} must be finite and at least 0, not {value}")
@@ -177,8 +193,8 @@ class MpcController:
     """Solves the MPC problem for one policy step.
 
     The problem is a least-squares cost ||M u - c||^2 over the planned curvatures u, with each curvature limited to
-    the car's right and left limits. M depends only on the settings, so it is built once; c depends on the car's
-    state.
+    the car's right and left limits. Motion matrices use the current measured speed; curvature penalties
+    are constant. Speed is held constant across the prediction horizon.
     """
 
     def __init__(self, config: MpcConfig):
@@ -207,20 +223,40 @@ class MpcController:
         return -right, config.max_curvature_per_m
 
     def solve(self, state: PathTrackingState, previous_curvature_per_m: float, delay_s: float,
-              lateral_offset_m: float = 0.0) -> MpcSolution:
+              speed_m_per_s: float | None = None, *, lateral_offset_m: float = 0.0) -> MpcSolution:
         """Chooses the curvatures that best follow the path from the car's state.
 
         :param state: Where the car was relative to the path when the observation was taken.
         :param previous_curvature_per_m: Curvature requested at the previous step in 1/m, which the car is assumed
             to have driven since the observation, and which the first curvature change is measured from.
         :param delay_s: Age of the observation in seconds. The state is predicted forwards by this much first.
-        :param lateral_offset_m: Follow the line this far left of the path (right when negative) instead of the path.
-            On a curve it is the concentric line, so its curvature differs from the path's.
+        :param speed_m_per_s: Current finite, nonnegative wheel speed. None retains the nominal-speed model
+            for callers without feedback. Zero is a real measurement, not missing data. Delay propagation assumes
+            this speed and the previous curvature throughout the delay; it is not motion-history reconstruction.
+        :param lateral_offset_m: Metres left of the path to follow, using its concentric line on curves.
         :return: The planned curvatures and whether they can be driven.
         """
         start = time.perf_counter()
         config = self.config
         steps = config.horizon_steps
+        speed = config.target_speed_m_per_s if speed_m_per_s is None else float(speed_m_per_s)
+        values = (state.lateral_error_m, state.heading_error_rad, state.path_curvature_per_m,
+                  previous_curvature_per_m, delay_s, speed)
+        if not all(math.isfinite(value) for value in values) or delay_s < 0.0 or speed < 0.0:
+            raise ValueError("MPC requires finite inputs, nonnegative speed and nonnegative observation age")
+        distance = speed * config.step_s
+        # Exact zero-order-hold discretisation of the small-heading-error model:
+        # e_next = e + d*heading + d^2/2*(curvature - path_curvature).
+        free_response = np.zeros((2 * steps, 2))
+        free_response[0::2, 0] = 1.0
+        free_response[0::2, 1] = self._step_numbers * distance
+        free_response[1::2, 1] = 1.0
+        forced_response = np.empty((2 * steps, steps))
+        forced_response[0::2] = self._lateral_effect * distance ** 2
+        forced_response[1::2] = self._heading_effect * distance
+        cost_matrix = np.vstack([self._state_weights[:, None] * forced_response, self._curvature_cost])
+        if not math.isfinite(lateral_offset_m):
+            raise ValueError("MPC lateral offset must be finite")
         if lateral_offset_m:
             state = offset_state(state, lateral_offset_m)
         path_curvature = state.path_curvature_per_m
@@ -239,8 +275,19 @@ class MpcController:
             math.sqrt(config.curvature_weight) * path_curvatures,
             math.sqrt(config.curvature_change_weight) * previous,
         ])
-        # Bounded-variable least squares solves this small problem exactly; max_iter bounds its calculation time
-        result = lsq_linear(self._cost_matrix, targets, bounds=self.curvature_bounds, method="bvls",
-                            max_iter=4 * steps)
-        converged = result.status > 0 and bool(np.all(np.isfinite(result.x)))
-        return MpcSolution(result.x, converged, time.perf_counter() - start)
+        # max_iter limits iterations, not wall-clock time; the node still enforces its calculation budget.
+        try:
+            result = lsq_linear(cost_matrix, targets,
+                                bounds=self.curvature_bounds,
+                                method="bvls", max_iter=4 * steps)
+            plan = np.asarray(result.x, dtype=float)
+            converged = (result.status > 0 and plan.shape == (steps,)
+                         and bool(np.all(np.isfinite(plan)))
+                         and bool(np.all(plan >= self.curvature_bounds[0]))
+                         and bool(np.all(plan <= self.curvature_bounds[1])))
+        except (ValueError, np.linalg.LinAlgError):
+            converged = False
+        # Failed plans must not leak arbitrary solver iterates to a caller.
+        if not converged:
+            plan = np.zeros(steps)
+        return MpcSolution(plan, converged, time.perf_counter() - start)

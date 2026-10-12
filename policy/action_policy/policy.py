@@ -101,11 +101,12 @@ class MpcPolicy:
         corrected = None if cones is None else rotate_cones(cones, math.radians(self.config.camera_yaw_offset_deg))
         state = reference_from_cones(corrected, self.config.lane_width_m)
         if cones is None or state is None:
-            # No lane or a doubtful lane: stop. Task A7 decides how long to continue and how to slow down instead.
-            self.previous_curvature_per_m = 0.0
-            return [DriveCommand(0.0, 0.0)]
+            return [self._command_without_lane(observations.policy.dt)]
+        self.lane_lost_s = 0.0
+        prediction_speed = self.config.target_speed_m_per_s if measured_speed is None else measured_speed
         offset = self.followed_offset_m(self.config.lane_width_m, state.path_curvature_per_m)
-        solution = self.controller.solve(state, self.previous_curvature_per_m, cones.sensor_age, offset)
+        solution = self.controller.solve(state, self.previous_curvature_per_m, cones.sensor_age,
+                                         speed_m_per_s=prediction_speed, lateral_offset_m=offset)
         self.solve_count += 1
         self.last_solve_time_s = solution.solve_time_s
         if solution.converged:
