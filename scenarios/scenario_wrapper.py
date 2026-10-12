@@ -9,6 +9,8 @@ from scenarios import SCENARIO_SUFFIX, SCENARIOS_DIR
 
 class ScenarioType(Enum):
     REAL = "real_scenarios"
+    SYNTHETIC = "synthetic_scenarios"
+    """Simulated tracks from tests/policy/synthetic_tracks.py, in the same format as the real scenarios."""
 
 
 class Scenario:

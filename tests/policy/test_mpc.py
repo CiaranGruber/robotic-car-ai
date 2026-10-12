@@ -65,7 +65,7 @@ def test_turns_back_towards_the_lane_centre(offset_m, heading_rad):
 
 
 def test_curvature_stays_within_the_limit():
-    config = MpcConfig(max_curvature_per_m=0.5)
+    config = MpcConfig(max_curvature_per_m=0.5, max_right_curvature_per_m=0.0)
     result = command(MpcPolicy(config), lane_cones(0.4, 0.5))
     assert result.curvature_per_m == pytest.approx(-config.max_curvature_per_m)
 

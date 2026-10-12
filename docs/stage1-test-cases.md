@@ -80,32 +80,39 @@ at the 0.33 m wheelbase). The stop zone follows the card's example rule.
 ### Current result: shipped MPC on the tuning cases
 
 Shipped `ConeFilterConfig` defaults, then shipped `MpcConfig` defaults with the case's speed and lane width, in
-simulation (6 October 2026):
+simulation (11 October 2026). The MPC's curvature limits are now car 20's measured 0.48 1/m left and 0.92 1/m right,
+and its curvature-change weight is 2.0 (from 1.0; heading weight unchanged at 1.0), chosen on curved lanes
+([mpc-lab-calibration.md](mpc-lab-calibration.md) has the lab car and curve results). The steering is smoother
+than with the old settings on every case except T11 (curvature-rate RMS 0.08-0.33 against 0.12-0.62 1/(m s) on
+T1-T10):
 
 | Case | Lane | Touched | Outside lane [m] | Lat. err. at end [m] | Speed err. [m/s] | Curv. rate RMS [1/(m s)] | Stop past last cone [m] | Fallbacks | Result |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | 6x1m_0.5 | 0 | 0.000 | 0.002 | 0.000 | 0.14 | -0.50 | 0 | Fail (R5) |
-| T2 | 6x1m_0.5 | 0 | 0.000 | 0.003 | 0.000 | 0.35 | -0.51 | 0 | Fail (R5) |
-| T3 | 6x1m_0.5 | 0 | 0.000 | 0.001 | 0.000 | 0.32 | -0.50 | 0 | Fail (R5) |
-| T4 | 6x1m_0.5 | 0 | 0.000 | 0.007 | 0.000 | 0.38 | -0.50 | 0 | Fail (R5) |
-| T5 | 6x1m_0.5 | 0 | 0.000 | 0.000 | 0.000 | 0.62 | -0.51 | 0 | Fail (R5) |
-| T6 | 6x1m_0.5 | 0 | 0.000 | 0.005 | 0.003 | 0.12 | -0.38 | 0 | Fail (R5) |
-| T7 | 6x0.8m_0.5 | 0 | 0.000 | 0.000 | 0.000 | 0.25 | -0.40 | 0 | Fail (R5) |
-| T8 | 6x1.2m_0.75 | 0 | 0.000 | 0.000 | 0.000 | 0.38 | -0.91 | 0 | Fail (R5) |
-| T9 | 8x1m_0.5 | 0 | 0.000 | 0.005 | 0.000 | 0.15 | -0.50 | 0 | Fail (R5) |
-| T10 | 6x1m_0.5 | 0 | 0.000 | 0.008 | 0.000 | 0.17 | -0.50 | 0 | Fail (R5) |
-| T11 | 6x1m_0.5 | 0 | 0.000 | 0.153 | 0.001 | 0.89 | -0.20 | 0 | Fail (R1, R5) |
+| T1 | 6x1m_0.5 | 0 | 0.000 | 0.004 | 0.000 | 0.10 | -0.50 | 0 | Fail (R5) |
+| T2 | 6x1m_0.5 | 0 | 0.000 | 0.002 | 0.000 | 0.28 | -0.51 | 0 | Fail (R5) |
+| T3 | 6x1m_0.5 | 0 | 0.000 | 0.000 | 0.000 | 0.27 | -0.50 | 0 | Fail (R5) |
+| T4 | 6x1m_0.5 | 0 | 0.000 | 0.006 | 0.000 | 0.26 | -0.50 | 0 | Fail (R5) |
+| T5 | 6x1m_0.5 | 0 | 0.000 | 0.006 | 0.000 | 0.33 | -0.51 | 0 | Fail (R5) |
+| T6 | 6x1m_0.5 | 0 | 0.000 | 0.004 | 0.003 | 0.08 | -0.38 | 0 | Fail (R5) |
+| T7 | 6x0.8m_0.5 | 0 | 0.000 | 0.002 | 0.000 | 0.19 | -0.40 | 0 | Fail (R5) |
+| T8 | 6x1.2m_0.75 | 0 | 0.000 | 0.002 | 0.000 | 0.31 | -0.91 | 0 | Fail (R5) |
+| T9 | 8x1m_0.5 | 0 | 0.000 | 0.004 | 0.000 | 0.13 | -0.50 | 0 | Fail (R5) |
+| T10 | 6x1m_0.5 | 0 | 0.000 | 0.007 | 0.000 | 0.12 | -0.50 | 0 | Fail (R5) |
+| T11 | 6x1m_0.5 | 0 | 0.000 | 0.181 | 0.001 | 0.88 | -0.21 | 0 | Fail (R1, R5) |
 
 - **Lane end (R5, all cases).** The MPC follows the lane well but stops 0.4 to 0.9 m **before** the last cone
   pair. Each row needs two cones at least 0.25 m apart, and the 80 degree camera cannot see a cone beside the lane
   closer than about 0.6 m ahead (more on wider lanes), so the lane is "lost" before the end. This is the lane-end
   rule for Task A7. The stop-zone test is marked `xfail` until then; remove the mark when A7 is done.
 - **Extra object (T10).** The cone filter removes the object beside the lane (it is off the yellow row), so the
-  steering is smoother than without the filter (curvature-rate RMS 0.17 against 0.37 1/(m s)).
+  steering is smoother than without the filter.
 - **Wet floor (T11).** On dream-gym's dynamic tyre model the car holds a steady heading error (about 3 degrees on a
-  dry floor and 6 degrees on a wet one) while not turning, and ends 0.15 m off centre. This also happens on a dry
-  floor, so the tyre model may not be calibrated for a 1:10 car. Check it (Task A2) before tuning on T11; its
-  driving test is marked `xfail` until then.
+  dry floor and 6 degrees on a wet one) while not turning. With the 3.0 1/m curvature limit it ended 0.15 m off
+  centre; with 0.48 1/m both ways it left the lane. With car 20's own limits (0.92 1/m to the right) it stays in
+  the lane, touches nothing, and ends 0.18 m off centre (R1); curvature-change weight 2.0 corrects more slowly than
+  1.0 (0.15 m). This also happens on a dry floor, so the tyre model
+  may not be calibrated for a 1:10 car. Check it (Task A2) before tuning on T11; its driving test is marked
+  `xfail` until then.
 
 ## 2.2 Physical cone layout
 
@@ -176,9 +183,12 @@ Import it into the team's shared sheet and replace this sentence with the sheet'
 ## Open items
 
 - Card 1.1: agree the requirements and metrics, then update `Thresholds` and the table above.
-- Task 1.4: which colour is on which side (yellow left is assumed here) and Car Control's conversion.
+- Task 1.4: Car Control's conversion. The lab tracks have blue on the left; these cases keep yellow on the left,
+  which the MPC does not depend on.
 - Task 1.5: the real detection rate and calculation budget (`POLICY_PERIOD_S`, `TIME_BUDGET_S`).
-- Task A1: measured camera view, range and noise; the lab cones' base size (`CONE_RADIUS_M`).
+- Task A1: the camera view, range, noise, latency and yaw are now measured from Ciaran's recordings
+  ([mpc-lab-calibration.md](mpc-lab-calibration.md)); still to do: a tape-measured check and the lab cones' base
+  size (`CONE_RADIUS_M`).
 - Task A2: check dream-gym's dynamic tyre model against the 1:10 car (T11).
 - Task A7: lane-end behaviour, so the stop-zone test can pass.
 - Lab: check the floor areas above fit, count the cones available, create the shared record sheet and log a real
