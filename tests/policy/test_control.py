@@ -1,4 +1,4 @@
-"""Hardware-free checks of the low-level control module, without ROS.
+"""Hardware-free checks of the low-level control module and the whole movement policy, without ROS.
 
 Run from the repository root with: python3 -m pytest tests/policy/test_control.py
 """
@@ -9,17 +9,23 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from policy.action_policy.mpc import MpcConfig  # noqa: E402
+from policy.cone_filter.cone_filter import ConeFilterConfig  # noqa: E402
 from policy.control.actions import DriveCommand, MoveCameraTo  # noqa: E402
 from policy.control.control import (CarController, ControlConfig, SpeedController,  # noqa: E402
                                     steering_for_curvature)
-from policy.input_output import CarObservations, ObservedCarState, PolicyState, SensorAge, WheelSpeed  # noqa: E402
+from policy.input_output import (  # noqa: E402
+    CarActions, CarObservations, ConeBatch, ObservedCarState, PolicyState, SensorAge, WheelSpeed)
+from policy.policy_runner import MovementPolicy  # noqa: E402
+from tests.policy.test_mpc import lane_cones  # noqa: E402
 
 CONFIG = ControlConfig()
 
 
-def observations(wheel_speed, dt=0.02, first=False):
+def observations(wheel_speed, dt=0.02, first=False, cones=None):
     speed = None if wheel_speed is None else WheelSpeed(wheel_speed, SensorAge(0.01, None))
-    return CarObservations(None, None, None, None, ObservedCarState(None, None, None, speed),
+    batch = None if cones is None else ConeBatch(cones, SensorAge(0.0, None), acquisition_to_publish_latency_s=0.0)
+    return CarObservations(batch, None, None, None, ObservedCarState(None, None, None, speed),
                            PolicyState(dt, 0.0, first))
 
 
@@ -95,3 +101,54 @@ def test_first_policy_step_resets_integral():
 def test_invalid_settings_are_rejected(change):
     with pytest.raises(ValueError):
         ControlConfig(**change)
+
+
+def test_steering_direction_follows_the_map_sign():
+    assert not CONFIG.positive_steering_turns_left  # car 20: positive steering turns right
+    assert ControlConfig(steering_left_action_per_curvature=1.0,
+                         steering_right_action_per_curvature=1.0).positive_steering_turns_left
+
+
+def test_movement_policy_turns_back_to_the_lane_centre_within_the_drive_limit():
+    """The whole chain: cones, MPC, then control. The car is 0.3 m left of the lane centre."""
+    actions = MovementPolicy(MpcConfig(), ConeFilterConfig(), CONFIG).step(
+        observations(0.3, dt=0.0, first=True, cones=lane_cones(0.3, 0.0)))
+    assert isinstance(actions, CarActions)
+    assert actions.steering_action > CONFIG.steering_centre_action  # right, with positive steering turning right
+    assert 0.0 < actions.drive_action <= CONFIG.max_drive_action
+    assert actions.camera_pan_action == 0.0  # held at zero pan, which the camera's fixed transform assumes
+
+
+def test_movement_policy_publishes_the_lane_state_on_debug1_and_debug2():
+    """debug1 is the lateral error in metres and debug2 the heading error in radians, for Foxglove."""
+    actions = MovementPolicy(MpcConfig(), ConeFilterConfig(), CONFIG).step(
+        observations(0.3, dt=0.0, first=True, cones=lane_cones(0.3, 0.1)))
+    assert actions.debug1 == pytest.approx(0.3) and actions.debug2 == pytest.approx(0.1)
+
+
+def test_movement_policy_stops_without_a_lane():
+    actions = MovementPolicy(MpcConfig(), ConeFilterConfig(), CONFIG).step(observations(0.5, dt=0.0, first=True, cones=[]))
+    assert actions.drive_action == 0.0
+    assert actions.steering_action == CONFIG.steering_centre_action  # the MPC asks to stop, steering straight
+    assert actions.debug1 is None and actions.debug2 is None
+
+
+@pytest.mark.parametrize("curvature", [float("nan"), float("inf"), -float("inf")])
+def test_invalid_curvature_is_rejected_before_clipping(curvature):
+    with pytest.raises(ValueError):
+        CarController(CONFIG).step(observations(0.5), [DriveCommand(0.5, curvature)])
+
+
+@pytest.mark.parametrize("target, measured, dt", [
+    (float("inf"), 0.5, 0.1), (float("nan"), 0.5, 0.1),
+    (0.5, float("nan"), 0.1), (0.5, float("inf"), 0.1), (0.5, -0.1, 0.1),
+    (0.5, 0.5, float("nan")), (0.5, 0.5, float("inf")), (0.5, 0.5, -0.1),
+    (0.1, float("nan"), 0.1),
+])
+def test_invalid_speed_inputs_clear_integral_and_are_rejected(target, measured, dt):
+    controller = SpeedController(CONFIG)
+    controller.step(0.6, 0.5, 0.1)
+    assert controller.integral > 0.0
+    with pytest.raises(ValueError):
+        controller.step(target, measured, dt)
+    assert controller.integral == 0.0

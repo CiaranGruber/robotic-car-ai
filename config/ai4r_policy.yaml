@@ -23,7 +23,10 @@
     # Which observations MUST be present and fresh before/during your policy?
     # Valid names: cone_detections, fiducial_detections, lidar_scan,
     #              lidar_cartesian, wheel_speed,
-    #              imu_orientation, imu_angular_velocity, imu_specific_force.
+    #              imu_orientation, imu_angular_velocity, imu_specific_force,
+    #              rc_drive_and_steer.
+    # rc_drive_and_steer is the operator's RC sticks, published by the vehicle
+    # interface only while both RC channels are GOOD; it never triggers a step.
     # Each IMU field is independent: a new gyro message is not a new heading.
     # Missing/stale REQUIRED data stops the policy in publishing-zero state.
     # Recovery needs another explicit state-3 request. Optional missing/expired
@@ -59,6 +62,13 @@
     # missing (see obstacle_detection below):
     #   policy_update_mode: cone_detection
     #   required_sensors: [cone_detections, wheel_speed, lidar_cartesian]
+    # RC-assisted open-space driving (see open_space below): hold the RC drive
+    # forwards to go. Cones stay optional, because seeing no cone is normal here;
+    # without a fresh cone batch the policy stops the car but keeps running.
+    #   policy_update_mode: timer
+    #   policy_update_rate_hz: 20.0
+    #   required_sensors: [rc_drive_and_steer, wheel_speed]
+    #   action_policy: open_space
 
     # Maximum accepted age of each sensor in seconds (positive finite doubles).
     # Defaults are 0.5 s. Expiry occurs at age >= the value. Smaller values stop
@@ -79,6 +89,8 @@
       imu_orientation: 0.5
       imu_angular_velocity: 0.5
       imu_specific_force: 0.5
+      # RC sticks arrive at about 50 Hz (measured on car 20, 2026-10-06).
+      rc_drive_and_steer: 0.5
 
     # How long can required cone data contain NO cones? Seconds, positive finite
     # double, default 1.0. A valid empty frame refreshes stream freshness above,
@@ -129,6 +141,15 @@
     # Explain its units/range here. A YAML entry alone does not declare a ROS
     # parameter. Use 0.2/0.0 for doubles; integer 0 has a different ROS type.
 
+    # Which policy chooses where to drive (MovementPolicy in
+    # policy/policy_runner.py, which checks it): a string,
+    #   mpc:        follow the lane between the yellow and blue cone rows.
+    #   open_space: drive into the open space between the cones, of any colour,
+    #               ONLY while the operator holds the RC drive forwards. Releasing
+    #               it stops the car; RC steering picks the preferred side. Use the
+    #               open-space exercise settings above.
+    action_policy: mpc
+
     # Logging settings (policy/data_logging/data_logging.py).
     logging:
       # When true, record CarObservations and CarActions each policy step as JSON
@@ -154,33 +175,149 @@
     # tuning in the Task A4 log-book.
     mpc:
       # Speed to drive at, m/s, positive double. The prediction assumes it.
-      # Lane-following test run: 0.4 on car 9 (car 20 PI was tuned at 0.5;
-      # feedback works from 0.4 m/s up, so do not go lower).
-      target_speed_m_per_s: 0.4
+      # Default 0.5: Car Control's speed controller was checked at 0.5 on car
+      # 20 and may not start the car below 0.4.
+      target_speed_m_per_s: 0.5
       # Number of predicted steps: INTEGER >= 1. More steps cost more calculation
       # time (Task A6). Keep target_speed_m_per_s * step_s * horizon_steps within
-      # the camera range (shared default 4 m); the default predicts 1.2 m ahead.
+      # the camera range (measured about 2.5 m); the default predicts 0.6 m ahead.
       horizon_steps: 12
       # Duration of one predicted step, seconds, positive double.
       step_s: 0.1
-      # Largest curvature (1 / turning radius) in either direction, 1/m, positive
-      # double. Default tan(45 deg) / 0.335 m approximate wheelbase, likely larger
-      # than the real car; replace it with Car Control's measured value.
-      # Lane-following test run: 0.5, about car 20's left limit (0.48 1/m, a
-      # 2.1 m radius; right reaches 0.92), so the prediction matches the car.
-      max_curvature_per_m: 0.5
+      # Largest curvature (1 / turning radius) to the left, and to the right
+      # unless max_right_curvature_per_m is set, 1/m, positive double. Default
+      # 0.48: car 20's measured left limit (2.1 m radius). Re-measure for
+      # another car.
+      max_curvature_per_m: 0.48
+      # Largest curvature to the right, 1/m, double >= 0.0; 0.0 uses
+      # max_curvature_per_m. Default 0.92: car 20's measured right limit, which
+      # lets the MPC plan the 1.25-1.5 m radius right curves car 20 can drive.
+      max_right_curvature_per_m: 0.92
       # Cost weights, finite doubles; only their ratios matter.
       # Distance from the lane centre, per m^2 at each predicted step, >= 0.
       lateral_error_weight: 10.0
       # Heading error relative to the lane, per rad^2 at each predicted step, >= 0.
-      heading_error_weight: 5.0
+      # Default 1.0: with car 20's limits it kept every simulated curve; 3.0 and
+      # 5.0 (the car 20 test run) lost curves (docs/mpc-lab-calibration.md).
+      heading_error_weight: 1.0
       # Curvature beyond the lane's own curvature, per (1/m)^2, > 0.
       curvature_weight: 0.1
       # Curvature change between steps, per (1/m)^2, >= 0. Larger is smoother.
-      curvature_change_weight: 1.0
-      # Lane width, metres, positive double (shared default 1.0). Used to find the
-      # centre when only one cone row is visible.
-      lane_width_m: 1.0
+      # Default 2.0: about a quarter to a third less steering activity than 1.0
+      # with the same lane keeping on simulated curves and straights.
+      curvature_change_weight: 2.0
+      # Lane width, metres, positive double. Default 0.8, the lab tracks' measured
+      # 0.73-0.85 m. Used to find the centre when only one cone row is visible.
+      lane_width_m: 0.8
+      # Where in the lane to drive, metres from the centre line, + left, finite
+      # double. Default 0.0, the centre. Towards the hook turn: the car keeps to
+      # one side, at least edge_clearance_m from each edge.
+      lane_offset_m: 0.0
+      # Smallest distance from the followed line to either lane edge, metres,
+      # positive double. Default 0.30: half the car, a cone and room for
+      # tracking error, so 0.1 m of offset in a 0.8 m lane.
+      edge_clearance_m: 0.30
+      # Path curvature at which the offset has faded to nothing, 1/m, positive
+      # double; it shrinks in proportion below that. Default 0.3 (3.3 m radius).
+      offset_fade_curvature_per_m: 0.3
+      # How far left of the car's forwards direction the camera points, degrees,
+      # finite double. The cones are rotated back by this much before the lane is
+      # fitted. Default 0.0. The recordings showed 6-10 degrees, but with the
+      # camera pan never commanded; the policy now holds it at zero. Measure it
+      # with a cone 2 m straight ahead before setting it.
+      camera_yaw_offset_deg: 0.0
+      # LANE LOSS: what happens when no lane can be found (no cone row can be
+      # fitted, or both rows are on one side of the car). Before the first
+      # usable lane of a run, the car waits stopped. After it, the car follows
+      # the last plan at reduced speed for up to lane_loss_timeout_s, then
+      # STOPS for the rest of the run, even if cones reappear. To drive again,
+      # request zero state, then state 3 (a repeated state-3 request is ignored).
+      # Seconds, finite double >= 0; 0.0 stops at once. Cones arrive at about
+      # 10 Hz (measured 2026-10-06), so 0.5 tolerates about 4 missed batches.
+      # Starting value for Task A7; keep it short, the plan only covers the horizon.
+      # Reaching the cached plan's distance limit also latches a stop. A failed
+      # MPC solve immediately requests zero and needs an explicit new run.
+      lane_loss_timeout_s: 0.5
+      # Fraction of target_speed_m_per_s while the lane is lost, double in
+      # [0.0, 1.0].
+      lane_loss_speed_fraction: 0.5
+      # LANE END (Task A7): if the lane is lost while the farthest cone last seen
+      # is at most lane_end_distance_m ahead, infer that the rows ended there.
+      # Occlusion can look identical; this does not confirm the final pair.
+      # The camera loses the last pair before reaching it. The car keeps its
+      # speed and requests the stop so that it rolls to a stop
+      # lane_end_stop_past_m past that cone (Stage 1 stop zone: 0.0 to 0.5 m).
+      # Otherwise the loss is unexpected and the timeout above applies.
+      # Metres, finite double >= 0. Keep it below how far the camera reliably
+      # sees cones (Task A1), so a loss mid-lane is still unexpected.
+      lane_end_distance_m: 1.5
+      # Metres past the farthest cone seen to stop at, finite double >= 0.
+      lane_end_stop_past_m: 0.25
+      # How far the car rolls after a stop request, in metres per m/s of speed
+      # (seconds), finite double >= 0. The control only coasts (zero drive, no
+      # braking). 2.1 for car 22: it coasted with a time constant of about 2 s
+      # on 2026-10-12, and 2.1 stops 0.13-0.30 m past the last cone in the
+      # car 22 models (tests/policy/car_models.py). MEASURE IT: drive at a
+      # known speed, request a stop, divide the roll-out by the speed.
+      stop_distance_per_speed_s: 2.1
+      # Seconds after requesting state 3 before the car STOPS for the rest of
+      # the run, finite double >= 0; 0.0 drives until the lane ends. 8.0 for the
+      # 5-10 s demo runs: about 4 m at 0.5 m/s, so lay out a cone lane at least
+      # that long, or the car stops at its end instead.
+      run_duration_s: 8.0
+
+    # OPEN-SPACE SETTINGS, used when action_policy is open_space (OpenSpaceConfig
+    # in policy/action_policy/open_space.py, which checks them and explains the
+    # method; invalid values stop the node from starting). UNMEASURED starting
+    # guesses: check them with the wheels off the ground before driving. debug1
+    # shows the chosen heading in degrees (positive left) and debug2 the status:
+    # 0 waiting for RC drive, 1 no fresh cones, 2 no open heading (stopped),
+    # 3 driving. Only cone_filter's space, confidence and duplicate settings apply.
+    open_space:
+      # Speed while the RC drive is held forwards, m/s, positive double.
+      speed_m_per_s: 0.5
+      # Smallest normalized RC drive that lets the car drive, double in (0, 1].
+      # Below it the car stops. Drive held below the vehicle's RC stop threshold
+      # (-0.2 by default) also disables the vehicle, independently of the policy.
+      rc_drive_threshold: 0.25
+      # RC steering smaller than this in size counts as centred, double in [0, 1).
+      rc_steer_deadband: 0.15
+      # Preferred heading at full RC steering, radians, double in
+      # [0, max_heading_rad]. Centred steering prefers straight ahead.
+      max_preferred_heading_rad: 0.5
+      # Largest candidate heading either side of straight ahead, radians, double
+      # in (0, pi/2).
+      max_heading_rad: 0.7
+      # Number of evenly spaced candidate headings: INTEGER from 3 to 181. Odd
+      # includes straight ahead.
+      heading_count: 29
+      # Length of each candidate's corridor along the arc the car would drive,
+      # metres, positive double. Keep it within the distance the camera sees cones.
+      look_ahead_m: 1.5
+      # A heading is open when every cone in its corridor is at least this far
+      # from its arc, metres, positive double: half the car's width,
+      # plus the cone's radius, plus a margin. Smaller squeezes through tighter
+      # gaps. With no open heading the car stops.
+      clearance_m: 0.35
+      # Clearance beyond which more is not better, metres, double >= clearance_m.
+      clearance_cap_m: 1.0
+      # Score lost per radian away from the preferred heading, in metres of
+      # clearance, double >= 0. Keep it above heading_change_weight_m_per_rad.
+      preferred_heading_weight_m_per_rad: 0.5
+      # Score lost per radian away from the previous heading, metres of
+      # clearance, double >= 0. Larger stops flickering between similar gaps.
+      heading_change_weight_m_per_rad: 0.2
+      # Pure pursuit distance along the chosen heading, metres, positive double.
+      # Smaller turns harder.
+      steering_look_ahead_m: 1.0
+      # Seconds a cone is remembered after its last detection, moved with the
+      # measured wheel speed (and IMU yaw rate when available), double >= 0.
+      # The camera loses cones as the car passes them; without memory (0.0) it
+      # cuts back into them. Longer lets motion errors build up.
+      cone_memory_s: 1.0
+      # A remembered cone this close to a new detection, metres, positive double,
+      # is the same cone and is replaced by it.
+      memory_merge_distance_m: 0.25
 
     # CONE OUTLIER FILTER SETTINGS (ConeFilterConfig in
     # policy/cone_filter/cone_filter.py, which checks them; invalid values stop
@@ -256,30 +393,42 @@
     # LOW-LEVEL CONTROL SETTINGS (ControlConfig in policy/control/control.py,
     # which checks them; invalid values stop the node from starting). They turn
     # the policy's DriveCommand (speed m/s, curvature 1/m, + = left) into drive
-    # and steering actions. Values are car 20's calibration from 5 Oct; another
-    # car needs its own (docs/car-calibration.md, policy/control/README.md).
+    # and steering actions. Each car needs its own (docs/control/car-calibration.md,
+    # policy/control/README.md). The speed values below are for CAR 22
+    # (10.43.254.22) and are NOT a calibration: they were chosen in simulation
+    # (2026-10-12) to pass the Stage 1 cases at 0.5 m/s on both car 22 models
+    # fitted to one floor run (tests/policy/car_models.py, car22a and car22b).
+    # The steering values are car 20's calibration from 5 Oct, NOT measured on
+    # car 22. Check both on a stand before driving on the floor.
     # Speed feedback needs wheel_speed: without a fresh wheel speed the drive is
     # zero for targets at or above speed_feedback_min_m_per_s.
     control:
       # Speed map: speed = speed_ff_gain * (drive - speed_ff_offset).
       # Breakaway drive, double in [0, 1). Rises as the motor battery drains.
-      speed_ff_offset: 0.48
-      # Speed map slope, m/s per unit drive, positive double.
-      speed_ff_gain: 9.18
+      # Car 22 fits gave 0.17-0.32 (car 20: 0.48); 0.25 lies between them.
+      speed_ff_offset: 0.25
+      # Speed map slope, m/s per unit drive, positive double. Car 22 fits gave
+      # 7.65-24.7 (car 20: 9.18).
+      speed_ff_gain: 12.0
       # PI gains: drive per m/s of error, and drive per m of accumulated error.
-      # Doubles >= 0; speed_ki: 0.0 gives feedforward + P only.
-      speed_kp: 0.15
-      speed_ki: 0.04
+      # Doubles >= 0; speed_ki: 0.0 gives feedforward + P only. Car 22 uses the
+      # stronger PI of docs/control/car-calibration.md step 2 (car 20: 0.15 and
+      # 0.04), so the feedback corrects the uncertain feedforward. Watch for
+      # speed oscillation: the real wheel speed lags at low speed.
+      speed_kp: 0.2
+      speed_ki: 0.15
       # Largest integral contribution, drive units, double >= 0.
       speed_i_max: 0.2
       # Integrate only while |target - speed| < this, m/s, positive double.
-      speed_i_band: 0.2
+      # Car 22: 0.5 (car 20: 0.2).
+      speed_i_band: 0.5
       # Feedback only for targets >= this, m/s, double >= 0 (low-speed wheel
       # speed lags by seconds). Car 20 may not start below about 0.4 m/s.
       speed_feedback_min_m_per_s: 0.4
       # Drive action upper limit, double in (0, 1]. Car 20 open-loop 0.75
-      # passes 1.5 m/s in about 3 s; lowered to 0.6 for car 9.
-      max_drive_action: 0.6
+      # passes 1.5 m/s in about 3 s. Car 22: 0.45, which the car 22 models
+      # never reach at 0.5 m/s; car 22 drove over 1.2 m/s with 0.42.
+      max_drive_action: 0.45
       # Steering map: steering = centre + slope * curvature, with a separate
       # slope for left (curvature > 0) and right. Measured with the vehicle
       # interface steering trim at -0.18 on car 20; the trim resets to 0.0 when

@@ -13,6 +13,9 @@ other lanes, misclassified colours and other objects still reach the policy. Thi
    cones are not on straight rows, so this step is skipped when check_straight_rows is False; lane detection's curved
    fit then leaves out the cones off their edge instead.
 
+remove_implausible_cones applies only steps 1 and 2, for policies that treat the cones as obstacles rather than lane
+rows.
+
 It keeps no state between policy steps, and its loops are bounded by the batch size and max_fit_cones_per_colour, so
 it is safe to run inside the real-time policy step.
 """
@@ -109,14 +112,30 @@ def filter_cones(cones: ConeBatch | None, config: ConeFilterConfig) -> ConeBatch
     :return: The kept cones in their received order, with the batch's sensor age and latency, or None when cones is
         None. An empty batch means no cone was plausible; it is still fresh data.
     """
+    cones = remove_implausible_cones(cones, config)
     if cones is None:
         return None
-    kept = _merge_duplicates([cone for cone in cones if _is_plausible(cone, config)], config.merge_distance_m)
+    kept = list(cones)
     fit = _fit_parallel_rows(kept, config) if config.check_straight_rows else None
     if fit is not None:
         slope, offsets = fit
         kept = [cone for cone in kept
                 if _distance_from_row(cone, slope, offsets[cone.colour]) <= config.row_residual_m]
+    return ConeBatch(kept, cones.sensor_age, cones.acquisition_to_publish_latency_s)
+
+
+def remove_implausible_cones(cones: ConeBatch | None, config: ConeFilterConfig) -> ConeBatch | None:
+    """Removes only the first two kinds of outlier: cones outside the kept space or below the confidence floor,
+    and duplicate detections. Use it when the cones are obstacles rather than lane rows.
+
+    :param cones: The cone detections for this policy step, or None when none are available.
+    :param config: The cone filter settings. The row settings are not used.
+    :return: The kept cones in their received order, with the batch's sensor age and latency, or None when cones is
+        None.
+    """
+    if cones is None:
+        return None
+    kept = _merge_duplicates([cone for cone in cones if _is_plausible(cone, config)], config.merge_distance_m)
     return ConeBatch(kept, cones.sensor_age, cones.acquisition_to_publish_latency_s)
 
 

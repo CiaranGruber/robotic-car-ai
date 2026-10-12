@@ -23,7 +23,8 @@ TUNING_CASES = (
     Stage1Case("T4", "tuning", "Centred, detector noise and one missed cone", 0.0, 0.0, 1.0,
                Disturbances(noise_m=0.03, missed_cones=((ConeColour.YELLOW, 6),)), seed=1),
     Stage1Case("T5", "tuning", "0.15 m right, 10 degrees off to the right", -0.15, -10.0, 1.0),
-    Stage1Case("T6", "tuning", "Centred, 0.2 s detection delay", 0.0, 0.0, 1.0, Disturbances(delay_s=0.2)),
+    Stage1Case("T6", "tuning", "Centred, 0.2 s extra detection delay (0.4 s in all)", 0.0, 0.0, 1.0,
+               Disturbances(delay_s=0.2)),
     # Roads of different sizes
     Stage1Case("T7", "tuning", "Narrow 0.8 m lane, 0.1 m to the left", 0.1, 0.0, 1.0, lane=NARROW_LANE),
     Stage1Case("T8", "tuning", "Wide 1.2 m lane, cones every 0.75 m, 0.15 m to the right", -0.15, 0.0, 1.0,
@@ -34,4 +35,7 @@ TUNING_CASES = (
                Disturbances(extra_objects=((3.0, 0.85, ConeColour.YELLOW),), detector_range_m=3.0)),
     Stage1Case("T11", "tuning", "Wet floor (dynamic car), 20% heavier car, 0.1 m to the left", 0.1, 0.0, 1.0,
                Disturbances(floor="wet", car_mass_kg=3.6)),
+    # Losing the lane mid-lane (R7, Task A7)
+    Stage1Case("T12", "tuning", "Centred, camera covered from 3 m (lane lost mid-lane)", 0.0, 0.0, 1.0,
+               Disturbances(camera_blackout_from_m=3.0)),
 )

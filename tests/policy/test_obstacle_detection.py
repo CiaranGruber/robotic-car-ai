@@ -120,18 +120,15 @@ def test_corridor_follows_the_steering_curvature(curvature_per_m):
     assert detect_obstacles(observe_lidar(on_curve), CONFIG).path_clear
 
 
-@pytest.mark.parametrize("points, debug1", [([], CONFIG.corridor_length_m), (box(AHEAD_M, 0.0), 1.0)],
-                         ids=["clear", "box"])
-def test_movement_policy_reports_obstacles_without_changing_the_drive(points, debug1):
-    without_lidar = movement_policy().step(observe(lane_cones()))
+@pytest.mark.parametrize("points, path_clear", [([], True), (box(AHEAD_M, 0.0), False)], ids=["clear", "box"])
+def test_movement_policy_observes_obstacles_without_changing_the_drive(points, path_clear):
+    without_lidar = movement_policy()
+    expected = without_lidar.step(observe(lane_cones()))
     policy = movement_policy()
     actions = policy.step(dataclasses.replace(observe(lane_cones()), lidar_cartesian=lidar(points)))
-    assert (actions.drive_action, actions.steering_action) == (without_lidar.drive_action,
-                                                               without_lidar.steering_action)
-    assert without_lidar.debug1 is None and without_lidar.debug2 is None
-    # Debug values must be finite, so a clear corridor reads corridor_length_m
-    assert actions.debug1 == pytest.approx(debug1)
-    assert actions.debug2 == min(policy.obstacles.forward_ranges_m)
+    assert (actions.drive_action, actions.steering_action) == (expected.drive_action, expected.steering_action)
+    assert without_lidar.obstacles is None
+    assert policy.obstacles.path_clear == path_clear
 
 
 @pytest.mark.parametrize("points", [[], box(AHEAD_M, 0.0)], ids=["clear", "box"])

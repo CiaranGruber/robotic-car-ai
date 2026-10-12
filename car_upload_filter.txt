@@ -39,3 +39,5 @@
 - tools/record_run.ps1
 - tools/sysid_analyze.py
 - .gitlab/
+- tools/record_run.ps1
+- tools/sysid_analyze.py

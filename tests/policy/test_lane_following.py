@@ -5,10 +5,12 @@ The cone filter, lane detection, MPC and car 20's control run together as in Mov
 Run from the repository root with: python3 -m pytest tests/policy/test_lane_following.py
 """
 import dataclasses
+import math
 
 import pytest
 
 from policy.action_policy.mpc import MpcConfig
+from policy.action_policy.reference import rotate_cones
 from policy.cone_filter.cone_filter import ConeFilterConfig
 from policy.control.control import ControlConfig
 from policy.input_output import CarObservations, ConeBatch, ObservedCarState, PolicyState, SensorAge, WheelSpeed
@@ -23,7 +25,7 @@ CONTROL = ControlConfig()
 def movement_policy():
     """The movement policy with the lane-following test run's settings."""
     return MovementPolicy(MpcConfig(target_speed_m_per_s=0.5, max_curvature_per_m=0.5), ConeFilterConfig(),
-                          LaneDetectionConfig(), CONTROL)
+                          CONTROL, lane_detection_config=LaneDetectionConfig())
 
 
 def observe(cones, wheel_speed=0.5, first=True):
@@ -50,6 +52,16 @@ def test_car_left_of_the_lane_steers_right_and_right_of_it_steers_left(offset_m,
     left = movement_policy().step(observe(lane_cones(offset_m=-offset_m, heading_deg=-heading_deg)))
     assert right.steering_action > CONTROL.steering_centre_action > left.steering_action
     assert right.drive_action > 0.0 and left.drive_action > 0.0
+
+
+def test_camera_yaw_offset_is_corrected_before_the_lane_is_detected():
+    # A camera pointing 8 degrees left sees a centred lane rotated 8 degrees to the right
+    seen = rotate_cones(lane_cones(), math.radians(-8.0))
+    corrected = MovementPolicy(MpcConfig(target_speed_m_per_s=0.5, max_curvature_per_m=0.5, camera_yaw_offset_deg=8.0),
+                               ConeFilterConfig(), CONTROL, lane_detection_config=LaneDetectionConfig())
+    assert corrected.step(observe(seen)).steering_action == pytest.approx(CONTROL.steering_centre_action, abs=1e-6)
+    assert movement_policy().step(observe(seen)).steering_action != pytest.approx(CONTROL.steering_centre_action,
+                                                                                abs=1e-3)
 
 
 @pytest.mark.parametrize("cones", [None, []], ids=["no-data", "no-cones"])

@@ -41,7 +41,7 @@ def test_tuning_cases_cover_roads_of_different_sizes():
 
 @pytest.mark.parametrize("change", [
     {"noise_m": -0.01}, {"noise_m": math.nan}, {"delay_s": 0.15}, {"delay_s": -0.1},
-    {"detector_range_m": 0.0}, {"car_mass_kg": -1.0}, {"floor": "mud"},
+    {"detector_range_m": 0.0}, {"car_mass_kg": -1.0}, {"floor": "mud"}, {"camera_blackout_from_m": -1.0},
 ])
 def test_invalid_disturbances_are_rejected(change):
     with pytest.raises(ValueError):
@@ -116,6 +116,13 @@ def test_extra_objects_are_detected_only_inside_the_camera_view():
     assert result == pytest.approx([(2.0, 0.8, ConeColour.YELLOW)])
 
 
+def test_camera_blackout_empties_every_batch_from_its_distance():
+    case = s1.Stage1Case("d", "tuning", "", disturbances=s1.Disturbances(camera_blackout_from_m=3.0))
+    batch = detector_batch([(1.0, 0.5, ConeColour.YELLOW)])
+    assert len(s1.disturbed_detections(batch, (2.9, 0.0, 0.0), case)) == 1
+    assert s1.disturbed_detections(batch, (3.0, 0.0, 0.0), case) == []
+
+
 def test_floor_and_mass_disturbances_reach_the_car_model():
     pytest.importorskip("dreamgym")
     case = s1.Stage1Case("d", "tuning", "", disturbances=s1.Disturbances(floor="wet", car_mass_kg=3.6))
@@ -139,10 +146,11 @@ class RecordingPolicy:
 def test_detection_delay_holds_back_batches_and_reports_their_age():
     pytest.importorskip("dreamgym")
     policy = RecordingPolicy()
-    case = s1.Stage1Case("delay", "tuning", "", disturbances=s1.Disturbances(delay_s=0.2))
+    case = s1.Stage1Case("delay", "tuning", "", disturbances=s1.Disturbances(delay_s=0.1))
     s1.run_case(case, policy)
-    assert policy.cones[0] is None and policy.cones[1] is None
-    assert policy.cones[2] is not None and policy.cones[2].sensor_age == pytest.approx(0.2)
+    # The nominal 0.2 s plus 0.1 s extra: three 0.1 s policy steps without a batch
+    assert policy.cones[:3] == [None] * 3
+    assert policy.cones[3] is not None and policy.cones[3].sensor_age == pytest.approx(0.3)
 
 
 @pytest.mark.parametrize("curvature, sign", [(0.0, 0.0), (1.0, 1.0), (-1.0, -1.0)])
@@ -174,6 +182,22 @@ def test_metrics_pass_a_centred_run_that_stops_in_the_zone():
     assert metrics["cones_touched"] == 0 and metrics["body_outside_lane_m"] == 0.0
     assert metrics["stop_past_last_cone_m"] == pytest.approx(0.3)
     assert s1.check_thresholds(metrics, s1.Thresholds()) == []
+
+
+@pytest.mark.parametrize("stop_request_s, passes", [(2.5, True), (2.8, False)])
+def test_a_lane_lost_mid_lane_is_scored_on_the_time_to_the_stop_request(stop_request_s, passes):
+    # Camera covered from 2.0 m, reached at 2.0 s; the car stops at 3.0 m, far before the lane end
+    case = s1.Stage1Case("synthetic", "tuning", "", disturbances=s1.Disturbances(camera_blackout_from_m=2.0))
+    x = np.arange(0.0, 3.0 + 1e-9, 0.05)
+    speeds = np.ones_like(x)
+    speeds[-1] = 0.0
+    commands = [(t, DriveCommand(1.0 if t < stop_request_s else 0.0, 0.0)) for t in np.arange(0.0, 3.0, 0.1)]
+    run = s1.Stage1Result(case, x, x, np.zeros_like(x), np.zeros_like(x), speeds, commands=commands,
+                          calc_times_s=[0.001] * 10)
+    metrics = s1.compute_metrics(run, fallback_count=0)
+    assert metrics["lane_lost_to_stop_request_s"] == pytest.approx(stop_request_s - 2.0, abs=0.06)
+    # Not scored on the stop zone, which the car cannot reach
+    assert (s1.check_thresholds(metrics, s1.Thresholds()) == []) == passes
 
 
 def test_metrics_count_touched_cones_and_leaving_the_lane():
@@ -208,8 +232,9 @@ def driving_failures(result):
 
 DYNAMIC_MODEL_XFAIL = pytest.mark.xfail(
     reason="Unexplained: on dream-gym's dynamic tyre model the car holds a steady heading error (3 degrees dry, "
-           "6 degrees wet) without turning, so it ends about 0.15 m off centre. Check the tyre model against the 1:10 car "
-           "(Task A2) before tuning on T11.", strict=False)
+           "6 degrees wet) without turning. Within car 20's curvature limits the MPC keeps it in the lane but ends "
+           "0.18 m off centre. Check the tyre model against the 1:10 car (Task A2) before tuning on T11.",
+    strict=False)
 
 
 @pytest.mark.parametrize("case", [pytest.param(case, marks=DYNAMIC_MODEL_XFAIL) if case.disturbances.floor
@@ -219,12 +244,12 @@ def test_mpc_drives_the_lane_on_tuning_cases(case):
     assert driving_failures(result) == [], s1.format_table([result])
 
 
-@pytest.mark.xfail(reason="Known gap: the MPC stops when the last cones leave the camera view, 0.4 to 0.9 m before "
-                          "the last cone pair. Task A7 decides how to keep going to the stop zone.", strict=False)
 @pytest.mark.parametrize("case", TUNING_CASES, ids=lambda case: case.name)
 def test_mpc_stops_in_the_stop_zone_on_tuning_cases(case):
     result = mpc_result(case)
-    assert result.passed, s1.format_table([result])
+    stop_failures = [failure for failure in result.failures
+                     if "stop_past_last_cone_m" in failure or "stopped" in failure or "lane_loss_to_stop_s" in failure]
+    assert stop_failures == [], s1.format_table([result])
 
 
 @pytest.mark.unseen

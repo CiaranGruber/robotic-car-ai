@@ -78,6 +78,11 @@ class ControlConfig:
     Car 20's left turn saturates beyond about -0.75 (radius about 2.1 m); right reaches radius about 1.1 m at 1.0.
     """
 
+    @property
+    def positive_steering_turns_left(self) -> bool:
+        """Whether a positive steering action turns the car left, from the sign of the steering map."""
+        return self.steering_left_action_per_curvature > 0.0
+
     def __post_init__(self):
         for name in ("speed_ff_gain", "speed_i_band"):
             value = getattr(self, name)
@@ -109,6 +114,8 @@ def steering_for_curvature(curvature_per_m: float, config: ControlConfig) -> flo
     :param config: The control settings.
     :return: The steering action, limited to +-max_steering_action.
     """
+    if not math.isfinite(curvature_per_m):
+        raise ValueError("Control curvature must be finite")
     slope = (config.steering_left_action_per_curvature if curvature_per_m >= 0.0
              else config.steering_right_action_per_curvature)
     steering = config.steering_centre_action + slope * curvature_per_m
@@ -144,6 +151,11 @@ class SpeedController:
             speed is missing, because then neither the speed nor an overspeed can be checked.
         """
         config = self.config
+        if (not math.isfinite(target_speed_m_per_s) or not math.isfinite(dt) or dt < 0.0
+                or (wheel_speed_m_per_s is not None
+                    and (not math.isfinite(wheel_speed_m_per_s) or wheel_speed_m_per_s < 0.0))):
+            self.reset()
+            raise ValueError("Control requires finite speed inputs and nonnegative wheel speed and dt")
         if not target_speed_m_per_s > 0.0:
             self.reset()
             return 0.0

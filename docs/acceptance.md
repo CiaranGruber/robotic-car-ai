@@ -13,6 +13,89 @@ not actual sensor/vehicle response.
 Keep revision, command, result and limitations here; retain detailed logs in
 CI artifacts or merge requests rather than a tracked evidence directory.
 
+## PR target conflict resolution, 2026-10-10
+
+Merged `dev` at `238fe38` into the combined MPC/prototype branch based on
+`3b950e6`. Kept the Stage 1 documentation and dev's updated figures, logging,
+scenario tools and replacement car-management script. Combined logging and RC
+observations with serialisable RC records and compatibility for recordings
+made before the RC field existed. Updated evaluation imports for the new test
+package layout; the MPC and open-space behavior remains selected as before.
+
+With the declared dependencies and bundled DREAMGym 0.2.2 installed in the local
+Windows Python 3.12.14 environment, the policy suite passed 207 tests, with
+12 existing expected failures (lane-end stopping and dynamic tyre-model cases)
+and three intentionally withheld unseen cases. Command:
+`.venv/Scripts/python.exe -B -m pytest tests/policy/ -q -rs -p no:cacheprovider
+--basetemp=build/pytest-dev-merge-2`.
+The ROS fast command again could not start through Windows Bash
+(`Bash/E_ACCESSDENIED`); the pinned interfaces checkout is absent. No physical
+acceptance or live configuration changes are claimed. Recorded human review
+and the installed ROS gate remain outstanding before PR merge.
+
+## MPC and RC/open-space integration, 2026-10-10
+
+Combined MPC branch `f7052b2` with prototype branch `7e30078`. The conflict
+resolution retains measured-speed prediction, solver-failure latching and
+distance-bounded lane-loss fallback alongside the prototype's run-duration
+stop and RC/open-space selection. Travelled distance is accumulated once.
+Endpoint inference remains an offline experiment, not a ROS-selected policy.
+
+On Windows with Python 3.12.14, `.venv/Scripts/python.exe -B -m pytest
+tests/policy/ -q -p no:cacheprovider` passed all 139 tests. This includes
+timed-stop/restart and invalid-duration regressions plus the existing MPC,
+endpoint, filtering, control and open-space tests. The saturation test now
+sets its effort limit explicitly; the control default is float `1.0` so ROS
+declares the same parameter type as the shipped YAML's `0.2` override.
+
+The CONTRIBUTING fast command was attempted through Windows Bash but could
+not start (`Bash/E_ACCESSDENIED`). The pinned interfaces checkout is also
+absent. These portable tests include import stubs and do not establish ROS
+integration, physical stopping or frame accuracy. The installed ROS gate
+and recorded human diff review remain required before PR merge. No robot
+configuration or hardware was changed.
+
+## MPC kinematic screening, 2026-10-06
+
+Final-pair endpoint prototype, also uncommitted: the owner chose the final cone
+pair as finish cue. The explicitly selected offline EndpointMpcPolicy completed
+20/20 finish-visible cases in a 70-run baseline/prototype experiment. Hidden
+final cones and persistent occlusion each caused 5/5 false early endpoint
+declarations; these are retained failures, not accepted behavior. Missing-stream
+cases latched zero. 96 policy tests pass; the ROS fast gate remains blocked by
+the absent pinned interfaces checkout. Results, source hashes and settings are
+in `build/mpc-endpoint-evaluation/`, explained in the
+[iteration report](mpc-simulation-evaluation.md). The endpoint extension is not
+selected by MovementPolicy or the ROS node. No hardware acceptance is claimed.
+
+Subsequent uncommitted algorithm iteration on `codex/mpc-simulation-evaluation`:
+MPC uses available wheel speed for prediction, solver failure latches zero until
+an explicit new run, and lane-loss fallback stops at cached-plan exhaustion.
+The [iteration report](mpc-simulation-evaluation.md) records 30 speed-sensitivity
+runs with zero solver failures and 1.2–3.5% lower spatial lateral RMS using
+measured speed. Completion still fails; no physical or dynamic-model acceptance
+is claimed. `.venv/bin/python -m pytest tests/policy -q` passes 83 tests. The fast
+gate was reattempted and is still blocked by the absent pinned interfaces
+checkout. Source hashes, metrics and plots are in local
+`build/mpc-speed-evaluation/`. Human diff review remains required before merge.
+
+Initial screening evidence (before those runtime changes):
+
+On the local macOS host, starting from `0e48627`, an offline evaluator compared
+three unchanged-runtime MPC configurations in 60 tuning runs and ran 10
+validation cases of the lowest-error Pareto candidate. All stopped before the
+6 m finish; none passed the provisional completion gate. Solver fallbacks were
+zero. The [evaluation report](mpc-simulation-evaluation.md) records assumptions,
+metrics, reproduction and limitations. Local `build/mpc-evaluation/summary.json`
+records exact source hashes and dependency versions.
+
+`.venv/bin/python -m pytest tests/policy -q` passed 66 tests. The CONTRIBUTING
+fast command was attempted but could not run: the pinned interfaces checkout
+at `.verification/dependencies/dream_interfaces` is absent. This is ideal
+speed/curvature kinematic screening, not a DREAMGym dynamics run, ROS gate,
+car-computer timing qualification, or physical vehicle acceptance. Runtime
+policy and car parameters were not changed.
+
 ## Student-facing review, 2026-09-28
 
 The owner reviewed `scripts/policy_node.py`, `config/ai4r_policy.yaml` and
@@ -292,3 +375,36 @@ camera TF is needed before physical pan motion. GUI workflow remains a separate
 follow-up. Release publication requires promotion, final-tag CI, immutable
 assets and recorded human review; their completion is recorded in GitLab MRs
 and the release record.
+
+### MPC and CarController integration review, 2026-10-12
+
+PR #16 was integrated with `dev` at `2fb92f0`, preserving the calibrated MPC
+settings, asymmetric curvature limits, camera-yaw correction and lane offsets
+from #15, alongside CarController, lane-end inference and lane-state debug
+outputs. The Stage 1 simulator retains both the calibrated camera/car profiles
+and the optional measured CarController response models. Non-finite control
+inputs are now rejected before clipping, so they cannot become full drive or
+steering actions; speed-input rejection also clears the integral.
+
+On macOS/Python 3.12 with dreamgym 0.2.2, the merged policy suite passed
+310 tests, with 3 optional RL tests skipped and 1 existing dynamic wet-floor
+case expected to fail. The stop-zone test checks stopping separately from the
+lane-tracking test; the latter retains that known failure. The yaw-correction
+regression disables lane-end inference to isolate tracking from the new stop
+behavior. Historical tuning tables are not evidence for the merged defaults.
+
+The Stage 1 CLI ran T1–T12 with `--speed 0.5`, the shipped car 22 control
+settings (`speed_ff_offset=0.25`, `speed_ff_gain=12.0`, `speed_kp=0.2`,
+`speed_ki=0.15`, `speed_i_band=0.5`, `max_drive_action=0.45`) and
+`--mpc stop_distance_per_speed_s=2.1`, with the new MPC defaults and no run-time
+limit. Car22a passed 12/12; car22b passed 11/12. Car22b T11 still failed:
+6 cone contacts, 0.394 m outside the lane, 0.461 m endpoint lateral error and
+stopping 1.28 m before the last cone. No tuning or threshold relaxation was
+applied to hide this failure. These models reuse car 20's steering map;
+car 22 steering calibration remains unresolved.
+
+The required `AI4R_INTERFACES_SOURCE="$PWD/.verification/dependencies/dream_interfaces"
+bash tools/verify_fast.sh` could not run because that pinned checkout is absent.
+No ROS build or physical driving was verified. Lane-end inference can mistake
+occlusion for a final pair; it is not a confirmed endpoint detector. Human diff
+review remains required before merge.
