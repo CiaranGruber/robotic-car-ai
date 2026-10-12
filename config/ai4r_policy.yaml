@@ -500,11 +500,17 @@
       # lane is detected; there keep it well below half the lane width (0.4 m
       # in the lab's 0.8 m lanes), or the cones beside the lane count.
       corridor_half_width_m: 0.20
-      # How far ahead of the car's front obstacles are searched for, metres,
-      # positive double. It must hold the MPC's obstacle stopping distance
-      # (mpc.obstacle_stop_margin_m). Longer sees obstacles sooner, but a
-      # heading error brings cones into the straight corridor.
+      # Length of the straight corridor ahead of the car's front (used without
+      # a lane), metres, positive double. It must hold the MPC's obstacle
+      # stopping distance (mpc.obstacle_stop_margin_m). Longer sees obstacles
+      # sooner, but a heading error brings cones into the straight corridor.
       corridor_length_m: 1.5
+      # How far along the lane, ahead of the car's front, obstacles in the lane
+      # are searched for, metres, positive double; about as far as the camera
+      # sees the lane. It must also hold the stopping distance. Driving around
+      # an obstacle (avoidance below) needs it seen early: at 0.5 m/s the car
+      # needs about 1.3 m to stop and about 1 m to move over.
+      lane_length_m: 2.5
       # Fewest lidar returns that make an obstacle (in the corridor, or in one
       # object in the lane), INTEGER >= 1, so stray returns do not count.
       min_points: 3
@@ -516,3 +522,35 @@
       # Neighbouring returns (in scan order) closer than this belong to one
       # object in the lane, metres, positive double.
       cluster_gap_m: 0.15
+
+    # DRIVING AROUND OBSTACLES IN THE LANE (AvoidanceConfig in
+    # policy/action_policy/avoidance.py, which checks them; invalid values stop
+    # the node from starting). When an obstacle in the lane is too close to the
+    # line the MPC follows, the line moves to the nearest place in the lane that
+    # keeps the car's sides obstacle_clearance_m from every obstacle ahead and
+    # cone_clearance_m from the cones, and stays there until the car's rear has
+    # passed the obstacle by pass_distance_m (measured with the wheel speed).
+    # Without such a place, or if the car cannot move clear before the
+    # obstacle is within the stopping distance, the MPC stops as before
+    # (mpc.obstacle_stop_*). In a 0.8 m lane with these values the line can
+    # move at most 0.4 - 0.05 - 0.10 - 0.125 = 0.125 m from the centre.
+    avoidance:
+      # true or false; false only stops for obstacles.
+      enabled: true
+      # The car's width, and the distance from base_link's origin back to its
+      # rear (with obstacle_detection.car_front_m, its length), metres. The
+      # notebook car's width and a guess for the rear: MEASURE car 9.
+      car_width_m: 0.25
+      car_rear_m: 0.30
+      # Radius of a cone at its base, metres; the lane edges pass through the
+      # cones' centres.
+      cone_radius_m: 0.05
+      # Smallest gaps while passing, metres, doubles >= 0: car side to cone,
+      # and car side to obstacle. Half the car's width plus
+      # obstacle_clearance_m must be at least
+      # obstacle_detection.corridor_half_width_m.
+      cone_clearance_m: 0.10
+      obstacle_clearance_m: 0.10
+      # How far the car's rear drives past the obstacle before returning to
+      # the lane centre, metres, double >= 0.
+      pass_distance_m: 0.30

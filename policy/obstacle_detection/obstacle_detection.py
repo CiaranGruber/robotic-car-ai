@@ -68,11 +68,16 @@ class ObstacleDetectionConfig:
     for the lab's 0.8 m lanes), or the cones beside the lane count as obstacles.
     """
     corridor_length_m: float = 1.5
-    """Length in metres ahead of the car's front that is searched for obstacles, along the corridor or along the lane.
-    Must be positive.
+    """Length in metres of the straight corridor ahead of the car's front. Must be positive.
 
     Longer sees obstacles sooner, but the path is less certain farther ahead, and a heading error brings the cones
     into a long corridor. A policy that stops for obstacles needs its stopping distance to fit within it.
+    """
+    lane_length_m: float = 2.5
+    """Length in metres along the lane, ahead of the car's front, searched for obstacles in the lane. Must be positive.
+
+    The cones on the edges keep the lane's own cones out, so it can be longer than the corridor: about as far as the
+    camera sees the lane. Driving around an obstacle needs it seen early, before it is within the stopping distance.
     """
     min_points: int = 3
     """Fewest returns that make an obstacle, in the corridor or in one object in the lane. Must be an integer of at
@@ -106,7 +111,7 @@ class ObstacleDetectionConfig:
             value = getattr(self, name)
             if not (math.isfinite(value) and value >= 0.0):
                 raise ValueError(f"obstacle_detection.{name} must be finite and at least 0, not {value}")
-        for name in ("max_range_m", "corridor_half_width_m", "corridor_length_m", "cluster_gap_m"):
+        for name in ("max_range_m", "corridor_half_width_m", "corridor_length_m", "lane_length_m", "cluster_gap_m"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value > 0.0):
                 raise ValueError(f"obstacle_detection.{name} must be positive and finite, not {value}")
@@ -157,7 +162,7 @@ def detect_lane_obstacles(observations: CarObservations, lane: LaneDetection | N
                           config: ObstacleDetectionConfig) -> list[LaneObstacle] | None:
     """Finds the objects inside the lane ahead of the car, in lane coordinates.
 
-    Only returns ahead of the car's front, at most corridor_length_m along the lane, and more than lane_edge_margin_m
+    Only returns ahead of the car's front, at most lane_length_m along the lane, and more than lane_edge_margin_m
     inside both edges count. Neighbouring returns in scan order, closer than cluster_gap_m, form one object, and an
     object needs at least min_points returns, so stray returns do not count.
 
@@ -177,7 +182,7 @@ def detect_lane_obstacles(observations: CarObservations, lane: LaneDetection | N
         x, y = point.pos.x, point.pos.y
         along = centre_line.project(x, y) - config.car_front_m
         left = centre_line.signed_distance(x, y)
-        if 0.0 < along <= config.corridor_length_m and abs(left) < inside_m:
+        if 0.0 < along <= config.lane_length_m and abs(left) < inside_m:
             returns.append((point.scan_index, x, y, along, left))
     returns.sort()
     groups = []

@@ -33,6 +33,10 @@ class MpcPolicy:
         """Where in the lane to drive, in metres from the centre line, positive to the left. Starts at
         mpc.lane_offset_m; a manoeuvre such as the hook turn may change it between steps. It is kept
         mpc.edge_clearance_m from both lane edges and shrinks on curves (followed_offset_m)."""
+        self.avoidance_offset_m: float | None = None
+        """The line to follow past obstacles in the lane, in metres left of the centre line, or None to follow
+        lane_offset_m. Set before each step (LaneAvoidance), which already keeps it clear of the cones, so it is
+        followed as it is."""
         self.reset()
 
     def reset(self):
@@ -76,14 +80,16 @@ class MpcPolicy:
         """Calculation time of the latest solve in seconds."""
 
     def followed_offset_m(self, lane_width_m: float, path_curvature_per_m: float = 0.0) -> float:
-        """The offset from the lane centre actually followed: lane_offset_m, limited so the followed line stays
-        edge_clearance_m from both edges of a lane this wide, and shrunk in proportion to the path's curvature until
-        it is nothing at offset_fade_curvature_per_m.
+        """The offset from the lane centre actually followed: avoidance_offset_m while passing obstacles, otherwise
+        lane_offset_m, limited so the followed line stays edge_clearance_m from both edges of a lane this wide, and
+        shrunk in proportion to the path's curvature until it is nothing at offset_fade_curvature_per_m.
 
         :param lane_width_m: Width of the lane in metres.
         :param path_curvature_per_m: Curvature of the lane's centre line in 1/m.
         :return: The offset in metres, positive to the left; 0.0 when the lane is too narrow to move over at all.
         """
+        if self.avoidance_offset_m is not None:
+            return self.avoidance_offset_m
         config = self.config
         room = max(0.0, lane_width_m / 2.0 - config.edge_clearance_m)
         fade = max(0.0, 1.0 - abs(path_curvature_per_m) / config.offset_fade_curvature_per_m)

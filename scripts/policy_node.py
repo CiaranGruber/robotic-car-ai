@@ -63,6 +63,7 @@ from dream_interfaces.msg import (ConeDetection, ConeDetections, DriveAndSteer,
                                   FiducialDetections)
 from tf2_ros import Buffer, TransformException, TransformListener
 
+from policy.action_policy.avoidance import AvoidanceConfig
 from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig
 from policy.cone_filter.cone_filter import ConeFilterConfig
@@ -236,21 +237,22 @@ class PolicyNode(Node):
         # floating-point number; 0 is an integer, which is a different ROS type.
 
         # Movement policy settings: see action_policy, mpc, open_space, cone_filter,
-        # control, lane_detection and obstacle_detection in ai4r_policy.yaml.
-        # MovementPolicy (policy/policy_runner.py) checks action_policy. MpcConfig
+        # control, lane_detection, obstacle_detection and avoidance in
+        # ai4r_policy.yaml. MovementPolicy (policy/policy_runner.py) checks
+        # action_policy and how the settings fit together. MpcConfig
         # (policy/action_policy/mpc.py), OpenSpaceConfig
         # (policy/action_policy/open_space.py), ConeFilterConfig
         # (policy/cone_filter/cone_filter.py), ControlConfig
         # (policy/control/control.py), LaneDetectionConfig
-        # (policy/lane_detection/lane_detection.py) and ObstacleDetectionConfig
-        # (policy/obstacle_detection/obstacle_detection.py) hold their defaults
-        # and check them.
+        # (policy/lane_detection/lane_detection.py), ObstacleDetectionConfig
+        # (policy/obstacle_detection/obstacle_detection.py) and AvoidanceConfig
+        # (policy/action_policy/avoidance.py) hold their defaults and check them.
         self.declare_parameter("action_policy", "mpc", ParameterDescriptor(read_only=True))
         settings = {}
         for prefix, config_type in (
                 ("mpc", MpcConfig), ("open_space", OpenSpaceConfig), ("cone_filter", ConeFilterConfig),
                 ("control", ControlConfig), ("lane_detection", LaneDetectionConfig),
-                ("obstacle_detection", ObstacleDetectionConfig)):
+                ("obstacle_detection", ObstacleDetectionConfig), ("avoidance", AvoidanceConfig)):
             defaults = asdict(config_type())
             for name, default in defaults.items():
                 self.declare_parameter(f"{prefix}.{name}", default, ParameterDescriptor(read_only=True))
@@ -259,7 +261,7 @@ class PolicyNode(Node):
         self.movement_policy = MovementPolicy(
             settings["mpc"], settings["cone_filter"], settings["control"], settings["open_space"],
             self.get_parameter("action_policy").value, lane_detection_config=settings["lane_detection"],
-            obstacle_detection_config=settings["obstacle_detection"])
+            obstacle_detection_config=settings["obstacle_detection"], avoidance_config=settings["avoidance"])
         # Every parameter value this node runs with, saved beside each drive data log
         # (<stem>_config.json). Settings are startup-only, so reading them once is enough.
         self.parameter_values = {

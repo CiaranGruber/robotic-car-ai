@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import math
 
+from policy.action_policy.avoidance import AvoidanceConfig, LaneAvoidance
 from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig, OpenSpacePolicy
 from policy.action_policy.policy import MpcPolicy
@@ -29,7 +30,8 @@ class MovementPolicy:
     def __init__(self, mpc_config: MpcConfig, cone_filter_config: ConeFilterConfig, control_config: ControlConfig,
                  open_space_config: OpenSpaceConfig = OpenSpaceConfig(), action_policy: str = "mpc",
                  lane_detection_config: LaneDetectionConfig = LaneDetectionConfig(),
-                 obstacle_detection_config: ObstacleDetectionConfig = ObstacleDetectionConfig()):
+                 obstacle_detection_config: ObstacleDetectionConfig = ObstacleDetectionConfig(),
+                 avoidance_config: AvoidanceConfig = AvoidanceConfig()):
         """
         :param mpc_config: The MPC settings, from the mpc parameters in config/ai4r_policy.yaml.
         :param cone_filter_config: The cone filter settings, from the cone_filter parameters in
@@ -43,21 +45,32 @@ class MovementPolicy:
             config/ai4r_policy.yaml.
         :param obstacle_detection_config: The obstacle detection settings, from the obstacle_detection parameters in
             config/ai4r_policy.yaml. A ValueError is raised when the MPC stops for obstacles and its stopping distance
-            at the target speed is longer than obstacle_detection.corridor_length_m, the distance searched.
+            at the target speed is longer than the distance searched, corridor_length_m or lane_length_m.
+        :param avoidance_config: The settings for driving around obstacles in the lane, from the avoidance
+            parameters in config/ai4r_policy.yaml. A ValueError is raised when the line that passes an obstacle would
+            still count as blocked: half the car's width plus obstacle_clearance_m below corridor_half_width_m.
         """
         if action_policy not in ACTION_POLICIES:
             raise ValueError(f"action_policy must be one of {ACTION_POLICIES}, not {action_policy!r}")
         stopping_m = (mpc_config.stop_distance_per_speed_s * mpc_config.target_speed_m_per_s
                       + mpc_config.obstacle_stop_margin_m)
-        if mpc_config.obstacle_stop_enabled and stopping_m > obstacle_detection_config.corridor_length_m:
+        searched_m = min(obstacle_detection_config.corridor_length_m, obstacle_detection_config.lane_length_m)
+        if mpc_config.obstacle_stop_enabled and stopping_m > searched_m:
             raise ValueError(f"The obstacle stopping distance at the target speed, {stopping_m:.2f} m, is longer than "
-                             f"obstacle_detection.corridor_length_m ({obstacle_detection_config.corridor_length_m} "
-                             f"m), so obstacles would be seen too late to stop")
+                             f"the {searched_m} m searched for obstacles (obstacle_detection.corridor_length_m and "
+                             f"lane_length_m), so obstacles would be seen too late to stop")
+        keep_out_m = avoidance_config.car_width_m / 2.0 + avoidance_config.obstacle_clearance_m
+        if avoidance_config.enabled and keep_out_m < obstacle_detection_config.corridor_half_width_m:
+            raise ValueError(f"Half the car's width plus avoidance.obstacle_clearance_m, {keep_out_m:.2f} m, is below "
+                             f"obstacle_detection.corridor_half_width_m "
+                             f"({obstacle_detection_config.corridor_half_width_m} m), so the car would stop instead "
+                             f"of passing an obstacle")
         self.cone_filter_config = cone_filter_config
         self.action_policy_name = action_policy
         self.lane_detector = LaneDetector(lane_detection_config)
         self.obstacle_detection_config = obstacle_detection_config
         self.action_policy = MpcPolicy(mpc_config)
+        self.avoidance = LaneAvoidance(avoidance_config, obstacle_detection_config.car_front_m)
         self.open_space_policy = OpenSpacePolicy(open_space_config, control_config.positive_steering_turns_left)
         self.car_controller = CarController(control_config)
         self.obstacles: ObstacleDetection | None = None
@@ -91,6 +104,9 @@ class MovementPolicy:
         # Find the obstacles: inside the lane when there is one, otherwise in a straight corridor ahead of the car
         self.obstacles = detect_obstacles(observations, self.obstacle_detection_config)
         self.lane_obstacles = detect_lane_obstacles(observations, lanes, self.obstacle_detection_config)
+        # Move over in the lane to pass the obstacles when there is room; the obstacle check then follows that line
+        self.action_policy.avoidance_offset_m = self.avoidance.step(
+            observations, lanes, self.lane_obstacles, self.action_policy.lane_offset_m)
         self.obstacle_distance_m = self._obstacle_distance_m(lanes)
         # Determine the policy to take based upon the car location; an obstacle in the car's way stops it
         instructions = self.action_policy.run_policy(observations, lanes, self.obstacle_distance_m)
@@ -113,8 +129,9 @@ class MovementPolicy:
         """Finds how far ahead the nearest obstacle in the car's way is, from this step's obstacles.
 
         With a lane, the car's way is the band across the lane from where the car is to the line the MPC follows
-        (the lane centre moved by lane_offset_m), widened by corridor_half_width_m on both sides. Covering both lets
-        the check include the car's drift back to the line. Without a lane, it is the straight corridor ahead.
+        (the lane centre moved by lane_offset_m, or the avoidance line), widened by corridor_half_width_m on both
+        sides. Covering both includes the car's move over to the line, so an obstacle the car cannot move clear of
+        before it is within the stopping distance still stops it. Without a lane, it is the straight corridor ahead.
 
         :param lanes: The lane detected at this step, or None.
         :return: Distance in metres from the car's front to the nearest obstacle in the car's way, math.inf when its
