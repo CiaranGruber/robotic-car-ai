@@ -185,10 +185,12 @@
       # Metres past the farthest cone seen to stop at, finite double >= 0.
       lane_end_stop_past_m: 0.25
       # How far the car rolls after a stop request, in metres per m/s of speed
-      # (seconds), finite double >= 0. 0.6 matches the simulation. MEASURE IT:
-      # drive at a known speed, request a stop, divide the roll-out by the
-      # speed. The control only coasts (zero drive, no braking).
-      stop_distance_per_speed_s: 0.6
+      # (seconds), finite double >= 0. The control only coasts (zero drive, no
+      # braking). 2.1 for car 22: it coasted with a time constant of about 2 s
+      # on 2026-10-12, and 2.1 stops 0.13-0.30 m past the last cone in the
+      # car 22 models (tests/policy/car_models.py). MEASURE IT: drive at a
+      # known speed, request a stop, divide the roll-out by the speed.
+      stop_distance_per_speed_s: 2.1
       # Seconds after requesting state 3 before the car STOPS for the rest of
       # the run, finite double >= 0; 0.0 drives until the lane ends. 8.0 for the
       # 5-10 s demo runs: about 4 m at 0.5 m/s, so lay out a cone lane at least
@@ -233,30 +235,42 @@
     # LOW-LEVEL CONTROL SETTINGS (ControlConfig in policy/control/control.py,
     # which checks them; invalid values stop the node from starting). They turn
     # the policy's DriveCommand (speed m/s, curvature 1/m, + = left) into drive
-    # and steering actions. Values are car 20's calibration from 5 Oct; another
-    # car needs its own (docs/control/car-calibration.md, policy/control/README.md).
+    # and steering actions. Each car needs its own (docs/control/car-calibration.md,
+    # policy/control/README.md). The speed values below are for CAR 22
+    # (10.43.254.22) and are NOT a calibration: they were chosen in simulation
+    # (2026-10-12) to pass the Stage 1 cases at 0.5 m/s on both car 22 models
+    # fitted to one floor run (tests/policy/car_models.py, car22a and car22b).
+    # The steering values are car 20's calibration from 5 Oct, NOT measured on
+    # car 22. Check both on a stand before driving on the floor.
     # Speed feedback needs wheel_speed: without a fresh wheel speed the drive is
     # zero for targets at or above speed_feedback_min_m_per_s.
     control:
       # Speed map: speed = speed_ff_gain * (drive - speed_ff_offset).
       # Breakaway drive, double in [0, 1). Rises as the motor battery drains.
-      speed_ff_offset: 0.48
-      # Speed map slope, m/s per unit drive, positive double.
-      speed_ff_gain: 9.18
+      # Car 22 fits gave 0.17-0.32 (car 20: 0.48); 0.25 lies between them.
+      speed_ff_offset: 0.25
+      # Speed map slope, m/s per unit drive, positive double. Car 22 fits gave
+      # 7.65-24.7 (car 20: 9.18).
+      speed_ff_gain: 12.0
       # PI gains: drive per m/s of error, and drive per m of accumulated error.
-      # Doubles >= 0; speed_ki: 0.0 gives feedforward + P only.
-      speed_kp: 0.15
-      speed_ki: 0.04
+      # Doubles >= 0; speed_ki: 0.0 gives feedforward + P only. Car 22 uses the
+      # stronger PI of docs/control/car-calibration.md step 2 (car 20: 0.15 and
+      # 0.04), so the feedback corrects the uncertain feedforward. Watch for
+      # speed oscillation: the real wheel speed lags at low speed.
+      speed_kp: 0.2
+      speed_ki: 0.15
       # Largest integral contribution, drive units, double >= 0.
       speed_i_max: 0.2
       # Integrate only while |target - speed| < this, m/s, positive double.
-      speed_i_band: 0.2
+      # Car 22: 0.5 (car 20: 0.2).
+      speed_i_band: 0.5
       # Feedback only for targets >= this, m/s, double >= 0 (low-speed wheel
       # speed lags by seconds). Car 20 may not start below about 0.4 m/s.
       speed_feedback_min_m_per_s: 0.4
       # Drive action upper limit, double in (0, 1]. Car 20 open-loop 0.75
-      # passes 1.5 m/s in about 3 s.
-      max_drive_action: 0.75
+      # passes 1.5 m/s in about 3 s. Car 22: 0.45, which the car 22 models
+      # never reach at 0.5 m/s; car 22 drove over 1.2 m/s with 0.42.
+      max_drive_action: 0.45
       # Steering map: steering = centre + slope * curvature, with a separate
       # slope for left (curvature > 0) and right. Measured with the vehicle
       # interface steering trim at -0.18 on car 20; the trim resets to 0.0 when
