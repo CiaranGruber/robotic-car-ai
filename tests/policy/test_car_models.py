@@ -58,3 +58,23 @@ def test_every_model_runs_a_case_through_car_controller():
     for car in CARS.values():
         result = scenarios.run_case(case, scenarios.shipped_mpc_policy(case, car), car=car)
         assert result.x_m[-1] > case.lane.length_m  # it drove past the lane end
+
+
+def shipped_settings():
+    """The control and MPC settings in config/ai4r_policy.yaml."""
+    yaml = pytest.importorskip("yaml")
+    path = Path(__file__).resolve().parents[2] / "config" / "ai4r_policy.yaml"
+    params = next(iter(yaml.safe_load(path.read_text()).values()))["ros__parameters"]
+    return ControlConfig(**params["control"]), params["mpc"]
+
+
+@pytest.mark.parametrize("car", CARS.values(), ids=list(CARS))
+def test_shipped_control_settings_drive_every_car_model(car):
+    """The yaml's control settings are deployed to every car, so they must hold the requested speed and stop at the
+    lane end on each car model, not only on the car they were tuned on."""
+    control, mpc = shipped_settings()
+    case = dataclasses.replace(scenarios.Stage1Case("shipped", "tuning", "shipped settings"),
+                               speed_m_per_s=mpc["target_speed_m_per_s"])
+    policy = scenarios.shipped_mpc_policy(case, car, stop_distance_per_speed_s=mpc["stop_distance_per_speed_s"])
+    result = scenarios.run_case(case, policy, car=car, control_config=control)
+    assert result.passed, scenarios.format_table([result])

@@ -352,10 +352,11 @@
     # which checks them; invalid values stop the node from starting). They turn
     # the policy's DriveCommand (speed m/s, curvature 1/m, + = left) into drive
     # and steering actions. Each car needs its own (docs/control/car-calibration.md,
-    # policy/control/README.md). The speed values below are for CAR 22
-    # (10.43.254.22) and are NOT a calibration: they were chosen in simulation
-    # (2026-10-12) to pass the Stage 1 cases at 0.5 m/s on both car 22 models
-    # fitted to one floor run (tests/policy/car_models.py, car22a and car22b).
+    # policy/control/README.md). The speed values below are NOT a calibration:
+    # they were chosen in simulation (2026-10-12) so that one setting drives
+    # car 20 (Chris's speed map) and car 22 (two fits of one floor run) through
+    # the Stage 1 cases at 0.5 m/s (tests/policy/car_models.py; checked by
+    # tests/policy/test_car_models.py). Replace them with each car's calibration.
     # The steering values are car 20's calibration from 5 Oct, NOT measured on
     # car 22. Check both on a stand before driving on the floor.
     # Speed feedback needs wheel_speed: without a fresh wheel speed the drive is
@@ -363,30 +364,34 @@
     control:
       # Speed map: speed = speed_ff_gain * (drive - speed_ff_offset).
       # Breakaway drive, double in [0, 1). Rises as the motor battery drains.
-      # Car 22 fits gave 0.17-0.32 (car 20: 0.48); 0.25 lies between them.
-      speed_ff_offset: 0.25
+      # Car 20: 0.48 (it starts at about 0.52); car 22 fits gave 0.17-0.32.
+      # 0.30 keeps car 22 from overspeeding; the PI adds what car 20 needs.
+      speed_ff_offset: 0.30
       # Speed map slope, m/s per unit drive, positive double. Car 22 fits gave
       # 7.65-24.7 (car 20: 9.18).
       speed_ff_gain: 12.0
       # PI gains: drive per m/s of error, and drive per m of accumulated error.
-      # Doubles >= 0; speed_ki: 0.0 gives feedforward + P only. Car 22 uses the
-      # stronger PI of docs/control/car-calibration.md step 2 (car 20: 0.15 and
-      # 0.04), so the feedback corrects the uncertain feedforward. Watch for
-      # speed oscillation: the real wheel speed lags at low speed.
-      speed_kp: 0.2
-      speed_ki: 0.15
+      # Doubles >= 0; speed_ki: 0.0 gives feedforward + P only. 0.3 and 0.3,
+      # stronger than car 20's calibrated 0.15 and 0.04, so the feedback
+      # corrects the feedforward on both cars. Watch for speed oscillation:
+      # the real wheel speed lags at low speed.
+      speed_kp: 0.3
+      speed_ki: 0.3
       # Largest integral contribution, drive units, double >= 0.
       speed_i_max: 0.2
       # Integrate only while |target - speed| < this, m/s, positive double.
-      # Car 22: 0.5 (car 20: 0.2).
-      speed_i_band: 0.5
+      # 0.6, above the 0.5 m/s target, so the integral also builds up from
+      # standstill: car 20 needs it to start (car 20's calibration: 0.2).
+      speed_i_band: 0.6
       # Feedback only for targets >= this, m/s, double >= 0 (low-speed wheel
       # speed lags by seconds). Car 20 may not start below about 0.4 m/s.
       speed_feedback_min_m_per_s: 0.4
       # Drive action upper limit, double in (0, 1]. Car 20 open-loop 0.75
-      # passes 1.5 m/s in about 3 s. Car 22: 0.45, which the car 22 models
-      # never reach at 0.5 m/s; car 22 drove over 1.2 m/s with 0.42.
-      max_drive_action: 0.45
+      # passes 1.5 m/s in about 3 s; car 22 drove over 1.2 m/s with 0.42.
+      # 0.55: above car 20's start (about 0.52), and the car models stay below
+      # 0.7 m/s at 0.5 m/s. A drained battery raises car 20's start; if it then
+      # does not move, calibrate it rather than raising this.
+      max_drive_action: 0.55
       # Steering map: steering = centre + slope * curvature, with a separate
       # slope for left (curvature > 0) and right. Measured with the vehicle
       # interface steering trim at -0.18 on car 20; the trim resets to 0.0 when
