@@ -37,7 +37,7 @@ class ControlConfig:
     """Drive effort per m/s of speed error (requested minus measured). Must be at least 0."""
     speed_ki: float = 0.1
     """Drive effort per metre of accumulated speed error. Must be at least 0."""
-    max_drive_effort: float = 0.2
+    max_drive_effort: float = 1.0
     """Largest drive effort ever requested, in (0, 1]. Drive is forwards only."""
 
     def __post_init__(self):
