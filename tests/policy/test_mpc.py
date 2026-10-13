@@ -250,10 +250,10 @@ def test_obstacle_within_the_stopping_distance_stops_for_the_rest_of_the_run():
     # Defaults: (0.6 s * 0.5 m/s) + 0.2 m margin = 0.5 m stopping distance, confirmed over 2 steps
     policy = MpcPolicy(MpcConfig())
     assert obstacle_command(policy, 0.45, first_step=True).speed_m_per_s > 0.0
-    assert obstacle_command(policy, 0.45) == DriveCommand(0.0, 0.0)
+    assert obstacle_command(policy, 0.45) == DriveCommand(0.0, 0.0, brake=True)
     assert policy.stopped_for_obstacle
     # The obstacle going does not restart the car; only a new run does
-    assert obstacle_command(policy, math.inf) == DriveCommand(0.0, 0.0)
+    assert obstacle_command(policy, math.inf) == DriveCommand(0.0, 0.0, brake=True)
     assert obstacle_command(policy, math.inf, first_step=True).speed_m_per_s > 0.0
 
 
@@ -275,7 +275,7 @@ def test_obstacle_beyond_the_stopping_distance_does_not_stop_the_car():
     (None, 1.0, True),  # Faster than the target speed: 2.1 * 1.0 + 0.2 = 2.3 m
 ])
 def test_stopping_distance_grows_with_lidar_age_and_speed(lidar_age_s, wheel_speed, stops):
-    policy = MpcPolicy(MpcConfig(stop_distance_per_speed_s=2.1))
+    policy = MpcPolicy(MpcConfig(obstacle_stop_distance_per_speed_s=2.1))
     obstacle_command(policy, 1.3, True, lidar_age_s, wheel_speed)
     assert (obstacle_command(policy, 1.3, False, lidar_age_s, wheel_speed).speed_m_per_s == 0.0) == stops
 
@@ -295,6 +295,7 @@ def test_invalid_obstacle_distance_is_rejected():
     {"horizon_steps": 0}, {"horizon_steps": 2.0}, {"step_s": 0.0}, {"curvature_weight": 0.0},
     {"lateral_error_weight": -1.0}, {"target_speed_m_per_s": math.nan}, {"max_curvature_per_m": math.inf},
     {"lane_end_distance_m": -0.1}, {"lane_end_stop_past_m": math.nan}, {"stop_distance_per_speed_s": -0.1},
+    {"obstacle_stop_distance_per_speed_s": -0.1}, {"obstacle_stop_distance_per_speed_s": math.inf},
     {"lane_loss_timeout_s": -0.1}, {"lane_loss_timeout_s": math.inf}, {"lane_loss_speed_fraction": 1.5},
     {"run_duration_s": -1.0}, {"run_duration_s": -0.1}, {"run_duration_s": math.inf},
     {"obstacle_stop_enabled": 1}, {"obstacle_stop_margin_m": -0.1}, {"obstacle_stop_margin_m": math.nan},

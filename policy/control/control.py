@@ -8,6 +8,7 @@ A DriveCommand asks for a speed in m/s and a path curvature in 1/m. The car's ac
 so this module converts them:
 - Speed: feedforward from the measured speed map, plus a PI correction on the wheel speed (SpeedController).
 - Curvature: a measured piecewise-linear steering map, with separate left and right slopes (steering_for_curvature).
+- Braking: a stop that asks to brake (DriveCommand.brake) gets reverse effort for a short time (CarController).
 
 The default settings are car 20's measured calibration from 5 Oct (see policy/control/README.md). Other cars need
 their own values; docs/car-calibration.md describes how to measure them.
@@ -77,6 +78,19 @@ class ControlConfig:
 
     Car 20's left turn saturates beyond about -0.75 (radius about 2.1 m); right reaches radius about 1.1 m at 1.0.
     """
+    brake_action: float = 0.0
+    """Reverse effort that brakes for a stop asking to brake (DriveCommand.brake). Must be within [0, 1).
+
+    The drive action is -brake_action while braking. 0.0 only coasts. A Traxxas ESC brakes on reverse effort while
+    the car drives forwards, but after neutral the same effort can drive it backwards, so braking only starts straight
+    from forward drive (see CarController).
+    """
+    brake_max_s: float = 1.0
+    """Longest braking time of one stop in seconds. Must be finite and at least 0.
+
+    Braking also ends when the wheel speed reads zero or is missing, but near standstill the wheel speed lags by
+    seconds, so this usually ends it.
+    """
 
     @property
     def positive_steering_turns_left(self) -> bool:
@@ -88,12 +102,14 @@ class ControlConfig:
             value = getattr(self, name)
             if not (math.isfinite(value) and value > 0.0):
                 raise ValueError(f"control.{name} must be positive and finite, not {value}")
-        for name in ("speed_kp", "speed_ki", "speed_i_max", "speed_feedback_min_m_per_s"):
+        for name in ("speed_kp", "speed_ki", "speed_i_max", "speed_feedback_min_m_per_s", "brake_max_s"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value >= 0.0):
                 raise ValueError(f"control.{name} must be finite and at least 0, not {value}")
-        if not 0.0 <= self.speed_ff_offset < 1.0:
-            raise ValueError(f"control.speed_ff_offset must be within [0, 1), not {self.speed_ff_offset}")
+        for name in ("speed_ff_offset", "brake_action"):
+            value = getattr(self, name)
+            if not 0.0 <= value < 1.0:
+                raise ValueError(f"control.{name} must be within [0, 1), not {value}")
         for name in ("max_drive_action", "max_steering_action"):
             value = getattr(self, name)
             if not 0.0 < value <= 1.0:
@@ -187,6 +203,10 @@ class CarController:
         """
         self.config = config
         self.speed_controller = SpeedController(config)
+        self.previous_drive_action = 0.0
+        """Drive action of the previous step."""
+        self.braking_s: float | None = None
+        """Seconds braked in the current stop: None before braking, math.inf once braking is over."""
 
     def step(self, observations: CarObservations, instructions: list[Instruction]) -> CarActions:
         """Converts the instructions chosen by the policy into the car actions for this step
@@ -199,13 +219,51 @@ class CarController:
         """
         if observations.policy.is_first_policy_step:
             self.speed_controller.reset()
+            self.previous_drive_action = 0.0
         actions = default_actions()
         commands = [instruction for instruction in instructions if isinstance(instruction, DriveCommand)]
         if not commands:
             self.speed_controller.reset()
+            self.braking_s = None
+            self.previous_drive_action = 0.0
             return actions
         command = commands[-1]
-        actions.drive_action = self.speed_controller.step(
-            command.speed_m_per_s, observations.car.wheel_speed, observations.policy.dt)
+        if command.brake and not command.speed_m_per_s > 0.0:
+            actions.drive_action = self._brake(observations)
+        else:
+            self.braking_s = None
+            actions.drive_action = self.speed_controller.step(
+                command.speed_m_per_s, observations.car.wheel_speed, observations.policy.dt)
         actions.steering_action = steering_for_curvature(command.curvature_per_m, self.config)
+        self.previous_drive_action = actions.drive_action
         return actions
+
+    def _brake(self, observations: CarObservations) -> float:
+        """The drive action for a stop that asks to brake.
+
+        A Traxxas ESC brakes on reverse effort while the car drives forwards, but after neutral the same effort can
+        drive it backwards. So braking only starts straight from forward drive while the wheels turn, and once the
+        drive is back at zero it does not brake again in this stop.
+
+        :param observations: The observations at this step.
+        :return: -brake_action while braking, otherwise 0.0. Braking ends when the wheel speed reads zero or is
+            missing, or after brake_max_s.
+        """
+        self.speed_controller.reset()
+        dt = observations.policy.dt
+        wheel_speed = observations.car.wheel_speed
+        if (not math.isfinite(dt) or dt < 0.0
+                or (wheel_speed is not None and (not math.isfinite(wheel_speed) or wheel_speed < 0.0))):
+            self.braking_s = math.inf
+            raise ValueError("Braking requires a finite nonnegative dt and wheel speed")
+        if self.braking_s is None:
+            if not (self.config.brake_action > 0.0 and self.previous_drive_action > 0.0):
+                self.braking_s = math.inf
+                return 0.0
+            self.braking_s = 0.0
+        else:
+            self.braking_s += dt
+        if self.braking_s >= self.config.brake_max_s or not wheel_speed:
+            self.braking_s = math.inf
+            return 0.0
+        return -self.config.brake_action

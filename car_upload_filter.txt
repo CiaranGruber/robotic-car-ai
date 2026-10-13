@@ -16,6 +16,14 @@
 - scripts/*
 + tests/test_policy_node.py
 + tests/test_release_contract.py
+# CMakeLists.txt registers test_mpc.py and test_control.py; the build fails without them.
++ tests/__init__.py
++ tests/policy/
++ tests/policy/__init__.py
++ tests/policy/conftest.py
++ tests/policy/test_mpc.py
++ tests/policy/test_control.py
+- tests/policy/*
 - tests/*
 - scenarios/
 - __pycache__

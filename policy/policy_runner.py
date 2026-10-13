@@ -45,20 +45,28 @@ class MovementPolicy:
             config/ai4r_policy.yaml.
         :param obstacle_detection_config: The obstacle detection settings, from the obstacle_detection parameters in
             config/ai4r_policy.yaml. A ValueError is raised when the MPC stops for obstacles and its stopping distance
-            at the target speed is longer than the distance searched, corridor_length_m or lane_length_m.
+            at the target speed is longer than the distance searched, corridor_length_m or lane_length_m, or when
+            control.brake_action is 0.0 (coasting) but obstacle_stop_distance_per_speed_s is below
+            stop_distance_per_speed_s.
         :param avoidance_config: The settings for driving around obstacles in the lane, from the avoidance
             parameters in config/ai4r_policy.yaml. A ValueError is raised when the line that passes an obstacle would
             still count as blocked: half the car's width plus obstacle_clearance_m below corridor_half_width_m.
         """
         if action_policy not in ACTION_POLICIES:
             raise ValueError(f"action_policy must be one of {ACTION_POLICIES}, not {action_policy!r}")
-        stopping_m = (mpc_config.stop_distance_per_speed_s * mpc_config.target_speed_m_per_s
+        stopping_m = (mpc_config.obstacle_stop_distance_per_speed_s * mpc_config.target_speed_m_per_s
                       + mpc_config.obstacle_stop_margin_m)
         searched_m = min(obstacle_detection_config.corridor_length_m, obstacle_detection_config.lane_length_m)
         if mpc_config.obstacle_stop_enabled and stopping_m > searched_m:
             raise ValueError(f"The obstacle stopping distance at the target speed, {stopping_m:.2f} m, is longer than "
                              f"the {searched_m} m searched for obstacles (obstacle_detection.corridor_length_m and "
                              f"lane_length_m), so obstacles would be seen too late to stop")
+        if (mpc_config.obstacle_stop_enabled and control_config.brake_action == 0.0
+                and mpc_config.obstacle_stop_distance_per_speed_s < mpc_config.stop_distance_per_speed_s):
+            raise ValueError(f"Without control.brake_action the car coasts for an obstacle, so "
+                             f"mpc.obstacle_stop_distance_per_speed_s "
+                             f"({mpc_config.obstacle_stop_distance_per_speed_s}) must be at least "
+                             f"mpc.stop_distance_per_speed_s ({mpc_config.stop_distance_per_speed_s})")
         keep_out_m = avoidance_config.car_width_m / 2.0 + avoidance_config.obstacle_clearance_m
         if avoidance_config.enabled and keep_out_m < obstacle_detection_config.corridor_half_width_m:
             raise ValueError(f"Half the car's width plus avoidance.obstacle_clearance_m, {keep_out_m:.2f} m, is below "

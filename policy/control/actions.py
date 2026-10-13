@@ -29,6 +29,8 @@ class DriveCommand:
 
     Positive turns left, negative turns right and 0.0 drives straight.
     """
+    brake: bool = False
+    """With speed 0.0, whether to brake actively (control.brake_action) instead of coasting. Ignored otherwise."""
 
 
 Instruction = MoveCameraTo | DriveCommand

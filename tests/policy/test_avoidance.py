@@ -134,7 +134,7 @@ def drive_past_box(lane_width_m, right_m, left_m, steps=140, dt=0.1):
 
     :return: The movement policy, and for each step the car's (x, y, heading) and the followed line.
     """
-    config = MpcConfig(stop_distance_per_speed_s=2.1)
+    config = MpcConfig(stop_distance_per_speed_s=2.1, obstacle_stop_distance_per_speed_s=2.1)
     policy = MovementPolicy(config, ConeFilterConfig(), ControlConfig())
     cones = [(x * 0.5, side * lane_width_m / 2.0, colour) for x in range(-2, 24)
              for side, colour in ((1.0, ConeColour.BLUE), (-1.0, ConeColour.YELLOW))]

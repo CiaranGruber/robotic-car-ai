@@ -126,7 +126,7 @@ class MpcPolicy:
         run_duration_s = self.config.run_duration_s
         if (self.stopped_for_lane_loss or self.stopped_for_solver_failure or self.stopped_for_obstacle
                 or 0.0 < run_duration_s <= observations.policy.policy_elapsed_s):
-            return [self._command(0.0, 0.0)]
+            return [self._command(0.0, 0.0, brake=self.stopped_for_obstacle)]
         measured_speed = observations.car.wheel_speed
         if measured_speed is not None and (not math.isfinite(measured_speed) or measured_speed < 0.0):
             raise ValueError("MPC wheel speed must be finite and nonnegative")
@@ -138,11 +138,12 @@ class MpcPolicy:
             if self.farthest_cone_ahead_m is not None:
                 self.farthest_cone_ahead_m -= self._conservative_speed(observations) * observations.policy.dt
         if self._obstacle_within_stopping_distance(observations, obstacle_distance_m):
-            # Coast to a stop before the obstacle, and stay stopped for the rest of the run
+            # Brake to a stop before the obstacle (coasting without control.brake_action), and stay stopped for the
+            # rest of the run
             self.stopped_for_obstacle = True
             _LOGGER.info("Obstacle %.2f m ahead of the car's front: stopping for the rest of the run",
                          obstacle_distance_m)
-            return [self._command(0.0, 0.0)]
+            return [self._command(0.0, 0.0, brake=True)]
         if cones is None or state is None:
             # No lane or a doubtful lane
             return [self._command_without_lane(observations)]
@@ -211,9 +212,10 @@ class MpcPolicy:
                                            obstacle_distance_m: float | None) -> bool:
         """Counts the consecutive steps that see an obstacle in the car's way within the stopping distance.
 
-        The stopping distance is how far the car rolls after a stop request (stop_distance_per_speed_s), plus how far
-        it drove since the lidar scan, plus obstacle_stop_margin_m. It uses the larger of the target speed and the
-        car's speed (_conservative_speed), so a car about to start does not drive towards a near obstacle either.
+        The stopping distance is how far the car travels after a braking stop request
+        (obstacle_stop_distance_per_speed_s), plus how far it drove since the lidar scan, plus obstacle_stop_margin_m.
+        It uses the larger of the target speed and the car's speed (_conservative_speed), so a car about to start does
+        not drive towards a near obstacle either.
 
         :param observations: The observations at this step.
         :param obstacle_distance_m: As in run_policy.
@@ -228,7 +230,7 @@ class MpcPolicy:
         speed = max(config.target_speed_m_per_s, self._conservative_speed(observations))
         lidar = observations.lidar_cartesian
         lidar_age_s = 0.0 if lidar is None else float(lidar.sensor_age)
-        stopping_m = (config.stop_distance_per_speed_s + lidar_age_s) * speed + config.obstacle_stop_margin_m
+        stopping_m = (config.obstacle_stop_distance_per_speed_s + lidar_age_s) * speed + config.obstacle_stop_margin_m
         self.obstacle_steps = self.obstacle_steps + 1 if obstacle_distance_m <= stopping_m else 0
         return self.obstacle_steps >= config.obstacle_confirm_steps
 
@@ -242,13 +244,14 @@ class MpcPolicy:
         wheel_speed = observations.car.wheel_speed
         return max(self.previous_speed_m_per_s, 0.0 if wheel_speed is None else float(wheel_speed))
 
-    def _command(self, speed_m_per_s: float, curvature_per_m: float) -> DriveCommand:
+    def _command(self, speed_m_per_s: float, curvature_per_m: float, brake: bool = False) -> DriveCommand:
         """Remembers the command for the next step.
 
         :param speed_m_per_s: Requested speed in m/s.
         :param curvature_per_m: Requested curvature in 1/m.
+        :param brake: Whether a stop brakes instead of coasting.
         :return: The drive command.
         """
         self.previous_speed_m_per_s = speed_m_per_s
         self.previous_curvature_per_m = curvature_per_m
-        return DriveCommand(speed_m_per_s, curvature_per_m)
+        return DriveCommand(speed_m_per_s, curvature_per_m, brake)

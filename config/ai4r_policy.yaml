@@ -261,8 +261,9 @@
       # Metres past the farthest cone seen to stop at, finite double >= 0.
       lane_end_stop_past_m: 0.25
       # How far the car rolls after a stop request, in metres per m/s of speed
-      # (seconds), finite double >= 0. The control only coasts (zero drive, no
-      # braking). 2.1 for car 22: it coasted with a time constant of about 2 s
+      # (seconds), finite double >= 0. For these stops the control coasts (zero
+      # drive); obstacle stops brake (obstacle_stop_distance_per_speed_s below).
+      # 2.1 for car 22: it coasted with a time constant of about 2 s
       # on 2026-10-12, and 2.1 stops 0.13-0.30 m past the last cone in the
       # car 22 models (tests/policy/car_models.py). MEASURE IT: drive at a
       # known speed, request a stop, divide the roll-out by the speed.
@@ -276,18 +277,29 @@
       # inside the lane between the car and the line it follows, widened by
       # corridor_half_width_m, or in the straight corridor without a lane)
       # STOPS the car for the rest of the run, like a lane loss: request zero
-      # state, then state 3, to drive again. Drive is set to zero (coasting, no
-      # braking). true or false; without lidar data nothing is checked, so keep
-      # lidar_cartesian in required_sensors.
+      # state, then state 3, to drive again. The car brakes with
+      # control.brake_action (it coasts when that is 0.0). true or false;
+      # without lidar data nothing is checked, so keep lidar_cartesian in
+      # required_sensors.
       obstacle_stop_enabled: true
       # The stop is requested once the obstacle is within
-      # (stop_distance_per_speed_s + lidar age) * speed + obstacle_stop_margin_m
-      # of the car's front, using the larger of target_speed_m_per_s and the
-      # measured speed: 2.1 * 0.5 + 0.2 = 1.25 m (plus ~0.05 m lidar age) at
-      # 0.5 m/s. The car then rolls to a stop about this margin short of it.
-      # Metres, finite double >= 0. The node does not start if that distance at
-      # the target speed is longer than obstacle_detection.corridor_length_m.
+      # (obstacle_stop_distance_per_speed_s + lidar age) * speed
+      # + obstacle_stop_margin_m of the car's front, using the larger of
+      # target_speed_m_per_s and the measured speed: 0.6 * 0.5 + 0.2 = 0.5 m
+      # (plus ~0.05 m lidar age) at 0.5 m/s. The car then brakes to a stop about
+      # this margin short of it. Metres, finite double >= 0. The node does not
+      # start if that distance at the target speed is longer than
+      # obstacle_detection.corridor_length_m.
       obstacle_stop_margin_m: 0.2
+      # How far the car travels after an obstacle stop request while braking,
+      # in metres per m/s of speed (seconds), finite double >= 0. Shorter than
+      # stop_distance_per_speed_s, so the car drives nearer before braking.
+      # 0.6 is an UNMEASURED starting guess for car 20 with brake_action 0.3.
+      # MEASURE IT with a soft obstacle: drive at a known speed, note where the
+      # stop was requested and where the car stopped, divide by the speed. With
+      # control.brake_action 0.0 the node does not start unless this is at
+      # least stop_distance_per_speed_s.
+      obstacle_stop_distance_per_speed_s: 0.6
       # Consecutive policy steps that must see the obstacle within that
       # distance, INTEGER >= 1, so one step of stray returns does not stop the
       # run. Each extra step is about 0.05 m more at 0.5 m/s with 10 Hz cones.
@@ -421,41 +433,39 @@
     # which checks them; invalid values stop the node from starting). They turn
     # the policy's DriveCommand (speed m/s, curvature 1/m, + = left) into drive
     # and steering actions. Each car needs its own (docs/control/car-calibration.md,
-    # policy/control/README.md). The speed values below are for CAR 22
-    # (10.43.254.22) and are NOT a calibration: they were chosen in simulation
-    # (2026-10-12) to pass the Stage 1 cases at 0.5 m/s on both car 22 models
-    # fitted to one floor run (tests/policy/car_models.py, car22a and car22b).
-    # The steering values are car 20's calibration from 5 Oct, NOT measured on
-    # car 22. Check both on a stand before driving on the floor.
+    # policy/control/README.md). The speed and steering values below are CAR
+    # 20's calibration from 5 Oct (docs/control/car-calibration.md); car 22's
+    # simulation-chosen speed values (tests/policy/car_models.py) are noted
+    # beside each. Car 22's 0.25 breakaway and 0.45 limit left car 20 standing
+    # at 0.37 applied drive. Recheck the breakaway when the battery changes.
     # Speed feedback needs wheel_speed: without a fresh wheel speed the drive is
     # zero for targets at or above speed_feedback_min_m_per_s.
     control:
       # Speed map: speed = speed_ff_gain * (drive - speed_ff_offset).
       # Breakaway drive, double in [0, 1). Rises as the motor battery drains.
-      # Car 22 fits gave 0.17-0.32 (car 20: 0.48); 0.25 lies between them.
-      speed_ff_offset: 0.25
-      # Speed map slope, m/s per unit drive, positive double. Car 22 fits gave
-      # 7.65-24.7 (car 20: 9.18).
-      speed_ff_gain: 12.0
+      # Car 20: 0.48 (fit 0.475). Car 22 fits gave 0.17-0.32 (car 22: 0.25).
+      speed_ff_offset: 0.48
+      # Speed map slope, m/s per unit drive, positive double. Car 20: 9.18.
+      # Car 22 fits gave 7.65-24.7 (car 22: 12.0).
+      speed_ff_gain: 9.18
       # PI gains: drive per m/s of error, and drive per m of accumulated error.
-      # Doubles >= 0; speed_ki: 0.0 gives feedforward + P only. Car 22 uses the
-      # stronger PI of docs/control/car-calibration.md step 2 (car 20: 0.15 and
-      # 0.04), so the feedback corrects the uncertain feedforward. Watch for
-      # speed oscillation: the real wheel speed lags at low speed.
-      speed_kp: 0.2
-      speed_ki: 0.15
+      # Doubles >= 0; speed_ki: 0.0 gives feedforward + P only. Car 20 at
+      # 0.5 m/s: 15% overshoot, about 0.01 m/s steady error. Car 22: 0.2 and
+      # 0.15. Watch for speed oscillation: the real wheel speed lags at low speed.
+      speed_kp: 0.15
+      speed_ki: 0.04
       # Largest integral contribution, drive units, double >= 0.
       speed_i_max: 0.2
       # Integrate only while |target - speed| < this, m/s, positive double.
-      # Car 22: 0.5 (car 20: 0.2).
-      speed_i_band: 0.5
+      # Car 20: 0.2 (car 22: 0.5).
+      speed_i_band: 0.2
       # Feedback only for targets >= this, m/s, double >= 0 (low-speed wheel
       # speed lags by seconds). Car 20 may not start below about 0.4 m/s.
       speed_feedback_min_m_per_s: 0.4
       # Drive action upper limit, double in (0, 1]. Car 20 open-loop 0.75
-      # passes 1.5 m/s in about 3 s. Car 22: 0.45, which the car 22 models
-      # never reach at 0.5 m/s; car 22 drove over 1.2 m/s with 0.42.
-      max_drive_action: 0.45
+      # passes 1.5 m/s in about 3 s. Car 22: 0.45; it drove over 1.2 m/s
+      # with 0.42.
+      max_drive_action: 0.75
       # Steering map: steering = centre + slope * curvature, with a separate
       # slope for left (curvature > 0) and right. Measured with the vehicle
       # interface steering trim at -0.18 on car 20; the trim resets to 0.0 when
@@ -468,6 +478,18 @@
       # saturates beyond -0.75 (radius about 2.1 m); right reaches about 1.1 m
       # at 1.0.
       max_steering_action: 1.0
+      # Reverse effort that brakes for an obstacle stop, double in [0, 1): the
+      # drive is -brake_action while braking; 0.0 only coasts. A Traxxas ESC
+      # brakes on reverse effort while driving forwards, but after neutral the
+      # same effort can reverse the car, so braking only starts straight from
+      # forward drive and never again once the drive is back at zero. 0.3 is
+      # an UNMEASURED starting value: check on a stand that the wheels stop
+      # and do not turn backwards.
+      brake_action: 0.3
+      # Longest braking time of one stop, seconds, finite double >= 0. Braking
+      # also ends when the wheel speed reads zero, but near standstill it lags
+      # by seconds, so this usually ends it.
+      brake_max_s: 1.0
 
     # LIDAR OBSTACLE OBSERVATION SETTINGS (ObstacleDetectionConfig in
     # policy/obstacle_detection/obstacle_detection.py, which checks them;

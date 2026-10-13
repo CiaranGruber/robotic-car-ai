@@ -139,7 +139,8 @@ class MpcConfig:
 
     A lane-end stop is requested this far before the stop point. 0.6 s matches the stand-in Car Control in the
     simulation. Measure it on the car: drive at a known speed, request a stop and divide the roll-out distance by the
-    speed. CarController only coasts (zero drive, no braking), so it is larger there.
+    speed. CarController coasts for these stops (zero drive, no braking), so it is larger there. Obstacle stops brake
+    and use obstacle_stop_distance_per_speed_s instead.
     """
     run_duration_s: float = 0.0
     """Seconds after entering the publishing-policy state before the car stops for the rest of the run.
@@ -153,9 +154,17 @@ class MpcConfig:
     """Distance in metres the car should stay short of an obstacle in its way. Must be finite and at least 0.
 
     The stop is requested once the obstacle is within the stopping distance of the car's front:
-    (stop_distance_per_speed_s + lidar age) * speed + this margin, with the larger of target_speed_m_per_s and the
-    car's speed. The car then coasts to a stop about this far before the obstacle. MovementPolicy checks that the
+    (obstacle_stop_distance_per_speed_s + lidar age) * speed + this margin, with the larger of target_speed_m_per_s
+    and the car's speed. The car then stops about this far before the obstacle. MovementPolicy checks that the
     stopping distance at the target speed fits within obstacle_detection.corridor_length_m.
+    """
+    obstacle_stop_distance_per_speed_s: float = 0.6
+    """Like stop_distance_per_speed_s, but for an obstacle stop, which asks to brake (DriveCommand.brake). Must be
+    finite and at least 0.
+
+    With control.brake_action the car brakes, so this is shorter than stop_distance_per_speed_s and the car drives
+    nearer before stopping. Measure it with braking on. Without braking the car coasts, so MovementPolicy rejects a
+    value below stop_distance_per_speed_s.
     """
     obstacle_confirm_steps: int = 2
     """Consecutive policy steps that must see an obstacle within the stopping distance before the car stops. Must be
@@ -185,7 +194,8 @@ class MpcConfig:
                 raise ValueError(f"mpc.{name} must be positive and finite, not {value}")
         for name in ("lateral_error_weight", "heading_error_weight", "curvature_change_weight",
                      "max_right_curvature_per_m", "lane_loss_timeout_s", "run_duration_s", "lane_end_distance_m",
-                     "lane_end_stop_past_m", "stop_distance_per_speed_s", "obstacle_stop_margin_m"):
+                     "lane_end_stop_past_m", "stop_distance_per_speed_s", "obstacle_stop_margin_m",
+                     "obstacle_stop_distance_per_speed_s"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value >= 0.0):
                 raise ValueError(f"mpc.{name} must be finite and at least 0, not {value}")

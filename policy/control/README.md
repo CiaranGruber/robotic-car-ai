@@ -13,6 +13,7 @@ It has no ROS imports, so it runs in pytest and dream-gym.
 | --- | --- | --- |
 | `speed_m_per_s` | m/s | Forwards speed. `0.0` (or less) stops: drive 0 and the integral is reset. |
 | `curvature_per_m` | 1/m | 1 / turning radius. **Positive turns left**, negative right, 0 straight. |
+| `brake` | bool | With a stop, brake with `brake_action` instead of coasting. The MPC sets it for obstacle stops. |
 
 No `DriveCommand` at all also stops the car with the steering centred. `MoveCameraTo` is not handled yet, so the
 camera pan stays `None` (no target sent).
@@ -24,7 +25,7 @@ The controller also reads `observations.car.wheel_speed` (unsigned m/s) and `obs
 
 | Field | Range | How it is calculated |
 | --- | --- | --- |
-| `drive_action` | `[0, max_drive_action]` | `speed_ff_offset + v_ref / speed_ff_gain + speed_kp * e + I`, with `e = v_ref - wheel_speed` |
+| `drive_action` | `[0, max_drive_action]`, or `-brake_action` while braking | `speed_ff_offset + v_ref / speed_ff_gain + speed_kp * e + I`, with `e = v_ref - wheel_speed` |
 | `steering_action` | `[-max_steering_action, max_steering_action]` | `steering_centre_action + slope * curvature`, with a separate slope for left and right |
 
 Details of the speed controller:
@@ -35,6 +36,14 @@ Details of the speed controller:
 - If feedback is needed but the wheel speed is missing or expired, the drive is **zero**. Put `wheel_speed` in
   `required_sensors` when driving with this controller.
 - Drive is forwards only. Wheel speed is unsigned, so reverse cannot be controlled.
+
+Braking (`brake_action`, `brake_max_s`; `brake_action: 0.0` only coasts):
+- A Traxxas ESC brakes on reverse effort while the car drives forwards, but after neutral the same effort can
+  drive it backwards. So braking only starts straight from forward drive (previous drive above zero) while the
+  wheel speed is above zero, and once the drive is back at zero it does not brake again until the car is driven.
+- Braking ends when the wheel speed reads zero or is missing, or after `brake_max_s`. Near standstill the wheel
+  speed lags by seconds, so `brake_max_s` usually ends it.
+- Check on a stand that the wheels stop and do not turn backwards before braking on the floor.
 
 ## Car 20 calibration (5 Oct)
 

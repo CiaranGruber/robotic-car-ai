@@ -238,9 +238,28 @@ def test_without_a_lane_the_straight_corridor_is_checked():
 def test_stopping_distance_must_fit_within_the_searched_distance():
     # 3.0 s * 0.5 m/s + 0.2 m = 1.7 m > 1.5 m
     with pytest.raises(ValueError):
-        MovementPolicy(MpcConfig(stop_distance_per_speed_s=3.0), ConeFilterConfig(), ControlConfig())
-    MovementPolicy(MpcConfig(stop_distance_per_speed_s=3.0, obstacle_stop_enabled=False), ConeFilterConfig(),
-                   ControlConfig())
+        MovementPolicy(MpcConfig(obstacle_stop_distance_per_speed_s=3.0), ConeFilterConfig(), ControlConfig())
+    MovementPolicy(MpcConfig(obstacle_stop_distance_per_speed_s=3.0, obstacle_stop_enabled=False),
+                   ConeFilterConfig(), ControlConfig())
+
+
+def test_a_short_obstacle_stopping_distance_needs_braking():
+    """Without braking the car coasts as far for an obstacle as for any other stop."""
+    short = MpcConfig(stop_distance_per_speed_s=2.1, obstacle_stop_distance_per_speed_s=0.6)
+    with pytest.raises(ValueError):
+        MovementPolicy(short, ConeFilterConfig(), ControlConfig(brake_action=0.0))
+    MovementPolicy(short, ConeFilterConfig(), ControlConfig(brake_action=0.3))
+    MovementPolicy(dataclasses.replace(short, obstacle_stop_enabled=False), ConeFilterConfig(),
+                   ControlConfig(brake_action=0.0))
+
+
+def test_obstacle_in_the_lane_brakes_the_car_straight_from_driving():
+    policy = MovementPolicy(MpcConfig(), ConeFilterConfig(), ControlConfig(brake_action=0.3))
+    near_box = box(CONFIG.car_front_m + 0.4, 0.0, width=0.2)
+    drive = [policy.step(dataclasses.replace(observe(lane_cones(), first=step == 0), lidar_cartesian=lidar(near_box)))
+             .drive_action for step in range(2)]
+    assert drive[0] > 0.0
+    assert drive[1] == -0.3
 
 
 @pytest.mark.parametrize("points", [[], box(AHEAD_M, 0.0)], ids=["clear", "box"])
