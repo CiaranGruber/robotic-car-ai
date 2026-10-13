@@ -44,6 +44,12 @@ _CONE_COLOURS = {
 }
 """Fill colours for yellow and blue cone markers."""
 
+_LIDAR_DOT_COLOUR = "#6B7280"
+"""Fill colour for body-frame lidar Cartesian returns."""
+
+_LIDAR_DOT_SIZE = 8.0
+"""Matplotlib scatter marker size for each lidar return."""
+
 _VELOCITY_ARROW_SCALE = 1.0
 """Plot metres of arrow length per m/s of wheel speed."""
 
@@ -93,6 +99,25 @@ def _to_plot(x_forward: float, y_left: float) -> tuple[float, float]:
     return -y_left, x_forward
 
 
+def _lidar_plot_points(
+    observations: CarObservations,
+) -> tuple[list[float], list[float]]:
+    """Collect lidar Cartesian returns in plot coordinates.
+
+    :param observations: Observations for one policy step.
+    :return: Plot-coordinate x and y samples for every usable lidar return.
+    """
+    plot_xs: list[float] = []
+    plot_ys: list[float] = []
+    if observations.lidar_cartesian is None:
+        return plot_xs, plot_ys
+    for point in observations.lidar_cartesian.points:
+        px, py = _to_plot(point.pos.x, point.pos.y)
+        plot_xs.append(px)
+        plot_ys.append(py)
+    return plot_xs, plot_ys
+
+
 def _velocity_arrow_length(observations: CarObservations) -> float:
     """Length of the facing arrow from wheel speed.
 
@@ -106,6 +131,9 @@ def _velocity_arrow_length(observations: CarObservations) -> float:
 
 def _frame_points(observations: CarObservations) -> tuple[list[float], list[float]]:
     """Collect plot points used when sizing axes for one frame.
+
+    Bounds use the origin, cone detections and the facing arrow. Lidar
+    returns are drawn but ignored for axis limits.
 
     :param observations: Observations for one policy step.
     :return: Plot-coordinate x and y samples used for axis limits.
@@ -141,6 +169,18 @@ def _draw_observations(
     ax.set_ylabel("x (m, forwards)")
     ax.axhline(0.0, color="0.85", linewidth=0.8)
     ax.axvline(0.0, color="0.85", linewidth=0.8)
+
+    lidar_xs, lidar_ys = _lidar_plot_points(observations)
+    if lidar_xs:
+        ax.scatter(
+            lidar_xs,
+            lidar_ys,
+            s=_LIDAR_DOT_SIZE,
+            c=_LIDAR_DOT_COLOUR,
+            marker="o",
+            linewidths=0.0,
+            zorder=1,
+        )
 
     if observations.cones:
         for cone in observations.cones:
@@ -392,10 +432,10 @@ class ScenarioRenderer:
 
 
 def display_observations(observations: CarObservations) -> None:
-    """Show cones and the car on a non-interactive body-frame plot.
+    """Show cones, lidar returns and the car on a non-interactive body-frame plot.
 
-    Cones are drawn as coloured ▲ markers. The car is drawn at the origin with a
-    velocity arrow along forwards.
+    Cones are drawn as coloured ▲ markers. Lidar Cartesian returns are drawn as
+    grey dots. The car is drawn at the origin with a velocity arrow along forwards.
 
     :param observations: Observations for one policy step.
     """

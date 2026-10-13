@@ -21,6 +21,7 @@ EXCLUDE_FROM="$ROOT_PATH/car_upload_filter.txt"
 
 # Terminal colours for script status logs (distinct from rsync/ssh output).
 COLOUR_BLUE=$'\033[1;34m'
+COLOUR_RED=$'\033[1;31m'
 COLOUR_RESET=$'\033[0m'
 
 # --------------------
@@ -38,15 +39,17 @@ log() {
 # Set when a step is interrupted (Ctrl+C); used with trap INT in run_step.
 STEP_INTERRUPTED=0
 
-ask_cancel_remaining() {
-    # Ask whether to cancel all remaining steps after an interrupt.
+ask_yes_no() {
+    # Ask a yes/no question on stderr.
+    #
+    # Args:
+    #   prompt: Question text shown before the reply.
     #
     # Returns:
-    #   0 if the user wants to cancel remaining steps (y/yes/…); 1 to skip only
-    #   the interrupted step.
+    #   0 for y/yes/…; 1 otherwise (including empty / N).
+    local prompt="$1"
     local reply
-    echo >&2
-    read -r -p "Cancel all remaining operations? [y/N] " reply || true
+    read -r -p "$prompt" reply || true
     case "$(printf '%s' "$reply" | tr '[:upper:]' '[:lower:]')" in
         y|yes|yeah|yep)
             return 0
@@ -79,7 +82,8 @@ run_step() {
 
     if [[ "$STEP_INTERRUPTED" -eq 1 || "$status" -eq 130 || "$status" -eq 20 ]]; then
         log "Interrupted during ${label}."
-        if ask_cancel_remaining; then
+        echo >&2
+        if ask_yes_no "Cancel all remaining operations? [y/N] "; then
             log "Cancelling remaining operations."
             exit 130
         fi
@@ -136,8 +140,8 @@ Commands:
                     or skip that step and continue.
   start_runtime [--debug-images <type>]
                     Restart the usual dream runtime services on the car.
-                    With --debug-images, oakd_cone_detector is restarted with
-                    that flag (dream runtime restart oakd_cone_detector
+                    With --debug-images, oakd_gpu_cone_detector is restarted with
+                    that flag (dream runtime restart oakd_gpu_cone_detector
                     --debug-images <type>).
   help              Show this help
 
@@ -159,6 +163,11 @@ dry_copy() {
 
 upload() {
     # Upload the repository to the car.
+    log "You are uploading to ${COLOUR_RED}car ${CAR_NUM}"
+    if ! ask_yes_no "Continue with upload? [y/N] "; then
+        log "Upload cancelled."
+        exit 1
+    fi
     log "Uploading files to ${REMOTE_USER}@${REMOTE_HOST}:${SRC_PATH}"
     copy_files_to_car
     log "Upload complete."
@@ -187,11 +196,11 @@ start_runtime() {
     # Start or restart the usual dream runtime services on the car.
     #
     # Args:
-    #   optional --debug-images <type>: pass through to oakd_cone_detector only.
+    #   optional --debug-images <type>: pass through to oakd_gpu_cone_detector only.
     local services=(
         foxglove_bridge
         traxxas_vehicle_interface
-        oakd_cone_detector
+        oakd_gpu_cone_detector
         aruco_detector
         ai4r_policy
     )
@@ -228,7 +237,7 @@ start_runtime() {
             continue
         fi
         restart_cmd="dream runtime restart ${service}"
-        if [[ "$service" == "oakd_cone_detector" && -n "$debug_images_type" ]]; then
+        if [[ "$service" == "oakd_gpu_cone_detector" && -n "$debug_images_type" ]]; then
             restart_cmd+=$(printf ' --debug-images %q' "$debug_images_type")
         fi
         remote_cmd+="${restart_cmd}; "
