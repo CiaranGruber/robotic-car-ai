@@ -8,9 +8,20 @@ from scenarios import SCENARIO_SUFFIX, SCENARIOS_DIR
 
 
 class ScenarioType(Enum):
+    """Scenario data kind under ``scenarios/data/``.
+
+    Each member's value is the folder name for that kind:
+
+    - ``REAL``: recorded drives converted from car logger dumps
+    - ``SYNTHETIC``: simulated tracks from ``tests/policy/synthetic_tracks.py``,
+      same format as real
+
+    When creating a new kind of scenario other than the existing members, add a
+    new member here whose value is that folder name.
+    """
+
     REAL = "real_scenarios"
     SYNTHETIC = "synthetic_scenarios"
-    """Simulated tracks from tests/policy/synthetic_tracks.py, in the same format as the real scenarios."""
 
 
 class Scenario:
