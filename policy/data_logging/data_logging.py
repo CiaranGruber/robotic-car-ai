@@ -19,13 +19,19 @@ DEFAULT_LOG_FOLDER = "./logs"
 DEFAULT_LOG_LEVEL_NAME = "info"
 """Default Python logging level name used by the ROS parameter."""
 
-OBSERVATIONS_LOG_FILENAME_FORMAT = "%Y-%m-%d_%H-%M_observations.json"
-"""strftime pattern for the observations data-log filename."""
+DATA_LOG_STEM_FORMAT = "%Y-%m-%d_%H-%M-%S"
+"""strftime pattern for the stem shared by an observations and actions data-log pair."""
 
-ACTIONS_LOG_FILENAME_FORMAT = "%Y-%m-%d_%H-%M_actions.json"
-"""strftime pattern for the actions data-log filename."""
+OBSERVATIONS_LOG_SUFFIX = "_observations.json"
+"""Filename suffix of the observations data log, after the stem."""
 
-GENERAL_LOG_FILENAME_FORMAT = "%Y-%m-%d_%H-%M_logging.log"
+ACTIONS_LOG_SUFFIX = "_actions.json"
+"""Filename suffix of the actions data log, after the stem."""
+
+CONFIG_LOG_SUFFIX = "_config.json"
+"""Filename suffix of the policy settings saved with a data-log pair, after the stem."""
+
+GENERAL_LOG_FILENAME_FORMAT = "%Y-%m-%d_%H-%M-%S_logging.log"
 """strftime pattern for the general Python log filename."""
 
 
@@ -126,18 +132,19 @@ def validate_parameters(
     )
 
 
-def _get_observations_log_filename() -> str:
+def _new_data_log_stem(folder: Path) -> str:
     """
-    :return: Observations data-log filename for the current local date and time.
+    :param folder: Folder the data-log pair will be written to.
+    :return: Stem for a new observations and actions pair: the current local date and time to the second, with _2,
+        _3, ... added when a pair started in the same second already exists, so no earlier run is replaced.
     """
-    return datetime.now().strftime(OBSERVATIONS_LOG_FILENAME_FORMAT)
-
-
-def _get_actions_log_filename() -> str:
-    """
-    :return: Actions data-log filename for the current local date and time.
-    """
-    return datetime.now().strftime(ACTIONS_LOG_FILENAME_FORMAT)
+    stem = datetime.now().strftime(DATA_LOG_STEM_FORMAT)
+    candidate, number = stem, 1
+    while any((folder / f"{candidate}{suffix}").exists()
+              for suffix in (OBSERVATIONS_LOG_SUFFIX, ACTIONS_LOG_SUFFIX, CONFIG_LOG_SUFFIX)):
+        number += 1
+        candidate = f"{stem}_{number}"
+    return candidate
 
 
 def _get_general_log_filename() -> str:
@@ -252,21 +259,30 @@ def setup_logging(logging_params: LoggingParameters):
     logging.basicConfig(**config)
 
 
-def start_data_log(logging_params: LoggingParameters) -> LoggingParameters:
+def start_data_log(logging_params: LoggingParameters,
+                   settings: dict[str, Any] | None = None) -> LoggingParameters:
     """Open a new observations and actions log named for the current local time.
 
-    An existing file with that name is replaced. When data logging is disabled, the parameters
-    are returned unchanged.
+    Both files share one stem, the time to the second, and an existing pair is never replaced
+    (see _new_data_log_stem). When data logging is disabled, the parameters are returned
+    unchanged and nothing is written.
 
     :param logging_params: Validated logging parameters.
+    :param settings: The policy settings this run uses, by parameter name, or None. They are
+        saved as <stem>_config.json beside the pair, so each recording keeps the settings it was
+        made with even after the YAML changes. Values must be JSON-serialisable.
     :return: Parameters whose data-log filenames match the current local time.
     """
     if not logging_params.is_data_logging:
         return logging_params
     folder = Path(logging_params.logging_folder)
     folder.mkdir(parents=True, exist_ok=True)
-    observations_log_filename = _get_observations_log_filename()
-    actions_log_filename = _get_actions_log_filename()
+    stem = _new_data_log_stem(folder)
+    observations_log_filename = f"{stem}{OBSERVATIONS_LOG_SUFFIX}"
+    actions_log_filename = f"{stem}{ACTIONS_LOG_SUFFIX}"
+    if settings is not None:
+        (folder / f"{stem}{CONFIG_LOG_SUFFIX}").write_text(
+            json.dumps(settings, ensure_ascii=False, indent="\t", sort_keys=True) + "\n", encoding="utf-8")
     _init_json_array_file(folder / observations_log_filename)
     _init_json_array_file(folder / actions_log_filename)
     return replace(

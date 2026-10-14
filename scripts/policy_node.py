@@ -63,6 +63,7 @@ from dream_interfaces.msg import (ConeDetection, ConeDetections, DriveAndSteer,
                                   FiducialDetections)
 from tf2_ros import Buffer, TransformException, TransformListener
 
+from policy.action_policy.avoidance import AvoidanceConfig
 from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig
 from policy.cone_filter.cone_filter import ConeFilterConfig
@@ -75,6 +76,8 @@ from policy.data_logging.data_logging import (
     validate_parameters,
 )
 from policy.input_output import ConeColour, convert_observations, convert_actions
+from policy.lane_detection.lane_detection import LaneDetectionConfig
+from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
 from policy.policy_runner import MovementPolicy
 
 # These values and the request/status topics match the previous AI4R policy.
@@ -233,24 +236,39 @@ class PolicyNode(Node):
         # YAML alone does not declare a parameter. A value such as 0.2 is a
         # floating-point number; 0 is an integer, which is a different ROS type.
 
-        # Movement policy settings: see action_policy, mpc, open_space, cone_filter
-        # and control in ai4r_policy.yaml. MovementPolicy (policy/policy_runner.py)
-        # checks action_policy. MpcConfig (policy/action_policy/mpc.py),
-        # OpenSpaceConfig (policy/action_policy/open_space.py), ConeFilterConfig
-        # (policy/cone_filter/cone_filter.py) and ControlConfig
-        # (policy/control/control.py) hold their defaults and check them.
+        # Movement policy settings: see action_policy, mpc, open_space, cone_filter,
+        # control, lane_detection, obstacle_detection and avoidance in
+        # ai4r_policy.yaml. MovementPolicy (policy/policy_runner.py) checks
+        # action_policy and how the settings fit together. MpcConfig
+        # (policy/action_policy/mpc.py), OpenSpaceConfig
+        # (policy/action_policy/open_space.py), ConeFilterConfig
+        # (policy/cone_filter/cone_filter.py), ControlConfig
+        # (policy/control/control.py), LaneDetectionConfig
+        # (policy/lane_detection/lane_detection.py), ObstacleDetectionConfig
+        # (policy/obstacle_detection/obstacle_detection.py) and AvoidanceConfig
+        # (policy/action_policy/avoidance.py) hold their defaults and check them.
         self.declare_parameter("action_policy", "mpc", ParameterDescriptor(read_only=True))
         settings = {}
         for prefix, config_type in (
                 ("mpc", MpcConfig), ("open_space", OpenSpaceConfig), ("cone_filter", ConeFilterConfig),
-                ("control", ControlConfig)):
+                ("control", ControlConfig), ("lane_detection", LaneDetectionConfig),
+                ("obstacle_detection", ObstacleDetectionConfig), ("avoidance", AvoidanceConfig)):
             defaults = asdict(config_type())
             for name, default in defaults.items():
                 self.declare_parameter(f"{prefix}.{name}", default, ParameterDescriptor(read_only=True))
             settings[prefix] = config_type(**{
                 name: self.get_parameter(f"{prefix}.{name}").value for name in defaults})
-        self.movement_policy = MovementPolicy(settings["mpc"], settings["cone_filter"], settings["control"],
-                                              settings["open_space"], self.get_parameter("action_policy").value)
+        self.movement_policy = MovementPolicy(
+            settings["mpc"], settings["cone_filter"], settings["control"], settings["open_space"],
+            self.get_parameter("action_policy").value, lane_detection_config=settings["lane_detection"],
+            obstacle_detection_config=settings["obstacle_detection"], avoidance_config=settings["avoidance"])
+        # Every parameter value this node runs with, saved beside each drive data log
+        # (<stem>_config.json). Settings are startup-only, so reading them once is enough.
+        self.parameter_values = {
+            parameter.name: (parameter.value
+                             if isinstance(parameter.value, (bool, int, float, str, type(None)))
+                             else list(parameter.value))
+            for parameter in self.get_parameters(sorted(self.get_parameters_by_prefix("")))}
 
         self.fsm_state = FSM_STATE_PUBLISHING_ZERO_ACTIONS
         self.state_reason = "Startup: waiting for an explicit policy request"
@@ -1144,7 +1162,7 @@ class PolicyNode(Node):
         self.state_reason = reason
         _LOGGER.info("Changing state to %s", self._state_name(state))
         if state == FSM_STATE_PUBLISHING_POLICY_ACTION:
-            self.logging_params = start_data_log(self.logging_params)
+            self.logging_params = start_data_log(self.logging_params, self.parameter_values)
         if state == FSM_STATE_PUBLISHING_ZERO_ACTIONS:
             self.publish_zero_actions()
         self.get_logger().info(f"{STATE_NAMES[state]}: {reason}")

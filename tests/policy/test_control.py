@@ -74,6 +74,61 @@ def test_missing_wheel_speed_stops_when_feedback_is_needed():
     assert controller.step(observations(None), [DriveCommand(0.6, 0.0)]).drive_action == 0.0
 
 
+BRAKING = ControlConfig(brake_action=0.3, brake_max_s=0.5)
+BRAKE = DriveCommand(0.0, 0.0, brake=True)
+
+
+def test_braking_stop_brakes_straight_from_driving_until_the_wheels_stop():
+    controller = CarController(BRAKING)
+    assert controller.step(observations(0.5, dt=0.0, first=True), [DriveCommand(0.5, 0.0)]).drive_action > 0.0
+    assert controller.step(observations(0.5), [BRAKE]).drive_action == -0.3
+    assert controller.step(observations(0.2), [BRAKE]).drive_action == -0.3
+    assert controller.step(observations(0.0), [BRAKE]).drive_action == 0.0
+    # Reverse effort after neutral could drive the car backwards, so braking does not start again
+    assert controller.step(observations(0.2), [BRAKE]).drive_action == 0.0
+
+
+def test_braking_ends_after_brake_max_s_while_the_wheel_speed_lags():
+    controller = CarController(BRAKING)
+    controller.step(observations(0.5, dt=0.0, first=True), [DriveCommand(0.5, 0.0)])
+    drive = [controller.step(observations(0.3, dt=0.1), [BRAKE]).drive_action for _ in range(10)]
+    assert drive == [-0.3] * 5 + [0.0] * 5
+
+
+@pytest.mark.parametrize("config, before, wheel_speed", [
+    (BRAKING, DriveCommand(0.0, 0.0), 0.5),  # Already at zero drive
+    (BRAKING, DriveCommand(0.5, 0.0), None),  # Wheel speed missing: zero drive before, and nothing to check
+    (CONFIG, DriveCommand(0.5, 0.0), 0.5),  # brake_action 0.0 only coasts
+])
+def test_braking_stop_coasts_unless_braking_can_start_from_driving(config, before, wheel_speed):
+    controller = CarController(config)
+    controller.step(observations(wheel_speed, dt=0.0, first=True), [before])
+    assert controller.step(observations(wheel_speed), [BRAKE]).drive_action == 0.0
+
+
+def test_driving_again_allows_the_next_stop_to_brake():
+    controller = CarController(BRAKING)
+    controller.step(observations(0.5, dt=0.0, first=True), [DriveCommand(0.5, 0.0)])
+    controller.step(observations(0.0), [BRAKE])
+    controller.step(observations(0.0), [DriveCommand(0.5, 0.0)])
+    assert controller.step(observations(0.5), [BRAKE]).drive_action == -0.3
+
+
+def test_stop_without_brake_coasts_even_with_brake_action():
+    controller = CarController(BRAKING)
+    controller.step(observations(0.5, dt=0.0, first=True), [DriveCommand(0.5, 0.0)])
+    assert controller.step(observations(0.5), [DriveCommand(0.0, 0.0)]).drive_action == 0.0
+
+
+@pytest.mark.parametrize("dt, wheel_speed", [(float("nan"), 0.5), (-0.1, 0.5), (0.02, float("nan")), (0.02, -0.1)])
+def test_invalid_braking_inputs_are_rejected_and_end_braking(dt, wheel_speed):
+    controller = CarController(BRAKING)
+    controller.step(observations(0.5, dt=0.0, first=True), [DriveCommand(0.5, 0.0)])
+    with pytest.raises(ValueError):
+        controller.step(observations(wheel_speed, dt=dt), [BRAKE])
+    assert controller.step(observations(0.5), [BRAKE]).drive_action == 0.0
+
+
 def test_steering_signs_and_limits_follow_car_20_map():
     # Positive curvature (left) needs negative steering on car 20
     assert steering_for_curvature(0.3, CONFIG) < 0.0 < steering_for_curvature(-0.3, CONFIG)
@@ -97,6 +152,10 @@ def test_first_policy_step_resets_integral():
     {"max_drive_action": 1.5},
     {"steering_left_action_per_curvature": 1.0},
     {"steering_right_action_per_curvature": 0.0},
+    {"brake_action": -0.1},
+    {"brake_action": 1.0},
+    {"brake_max_s": -0.1},
+    {"brake_max_s": float("inf")},
 ])
 def test_invalid_settings_are_rejected(change):
     with pytest.raises(ValueError):
@@ -116,7 +175,7 @@ def test_movement_policy_turns_back_to_the_lane_centre_within_the_drive_limit():
     assert isinstance(actions, CarActions)
     assert actions.steering_action > CONFIG.steering_centre_action  # right, with positive steering turning right
     assert 0.0 < actions.drive_action <= CONFIG.max_drive_action
-    assert actions.camera_pan_action is None
+    assert actions.camera_pan_action == 0.0  # held at zero pan, which the camera's fixed transform assumes
 
 
 def test_movement_policy_publishes_the_lane_state_on_debug1_and_debug2():

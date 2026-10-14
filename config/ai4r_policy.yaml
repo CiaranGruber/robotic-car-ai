@@ -38,7 +38,11 @@
     # Conversion always runs: this list selects requirements, not processing.
     # The old sensor name lidar is now lidar_scan; the update mode stays lidar.
     # Timer mode may use [] for a deliberate open-loop experiment.
-    required_sensors: [cone_detections]
+    # Lane-following test run: Chris's speed controller needs a fresh wheel speed.
+    # Obstacle stopping (mpc.obstacle_stop_enabled) needs the lidar: with
+    # lidar_cartesian required, missing or stale lidar stops the policy in
+    # publishing-zero state, and a run cannot start without it.
+    required_sensors: [cone_detections, wheel_speed, lidar_cartesian]
 
     # COPYABLE EXERCISES: replace the active settings above; do not add a second
     # active copy of the same key. A sensor-driven mode needs no rate setting.
@@ -57,6 +61,10 @@
     # ArUco marker observations, with no cone requirement:
     #   policy_update_mode: fiducial_detection
     #   required_sensors: [fiducial_detections]
+    # Lane following that must stop when the lidar obstacle observation is
+    # missing (see obstacle_detection below):
+    #   policy_update_mode: cone_detection
+    #   required_sensors: [cone_detections, wheel_speed, lidar_cartesian]
     # RC-assisted open-space driving (see open_space below): hold the RC drive
     # forwards to go. Cones stay optional, because seeing no cone is normal here;
     # without a fresh cone batch the policy stops the car but keeps running.
@@ -149,12 +157,17 @@
     logging:
       # When true, record CarObservations and CarActions each policy step as JSON
       # arrays in logging_folder. A new pair is named when the state becomes
-      # "Publishing policy actions".
-      is_data_logging: false
+      # "Publishing policy actions", with the local time to the second, e.g.
+      # 2026-10-12_14-03-27_observations.json. A pair started in the same
+      # second gets _2, _3, ..., so no earlier run is replaced. Beside each pair,
+      # <same stem>_config.json saves every parameter value the node was
+      # running with, so a recording keeps its settings after the YAML changes.
+      # Lane-following test run: true, to record each run for analysis.
+      is_data_logging: true
       # Directory for drive and general log files. Empty or unusable paths fall
       # back to data_logging.DEFAULT_LOG_FOLDER only when is_data_logging or
       # log_to_file is true. Otherwise the supplied path is kept.
-      logging_folder: "./logs"
+      logging_folder: "/home/ai4r/policy_logs"
       # Python logging level name: critical, error, warning, info, or debug.
       # Default info. Unrecognised values fall back to info. Restart the policy
       # node after changing this setting.
@@ -248,8 +261,9 @@
       # Metres past the farthest cone seen to stop at, finite double >= 0.
       lane_end_stop_past_m: 0.25
       # How far the car rolls after a stop request, in metres per m/s of speed
-      # (seconds), finite double >= 0. The control only coasts (zero drive, no
-      # braking). 2.1 for car 22: it coasted with a time constant of about 2 s
+      # (seconds), finite double >= 0. For these stops the control coasts (zero
+      # drive); obstacle stops brake (obstacle_stop_distance_per_speed_s below).
+      # 2.1 for car 22: it coasted with a time constant of about 2 s
       # on 2026-10-12, and 2.1 stops 0.13-0.30 m past the last cone in the
       # car 22 models (tests/policy/car_models.py). MEASURE IT: drive at a
       # known speed, request a stop, divide the roll-out by the speed.
@@ -259,6 +273,37 @@
       # 5-10 s demo runs: about 4 m at 0.5 m/s, so lay out a cone lane at least
       # that long, or the car stops at its end instead.
       run_duration_s: 8.0
+      # OBSTACLE STOP: an obstacle in the car's way (obstacle_detection below:
+      # inside the lane between the car and the line it follows, widened by
+      # corridor_half_width_m, or in the straight corridor without a lane)
+      # STOPS the car for the rest of the run, like a lane loss: request zero
+      # state, then state 3, to drive again. The car brakes with
+      # control.brake_action (it coasts when that is 0.0). true or false;
+      # without lidar data nothing is checked, so keep lidar_cartesian in
+      # required_sensors.
+      obstacle_stop_enabled: true
+      # The stop is requested once the obstacle is within
+      # (obstacle_stop_distance_per_speed_s + lidar age) * speed
+      # + obstacle_stop_margin_m of the car's front, using the larger of
+      # target_speed_m_per_s and the measured speed: 0.6 * 0.5 + 0.2 = 0.5 m
+      # (plus ~0.05 m lidar age) at 0.5 m/s. The car then brakes to a stop about
+      # this margin short of it. Metres, finite double >= 0. The node does not
+      # start if that distance at the target speed is longer than
+      # obstacle_detection.corridor_length_m.
+      obstacle_stop_margin_m: 0.2
+      # How far the car travels after an obstacle stop request while braking,
+      # in metres per m/s of speed (seconds), finite double >= 0. Shorter than
+      # stop_distance_per_speed_s, so the car drives nearer before braking.
+      # 0.6 is an UNMEASURED starting guess for car 20 with brake_action 0.3.
+      # MEASURE IT with a soft obstacle: drive at a known speed, note where the
+      # stop was requested and where the car stopped, divide by the speed. With
+      # control.brake_action 0.0 the node does not start unless this is at
+      # least stop_distance_per_speed_s.
+      obstacle_stop_distance_per_speed_s: 0.6
+      # Consecutive policy steps that must see the obstacle within that
+      # distance, INTEGER >= 1, so one step of stray returns does not stop the
+      # run. Each extra step is about 0.05 m more at 0.5 m/s with 10 Hz cones.
+      obstacle_confirm_steps: 2
 
     # OPEN-SPACE SETTINGS, used when action_policy is open_space (OpenSpaceConfig
     # in policy/action_policy/open_space.py, which checks them and explains the
@@ -323,7 +368,7 @@
     cone_filter:
       # Keep cones with 0 < x <= this, metres ahead of base_link, positive
       # double. Default 4.0, the shared camera range.
-      max_forward_m: 4.0
+      max_forward_m: 2.5
       # Keep cones with |y| <= this, metres, positive double. Default 2.0: half
       # the 1.0 m lane, a 0.2 m start offset and a 15 degree heading error
       # seen 4 m ahead.
@@ -342,51 +387,85 @@
       merge_distance_m: 0.1
       # Maximum distance of a cone from its fitted colour row, metres, positive
       # double. Keep it above detector position noise but well below half the
-      # 1.0 m lane width. Curved lanes need a larger value or a curved fit.
+      # 1.0 m lane width.
       row_residual_m: 0.15
       # Nearest cones of each colour used for the row fit: INTEGER from 2 to 12.
       # Bounds calculation time; farther cones are still checked against the fit.
       max_fit_cones_per_colour: 8
+      # true removes cones off their colour's straight row (Stage 1). Set false
+      # for curved lanes, whose cones are not on straight rows; lane detection
+      # then leaves out cones off its curved edges instead (boolean).
+      check_straight_rows: true
+
+    # LANE DETECTION SETTINGS (LaneDetectionConfig in
+    # policy/lane_detection/lane_detection.py, which checks them; invalid values
+    # stop the node from starting). Each cone colour is one lane edge; both edges
+    # are fitted together as arcs around one centre point (straight lines when
+    # the curvature is 0), giving the centre line and where the car is in it.
+    lane_detection:
+      # Colour of the LEFT edge's cones, string "AUTO", "BLUE" or "YELLOW".
+      # "AUTO" works out each colour's side from where its edge lies relative
+      # to the car, so either colour may be on the left.
+      left_colour: "AUTO"
+      # Lane width, metres, positive double (shared default 1.0). Places the
+      # centre line when only one edge is found, until both edges have been
+      # seen; the width measured with both edges is used after that.
+      lane_width_m: 1.0
+      # Fewest cones of one colour for that edge to count, INTEGER >= 1.
+      min_cones_per_edge: 2
+      # Plausible measured lane width with both edges, metres, positive doubles
+      # with min below max. Outside it gives no lane. The car is about 0.2 m wide.
+      min_lane_width_m: 0.3
+      max_lane_width_m: 3.0
+      # Largest curvature the fit may find, 1/m, double >= 0.0. 0.0 fits
+      # straight edges (Stage 1; fitting curves on straight lanes made the heading
+      # worse). For curved roads set 2.0 (a 0.5 m radius) AND set
+      # cone_filter.check_straight_rows: false.
+      max_curvature_per_m: 0.0
+      # Curvature treated as ordinary, 1/m, positive double (0.5 is a 2 m
+      # radius). Smaller values pull noisy fits harder towards straight.
+      typical_curvature_per_m: 0.5
+      # Cones farther than this from their fitted edge are left out and the
+      # edges refitted, metres, positive double.
+      outlier_distance_m: 0.15
 
     # LOW-LEVEL CONTROL SETTINGS (ControlConfig in policy/control/control.py,
     # which checks them; invalid values stop the node from starting). They turn
     # the policy's DriveCommand (speed m/s, curvature 1/m, + = left) into drive
     # and steering actions. Each car needs its own (docs/control/car-calibration.md,
-    # policy/control/README.md). The speed values below are for CAR 22
-    # (10.43.254.22) and are NOT a calibration: they were chosen in simulation
-    # (2026-10-12) to pass the Stage 1 cases at 0.5 m/s on both car 22 models
-    # fitted to one floor run (tests/policy/car_models.py, car22a and car22b).
-    # The steering values are car 20's calibration from 5 Oct, NOT measured on
-    # car 22. Check both on a stand before driving on the floor.
+    # policy/control/README.md). The speed and steering values below are CAR
+    # 20's calibration from 5 Oct (docs/control/car-calibration.md); car 22's
+    # simulation-chosen speed values (tests/policy/car_models.py) are noted
+    # beside each. Car 22's 0.25 breakaway and 0.45 limit left car 20 standing
+    # at 0.37 applied drive. Recheck the breakaway when the battery changes.
     # Speed feedback needs wheel_speed: without a fresh wheel speed the drive is
     # zero for targets at or above speed_feedback_min_m_per_s.
     control:
       # Speed map: speed = speed_ff_gain * (drive - speed_ff_offset).
       # Breakaway drive, double in [0, 1). Rises as the motor battery drains.
-      # Car 22 fits gave 0.17-0.32 (car 20: 0.48); 0.25 lies between them.
-      speed_ff_offset: 0.25
-      # Speed map slope, m/s per unit drive, positive double. Car 22 fits gave
-      # 7.65-24.7 (car 20: 9.18).
-      speed_ff_gain: 12.0
+      # Car 20: 0.48 (fit 0.475). Car 22 fits gave 0.17-0.32 (car 22: 0.25).
+      speed_ff_offset: 0.48
+      # Speed map slope, m/s per unit drive, positive double. Car 20: 9.18.
+      # Car 22 fits gave 7.65-24.7 (car 22: 12.0).
+      speed_ff_gain: 9.18
       # PI gains: drive per m/s of error, and drive per m of accumulated error.
-      # Doubles >= 0; speed_ki: 0.0 gives feedforward + P only. Car 22 uses the
-      # stronger PI of docs/control/car-calibration.md step 2 (car 20: 0.15 and
-      # 0.04), so the feedback corrects the uncertain feedforward. Watch for
-      # speed oscillation: the real wheel speed lags at low speed.
-      speed_kp: 0.2
-      speed_ki: 0.15
+      # Doubles >= 0; speed_ki: 0.0 gives feedforward + P only. Car 20 at
+      # 0.5 m/s: 15% overshoot, about 0.01 m/s steady error. Car 22: 0.2 and
+      # 0.15. Watch for speed oscillation: the real wheel speed lags at low speed.
+      speed_kp: 0.15
+      speed_ki: 0.04
       # Largest integral contribution, drive units, double >= 0.
       speed_i_max: 0.2
       # Integrate only while |target - speed| < this, m/s, positive double.
-      # Car 22: 0.5 (car 20: 0.2).
-      speed_i_band: 0.5
+      # Car 20: 0.2 (car 22: 0.5).
+      speed_i_band: 0.2
       # Feedback only for targets >= this, m/s, double >= 0 (low-speed wheel
       # speed lags by seconds). Car 20 may not start below about 0.4 m/s.
       speed_feedback_min_m_per_s: 0.4
       # Drive action upper limit, double in (0, 1]. Car 20 open-loop 0.75
-      # passes 1.5 m/s in about 3 s. Car 22: 0.45, which the car 22 models
-      # never reach at 0.5 m/s; car 22 drove over 1.2 m/s with 0.42.
-      max_drive_action: 0.45
+      # passes 1.5 m/s in about 3 s. Car 22: 0.45; it drove over 1.2 m/s
+      # with 0.42.
+      max_drive_action: 0.75
       # Steering map: steering = centre + slope * curvature, with a separate
       # slope for left (curvature > 0) and right. Measured with the vehicle
       # interface steering trim at -0.18 on car 20; the trim resets to 0.0 when
@@ -399,3 +478,101 @@
       # saturates beyond -0.75 (radius about 2.1 m); right reaches about 1.1 m
       # at 1.0.
       max_steering_action: 1.0
+      # Reverse effort that brakes for an obstacle stop, double in [0, 1): the
+      # drive is -brake_action while braking; 0.0 only coasts. A Traxxas ESC
+      # brakes on reverse effort while driving forwards, but after neutral the
+      # same effort can reverse the car, so braking only starts straight from
+      # forward drive and never again once the drive is back at zero. 0.3 is
+      # an UNMEASURED starting value: check on a stand that the wheels stop
+      # and do not turn backwards.
+      brake_action: 0.3
+      # Longest braking time of one stop, seconds, finite double >= 0. Braking
+      # also ends when the wheel speed reads zero, but near standstill it lags
+      # by seconds, so this usually ends it.
+      brake_max_s: 1.0
+
+    # LIDAR OBSTACLE OBSERVATION SETTINGS (ObstacleDetectionConfig in
+    # policy/obstacle_detection/obstacle_detection.py, which checks them;
+    # invalid values stop the node from starting). Each policy step turns the
+    # body-frame lidar points (lidar_cartesian) into the obstacle observation
+    # of the dream-gym system-project notebook, section 8, and, with a detected
+    # lane, into the objects inside the lane. It needs rplidar_c1 running and
+    # its mounting TF; without fresh lidar_cartesian there is no observation.
+    # The MPC stops for an obstacle in the car's way (mpc.obstacle_stop_*).
+    # The lidar's scan plane (about 0.12 m up) also hits the lane's cones, so
+    # returns near the lane edges are left out; objects lower than the scan
+    # plane are not seen at all.
+    obstacle_detection:
+      # Forwards fan, like the notebook's obstacle_lidar_ranges_m: INTEGER >= 2
+      # beams spread evenly across field_of_view_deg (double in (0, 360]),
+      # index 0 pointing right, the middle index forwards and the last left.
+      beam_count: 61
+      field_of_view_deg: 180.0
+      # Fan ranges, metres from base_link's origin, doubles with 0 <= min < max.
+      # Closer returns read min_range_m; a beam with no return reads
+      # max_range_m, as in the notebook.
+      min_range_m: 0.05
+      max_range_m: 4.0
+      # Distance from base_link's origin forwards to the car's front, metres,
+      # double >= 0. 0.30 is the notebook car's; measure your car.
+      car_front_m: 0.30
+      # Half the width of the way the car drives through, metres, positive
+      # double: half the car's width plus a margin (0.20 suits a 0.25 m wide
+      # car). Used across the lane, and for the straight corridor ahead when no
+      # lane is detected; there keep it well below half the lane width (0.4 m
+      # in the lab's 0.8 m lanes), or the cones beside the lane count.
+      corridor_half_width_m: 0.20
+      # Length of the straight corridor ahead of the car's front (used without
+      # a lane), metres, positive double. It must hold the MPC's obstacle
+      # stopping distance (mpc.obstacle_stop_margin_m). Longer sees obstacles
+      # sooner, but a heading error brings cones into the straight corridor.
+      corridor_length_m: 1.5
+      # How far along the lane, ahead of the car's front, obstacles in the lane
+      # are searched for, metres, positive double; about as far as the camera
+      # sees the lane. It must also hold the stopping distance. Driving around
+      # an obstacle (avoidance below) needs it seen early: at 0.5 m/s the car
+      # needs about 1.3 m to stop and about 1 m to move over.
+      lane_length_m: 2.5
+      # Fewest lidar returns that make an obstacle (in the corridor, or in one
+      # object in the lane), INTEGER >= 1, so stray returns do not count.
+      min_points: 3
+      # Returns this close inside either lane edge, or outside the lane, are
+      # not obstacles in the lane: they are the cones or the lane's
+      # surroundings. Metres, finite double >= 0: a cone's radius at the
+      # lidar's height plus the edge fit's error.
+      lane_edge_margin_m: 0.10
+      # Neighbouring returns (in scan order) closer than this belong to one
+      # object in the lane, metres, positive double.
+      cluster_gap_m: 0.15
+
+    # DRIVING AROUND OBSTACLES IN THE LANE (AvoidanceConfig in
+    # policy/action_policy/avoidance.py, which checks them; invalid values stop
+    # the node from starting). When an obstacle in the lane is too close to the
+    # line the MPC follows, the line moves to the nearest place in the lane that
+    # keeps the car's sides obstacle_clearance_m from every obstacle ahead and
+    # cone_clearance_m from the cones, and stays there until the car's rear has
+    # passed the obstacle by pass_distance_m (measured with the wheel speed).
+    # Without such a place, or if the car cannot move clear before the
+    # obstacle is within the stopping distance, the MPC stops as before
+    # (mpc.obstacle_stop_*). In a 0.8 m lane with these values the line can
+    # move at most 0.4 - 0.05 - 0.10 - 0.125 = 0.125 m from the centre.
+    avoidance:
+      # true or false; false only stops for obstacles.
+      enabled: true
+      # The car's width, and the distance from base_link's origin back to its
+      # rear (with obstacle_detection.car_front_m, its length), metres. The
+      # notebook car's width and a guess for the rear: MEASURE car 9.
+      car_width_m: 0.25
+      car_rear_m: 0.30
+      # Radius of a cone at its base, metres; the lane edges pass through the
+      # cones' centres.
+      cone_radius_m: 0.05
+      # Smallest gaps while passing, metres, doubles >= 0: car side to cone,
+      # and car side to obstacle. Half the car's width plus
+      # obstacle_clearance_m must be at least
+      # obstacle_detection.corridor_half_width_m.
+      cone_clearance_m: 0.10
+      obstacle_clearance_m: 0.10
+      # How far the car's rear drives past the obstacle before returning to
+      # the lane centre, metres, double >= 0.
+      pass_distance_m: 0.30

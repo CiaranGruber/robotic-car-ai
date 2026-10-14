@@ -78,6 +78,15 @@ def test_keeps_the_cones_it_cannot_check(cones):
     assert isinstance(result, ConeBatch) and list(result) == cones
 
 
+def test_curved_lanes_keep_their_cones_without_the_straight_row_check():
+    # A lane curving left around a 2 m radius, seen 3 m along
+    curve = [cone(r * math.sin(i * 0.5 / 2.0), 2.0 - r * math.cos(i * 0.5 / 2.0), colour)
+             for i in range(1, 7) for r, colour in ((1.5, YELLOW), (2.5, BLUE))]
+    assert len(filter_cones(batch(curve), ConeFilterConfig())) < len(curve)
+    no_rows = dataclasses.replace(ConeFilterConfig(), check_straight_rows=False)
+    assert list(filter_cones(batch(curve + OUTLIERS[3:]), no_rows)) == curve
+
+
 def test_missing_cones_stay_missing():
     assert filter_cones(None, ConeFilterConfig()) is None
 
@@ -85,7 +94,7 @@ def test_missing_cones_stay_missing():
 @pytest.mark.parametrize("change", [
     {"max_forward_m": 0.0}, {"max_lateral_m": math.inf}, {"merge_distance_m": -0.1}, {"row_residual_m": math.nan},
     {"min_height_m": 0.5}, {"min_confidence": 1.5}, {"max_fit_cones_per_colour": 1},
-    {"max_fit_cones_per_colour": 13}, {"max_fit_cones_per_colour": 8.0},
+    {"max_fit_cones_per_colour": 13}, {"max_fit_cones_per_colour": 8.0}, {"check_straight_rows": 1},
 ])
 def test_invalid_settings_are_rejected(change):
     with pytest.raises(ValueError):

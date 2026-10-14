@@ -13,8 +13,8 @@ from policy.action_policy.policy import MpcPolicy
 from policy.action_policy.reference import reference_from_cones
 from policy.control.actions import DriveCommand
 from policy.input_output import (
-    CarObservations, ConeBatch, ConeColour, ConeDetection, ObservedCarState, PolicyState, Position, SensorAge,
-    WheelSpeed)
+    CarObservations, ConeBatch, ConeColour, ConeDetection, LidarCartesian, ObservedCarState, PolicyState, Position,
+    SensorAge, WheelSpeed)
 
 LANE_WIDTH_M = 1.0
 
@@ -232,12 +232,74 @@ def test_run_duration_stops_with_fresh_lane_and_resets_on_new_run():
     assert command(policy, cones, first_step=True).speed_m_per_s > 0
 
 
+def obstacle_command(policy, distance_m, first_step=False, lidar_age_s=None, wheel_speed=None):
+    """The command for a centred car in a straight lane, with an obstacle distance_m ahead of the car's front."""
+    observations = observe(lane_cones(0.0, 0.0), first_step)
+    if lidar_age_s is not None:
+        observations = dataclasses.replace(
+            observations, lidar_cartesian=LidarCartesian([], SensorAge(lidar_age_s, None), "base_link"))
+    if wheel_speed is not None:
+        observations = dataclasses.replace(observations, car=ObservedCarState(
+            None, None, None, WheelSpeed(wheel_speed, SensorAge(0.0, None))))
+    instructions = policy.run_policy(observations, None, distance_m)
+    assert len(instructions) == 1 and isinstance(instructions[0], DriveCommand)
+    return instructions[0]
+
+
+def test_obstacle_within_the_stopping_distance_stops_for_the_rest_of_the_run():
+    # Defaults: (0.6 s * 0.5 m/s) + 0.2 m margin = 0.5 m stopping distance, confirmed over 2 steps
+    policy = MpcPolicy(MpcConfig())
+    assert obstacle_command(policy, 0.45, first_step=True).speed_m_per_s > 0.0
+    assert obstacle_command(policy, 0.45) == DriveCommand(0.0, 0.0, brake=True)
+    assert policy.stopped_for_obstacle
+    # The obstacle going does not restart the car; only a new run does
+    assert obstacle_command(policy, math.inf) == DriveCommand(0.0, 0.0, brake=True)
+    assert obstacle_command(policy, math.inf, first_step=True).speed_m_per_s > 0.0
+
+
+def test_one_step_with_an_obstacle_does_not_stop_the_car():
+    policy = MpcPolicy(MpcConfig())
+    for step, distance_m in enumerate((0.45, math.inf, 0.45, None, 0.45)):
+        assert obstacle_command(policy, distance_m, first_step=step == 0).speed_m_per_s > 0.0
+
+
+def test_obstacle_beyond_the_stopping_distance_does_not_stop_the_car():
+    policy = MpcPolicy(MpcConfig())
+    for step in range(5):
+        assert obstacle_command(policy, 0.55, first_step=step == 0).speed_m_per_s > 0.0
+
+
+@pytest.mark.parametrize("lidar_age_s, wheel_speed, stops", [
+    (None, None, False),  # 2.1 * 0.5 + 0.2 = 1.25 m < 1.3 m
+    (0.2, None, True),  # (2.1 + 0.2) * 0.5 + 0.2 = 1.35 m
+    (None, 1.0, True),  # Faster than the target speed: 2.1 * 1.0 + 0.2 = 2.3 m
+])
+def test_stopping_distance_grows_with_lidar_age_and_speed(lidar_age_s, wheel_speed, stops):
+    policy = MpcPolicy(MpcConfig(obstacle_stop_distance_per_speed_s=2.1))
+    obstacle_command(policy, 1.3, True, lidar_age_s, wheel_speed)
+    assert (obstacle_command(policy, 1.3, False, lidar_age_s, wheel_speed).speed_m_per_s == 0.0) == stops
+
+
+def test_obstacle_stop_can_be_switched_off():
+    policy = MpcPolicy(MpcConfig(obstacle_stop_enabled=False))
+    for step in range(3):
+        assert obstacle_command(policy, 0.1, first_step=step == 0).speed_m_per_s > 0.0
+
+
+def test_invalid_obstacle_distance_is_rejected():
+    with pytest.raises(ValueError):
+        obstacle_command(MpcPolicy(MpcConfig()), math.nan, first_step=True)
+
+
 @pytest.mark.parametrize("change", [
     {"horizon_steps": 0}, {"horizon_steps": 2.0}, {"step_s": 0.0}, {"curvature_weight": 0.0},
     {"lateral_error_weight": -1.0}, {"target_speed_m_per_s": math.nan}, {"max_curvature_per_m": math.inf},
     {"lane_end_distance_m": -0.1}, {"lane_end_stop_past_m": math.nan}, {"stop_distance_per_speed_s": -0.1},
+    {"obstacle_stop_distance_per_speed_s": -0.1}, {"obstacle_stop_distance_per_speed_s": math.inf},
     {"lane_loss_timeout_s": -0.1}, {"lane_loss_timeout_s": math.inf}, {"lane_loss_speed_fraction": 1.5},
     {"run_duration_s": -1.0}, {"run_duration_s": -0.1}, {"run_duration_s": math.inf},
+    {"obstacle_stop_enabled": 1}, {"obstacle_stop_margin_m": -0.1}, {"obstacle_stop_margin_m": math.nan},
+    {"obstacle_confirm_steps": 0}, {"obstacle_confirm_steps": 2.0}, {"obstacle_confirm_steps": True},
 ])
 def test_invalid_settings_are_rejected(change):
     with pytest.raises(ValueError):
