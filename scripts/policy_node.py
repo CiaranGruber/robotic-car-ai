@@ -676,7 +676,7 @@ class PolicyNode(Node):
         # A partial IMU message may contain gyro but no orientation. Covariance
         # [0] == -1 marks an ABSENT field; its numeric zeros are not measurements.
         fields = (("imu_orientation", msg.orientation_covariance, msg.orientation),
-                  ("imu_angular_velocity", msg.angular_velocity_covariance, msg.ang_velocity),
+                  ("imu_angular_velocity", msg.angular_velocity_covariance, msg.angular_velocity),
                   ("imu_specific_force", msg.linear_acceleration_covariance, msg.linear_acceleration))
         for name, covariance, measurement in fields:
             if covariance[0] == -1.0:

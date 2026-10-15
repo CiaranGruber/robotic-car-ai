@@ -4,6 +4,7 @@ import dataclasses
 import math
 
 from policy.action_policy.avoidance import AvoidanceConfig, LaneAvoidance
+from policy.action_policy.lane_path import LanePath
 from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig, OpenSpacePolicy
 from policy.action_policy.policy import MpcPolicy
@@ -50,7 +51,8 @@ class MovementPolicy:
             stop_distance_per_speed_s.
         :param avoidance_config: The settings for driving around obstacles in the lane, from the avoidance
             parameters in config/ai4r_policy.yaml. A ValueError is raised when the line that passes an obstacle would
-            still count as blocked: half the car's width plus obstacle_clearance_m below corridor_half_width_m.
+            still count as blocked: half the car's width plus obstacle_clearance_m below corridor_half_width_m, or when
+            max_ramp_curvature_per_m is sharper than the MPC's curvature limits.
         """
         if action_policy not in ACTION_POLICIES:
             raise ValueError(f"action_policy must be one of {ACTION_POLICIES}, not {action_policy!r}")
@@ -73,12 +75,18 @@ class MovementPolicy:
                              f"obstacle_detection.corridor_half_width_m "
                              f"({obstacle_detection_config.corridor_half_width_m} m), so the car would stop instead "
                              f"of passing an obstacle")
+        max_left = mpc_config.max_curvature_per_m
+        max_right = mpc_config.max_right_curvature_per_m or mpc_config.max_curvature_per_m
+        if avoidance_config.enabled and avoidance_config.max_ramp_curvature_per_m > min(max_left, max_right):
+            raise ValueError(f"avoidance.max_ramp_curvature_per_m ({avoidance_config.max_ramp_curvature_per_m}) is "
+                             f"sharper than the car can turn (mpc.max_curvature_per_m {max_left}, right {max_right})")
         self.cone_filter_config = cone_filter_config
         self.action_policy_name = action_policy
         self.lane_detector = LaneDetector(lane_detection_config)
         self.obstacle_detection_config = obstacle_detection_config
         self.action_policy = MpcPolicy(mpc_config)
-        self.avoidance = LaneAvoidance(avoidance_config, obstacle_detection_config.car_front_m)
+        self.avoidance = LaneAvoidance(avoidance_config, obstacle_detection_config.car_front_m, max_left, max_right,
+                                       stopping_m if mpc_config.obstacle_stop_enabled else 0.0)
         self.open_space_policy = OpenSpacePolicy(open_space_config, control_config.positive_steering_turns_left)
         self.car_controller = CarController(control_config)
         self.obstacles: ObstacleDetection | None = None
@@ -86,6 +94,9 @@ class MovementPolicy:
         without fresh Cartesian lidar points."""
         self.lane_obstacles: list[LaneObstacle] | None = None
         """The objects inside the lane ahead in the latest step, or None without fresh lidar points or a lane."""
+        self.lane_path: LanePath | None = None
+        """The line across the lane planned past the obstacles in the latest step, or None when avoidance is off or
+        there was no lane."""
         self.obstacle_distance_m: float | None = None
         """Distance in metres from the car's front to the nearest obstacle in its way in the latest step, math.inf when
         its way is clear, or None without fresh lidar points."""
@@ -112,9 +123,14 @@ class MovementPolicy:
         # Find the obstacles: inside the lane when there is one, otherwise in a straight corridor ahead of the car
         self.obstacles = detect_obstacles(observations, self.obstacle_detection_config)
         self.lane_obstacles = detect_lane_obstacles(observations, lanes, self.obstacle_detection_config)
-        # Move over in the lane to pass the obstacles when there is room; the obstacle check then follows that line
-        self.action_policy.avoidance_offset_m = self.avoidance.step(
-            observations, lanes, self.lane_obstacles, self.action_policy.lane_offset_m)
+        # Plan the line past the obstacles: through the middle of the free gap beside each, where there is room. The
+        # MPC follows it as seen lookahead_m ahead, and the obstacle check follows it at each obstacle.
+        usual_m = (self.action_policy.usual_offset_m(lanes.lane_width_m, lanes.path_curvature_per_m)
+                   if lanes is not None and lanes.has_lane else None)
+        self.lane_path = self.avoidance.step(observations, lanes, self.lane_obstacles, usual_m)
+        self.action_policy.avoidance_offset_m = (
+            self.lane_path.offset_at(self.avoidance.config.lookahead_m)
+            if self.lane_path is not None and self.lane_path.segments else None)
         self.obstacle_distance_m = self._obstacle_distance_m(lanes)
         # Determine the policy to take based upon the car location; an obstacle in the car's way stops it
         instructions = self.action_policy.run_policy(observations, lanes, self.obstacle_distance_m)
@@ -136,10 +152,12 @@ class MovementPolicy:
     def _obstacle_distance_m(self, lanes: LaneDetection | None) -> float | None:
         """Finds how far ahead the nearest obstacle in the car's way is, from this step's obstacles.
 
-        With a lane, the car's way is the band across the lane from where the car is to the line the MPC follows
-        (the lane centre moved by lane_offset_m, or the avoidance line), widened by corridor_half_width_m on both
-        sides. Covering both includes the car's move over to the line, so an obstacle the car cannot move clear of
-        before it is within the stopping distance still stops it. Without a lane, it is the straight corridor ahead.
+        With a planned line (lane_path), the car's way past each obstacle is the band across the lane the line covers
+        while the car's body is beside it, widened by corridor_half_width_m on both sides and by how far the car is
+        off the line now (beyond where the line is between here and lookahead_m ahead), as if it stays that far off.
+        So an obstacle the car is not moving clear of in time still stops it. With a lane but no planned line, the
+        band reaches from where the car is to the line the MPC follows. Without a lane, it is the straight corridor
+        ahead.
 
         :param lanes: The lane detected at this step, or None.
         :return: Distance in metres from the car's front to the nearest obstacle in the car's way, math.inf when its
@@ -148,9 +166,21 @@ class MovementPolicy:
         if self.lane_obstacles is not None:
             half_width_m = self.obstacle_detection_config.corridor_half_width_m
             car_m = lanes.lateral_error_m
-            line_m = self.action_policy.followed_offset_m(lanes.lane_width_m, lanes.path_curvature_per_m)
-            return nearest_in_band(self.lane_obstacles, min(car_m, line_m) - half_width_m,
-                                   max(car_m, line_m) + half_width_m)
+            path = self.lane_path
+            if path is None:
+                line_m = self.action_policy.followed_offset_m(lanes.lane_width_m, lanes.path_curvature_per_m)
+                return nearest_in_band(self.lane_obstacles, min(car_m, line_m) - half_width_m,
+                                       max(car_m, line_m) + half_width_m)
+            lowest_m, highest_m = path.offset_range(0.0, self.avoidance.config.lookahead_m)
+            margin_m = half_width_m + max(0.0, lowest_m - car_m, car_m - highest_m)
+            # base_link is beside an obstacle's near side when the car's front reaches it, and a car length past its
+            # far side when the rear leaves it
+            car_length_m = self.avoidance.car_length_m
+            in_way = math.inf
+            for obstacle in self.lane_obstacles:
+                right_m, left_m = path.offset_range(obstacle.distance_m, obstacle.far_distance_m + car_length_m)
+                in_way = min(in_way, nearest_in_band([obstacle], right_m - margin_m, left_m + margin_m))
+            return in_way
         if self.obstacles is not None:
             return self.obstacles.in_path_distance_m
         return None

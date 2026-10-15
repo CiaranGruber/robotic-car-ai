@@ -375,9 +375,12 @@
       max_lateral_m: 2.0
       # Accepted detected-point height above nominal ground, metres, finite
       # doubles with min below max. The fixed camera pose ignores vehicle
-      # pitch, so keep this band loose.
+      # pitch, so keep this band loose. Default max 0.45. 0.25 removes the
+      # false detections at z ~ 0.30 m (confidence ~0.6), mostly within 1.5 m,
+      # seen in the 2026-10-15 car runs, which flipped the lane fit; the real
+      # cones within 2.5 m had a median z of 0.06-0.11 m.
       min_height_m: -0.15
-      max_height_m: 0.45
+      max_height_m: 0.25
       # Minimum classification confidence, double in [0.0, 1.0]. The detector
       # already applies its own threshold (default 0.5); raising this removes
       # more cones.
@@ -395,7 +398,7 @@
       # true removes cones off their colour's straight row (Stage 1). Set false
       # for curved lanes, whose cones are not on straight rows; lane detection
       # then leaves out cones off its curved edges instead (boolean).
-      check_straight_rows: true
+      check_straight_rows: false
 
     # LANE DETECTION SETTINGS (LaneDetectionConfig in
     # policy/lane_detection/lane_detection.py, which checks them; invalid values
@@ -406,7 +409,7 @@
       # Colour of the LEFT edge's cones, string "AUTO", "BLUE" or "YELLOW".
       # "AUTO" works out each colour's side from where its edge lies relative
       # to the car, so either colour may be on the left.
-      left_colour: "AUTO"
+      left_colour: "BLUE"
       # Lane width, metres, positive double (shared default 1.0). Places the
       # centre line when only one edge is found, until both edges have been
       # seen; the width measured with both edges is used after that.
@@ -421,7 +424,7 @@
       # straight edges (Stage 1; fitting curves on straight lanes made the heading
       # worse). For curved roads set 2.0 (a 0.5 m radius) AND set
       # cone_filter.check_straight_rows: false.
-      max_curvature_per_m: 0.0
+      max_curvature_per_m: 2.0
       # Curvature treated as ordinary, 1/m, positive double (0.5 is a 2 m
       # radius). Smaller values pull noisy fits harder towards straight.
       typical_curvature_per_m: 0.5
@@ -530,8 +533,8 @@
       # How far along the lane, ahead of the car's front, obstacles in the lane
       # are searched for, metres, positive double; about as far as the camera
       # sees the lane. It must also hold the stopping distance. Driving around
-      # an obstacle (avoidance below) needs it seen early: at 0.5 m/s the car
-      # needs about 1.3 m to stop and about 1 m to move over.
+      # an obstacle (avoidance below) needs it seen early: the ramp onto the
+      # line beside it is about 1.5 m long.
       lane_length_m: 2.5
       # Fewest lidar returns that make an obstacle (in the corridor, or in one
       # object in the lane), INTEGER >= 1, so stray returns do not count.
@@ -547,15 +550,20 @@
 
     # DRIVING AROUND OBSTACLES IN THE LANE (AvoidanceConfig in
     # policy/action_policy/avoidance.py, which checks them; invalid values stop
-    # the node from starting). When an obstacle in the lane is too close to the
-    # line the MPC follows, the line moves to the nearest place in the lane that
-    # keeps the car's sides obstacle_clearance_m from every obstacle ahead and
-    # cone_clearance_m from the cones, and stays there until the car's rear has
-    # passed the obstacle by pass_distance_m (measured with the wheel speed).
-    # Without such a place, or if the car cannot move clear before the
-    # obstacle is within the stopping distance, the MPC stops as before
-    # (mpc.obstacle_stop_*). In a 0.8 m lane with these values the line can
-    # move at most 0.4 - 0.05 - 0.10 - 0.125 = 0.125 m from the centre.
+    # the node from starting). An obstacle in the lane becomes part of the lane
+    # edge on one side, and the line the MPC follows is planned again at every
+    # step: beside the obstacle it runs through the middle of the free gap
+    # between the obstacle and the other side's cones, from pass_distance_m
+    # before the car's front reaches it until pass_distance_m after its rear
+    # has passed it (remembered and measured with the wheel speed once the
+    # lidar no longer sees it ahead). Smooth ramps join that line to the usual
+    # one. The gap must leave obstacle_clearance_m and cone_clearance_m beside
+    # the car. Without such a gap, or if the car is not moving clear before
+    # the obstacle is within the stopping distance, the MPC stops as before
+    # (mpc.obstacle_stop_*). In a 0.8 m lane with these values the gap between
+    # the obstacle and the inner side of the cones must be at least
+    # 0.25 + 0.10 + 0.10 = 0.45 m, so an obstacle must end at least 0.10 m
+    # short of the centre line on its side.
     avoidance:
       # true or false; false only stops for obstacles.
       enabled: true
@@ -573,6 +581,20 @@
       # obstacle_detection.corridor_half_width_m.
       cone_clearance_m: 0.10
       obstacle_clearance_m: 0.10
-      # How far the car's rear drives past the obstacle before returning to
-      # the lane centre, metres, double >= 0.
+      # How far before the car's front reaches the obstacle, and after its rear
+      # has passed it, the line stays beside the obstacle, metres, double >= 0.
       pass_distance_m: 0.30
+      # Sharpest curvature a ramp onto or off the line beside an obstacle may
+      # add to the lane's own, 1/m, positive double, within the car's limits
+      # (mpc.max_curvature_per_m and max_right_curvature_per_m). A ramp moving
+      # the line d metres is pi * sqrt(d / (2 * this)) long: 1.7 m for 0.175 m.
+      max_ramp_curvature_per_m: 0.30
+      # How much more room the other side of an obstacle must leave before the
+      # car changes the side it passes on, metres, double >= 0. Once the car's
+      # front has reached the obstacle, the side no longer changes.
+      side_hysteresis_m: 0.05
+      # Distance ahead of base_link's origin at which the planned line is given
+      # to the MPC to follow, metres, double >= 0, so it starts each ramp in
+      # time. 0.60 matches the MPC's nominal prediction distance at 0.5 m/s
+      # (12 steps * 0.1 s * 0.5 m/s).
+      lookahead_m: 0.60
