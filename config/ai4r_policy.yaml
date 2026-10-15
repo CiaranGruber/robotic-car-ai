@@ -269,10 +269,11 @@
       # known speed, request a stop, divide the roll-out by the speed.
       stop_distance_per_speed_s: 2.1
       # Seconds after requesting state 3 before the car STOPS for the rest of
-      # the run, finite double >= 0; 0.0 drives until the lane ends. 8.0 for the
-      # 5-10 s demo runs: about 4 m at 0.5 m/s, so lay out a cone lane at least
-      # that long, or the car stops at its end instead.
-      run_duration_s: 8.0
+      # the run, finite double >= 0; 0.0 drives until the lane ends. 0.0 for
+      # longer roads: the car then stops only at the inferred lane end, a lane
+      # loss or an obstacle. 8.0 suits the 5-10 s demo runs (about 4 m at
+      # 0.5 m/s, so the cone lane must be at least that long).
+      run_duration_s: 0.0
       # OBSTACLE STOP: an obstacle in the car's way (obstacle_detection below:
       # inside the lane between the car and the line it follows, widened by
       # corridor_half_width_m, or in the straight corridor without a lane)
@@ -409,7 +410,7 @@
       # Colour of the LEFT edge's cones, string "AUTO", "BLUE" or "YELLOW".
       # "AUTO" works out each colour's side from where its edge lies relative
       # to the car, so either colour may be on the left.
-      left_colour: "BLUE"
+      left_colour: "AUTO"
       # Lane width, metres, positive double (shared default 1.0). Places the
       # centre line when only one edge is found, until both edges have been
       # seen; the width measured with both edges is used after that.
