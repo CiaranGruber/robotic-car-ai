@@ -5,8 +5,10 @@ Note: This module was primarily written by AI with manual review and adjustments
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
+from collections.abc import Container
 from pathlib import Path
 
 
@@ -35,14 +37,21 @@ from matplotlib.backend_bases import CloseEvent, MouseEvent
 from matplotlib.figure import Figure
 from matplotlib.widgets import Button, Slider
 
+from policy.cone_filter.cone_filter import ConeFilterConfig
 from policy.input_output import CarActions, CarObservations, ConeColour
+from scenarios.cone_filter_report import explain_cone_filter, format_cone_filter_report, load_cone_filter_config
 from scenarios.scenario_wrapper import Scenario, ScenarioType
+
+_LOGGER = logging.getLogger(__name__)
 
 _CONE_COLOURS = {
     ConeColour.YELLOW: "#F2C94C",
     ConeColour.BLUE: "#2F80ED",
 }
 """Fill colours for yellow and blue cone markers."""
+
+_REMOVED_CONE_COLOUR = "#EB5757"
+"""Colour of the cross drawn over a cone the cone filter removed."""
 
 _LIDAR_DOT_COLOUR = "#6B7280"
 """Fill colour for body-frame lidar Cartesian returns."""
@@ -156,12 +165,14 @@ def _draw_observations(
     observations: CarObservations,
     *,
     title: str | None = None,
+    removed_cones: Container[int] = (),
 ):
     """Draw one observation frame onto an axes.
 
     :param ax: Axes to draw on. Cleared before drawing.
     :param observations: Observations for one policy step.
     :param title: Optional axes title. Defaults to a body-frame label.
+    :param removed_cones: Indices of the cones the cone filter removed, drawn with a red cross.
     """
     ax.cla()
     ax.set_aspect("equal")
@@ -183,7 +194,7 @@ def _draw_observations(
         )
 
     if observations.cones:
-        for cone in observations.cones:
+        for index, cone in enumerate(observations.cones):
             colour = _CONE_COLOURS[cone.colour]
             px, py = _to_plot(cone.pos.x, cone.pos.y)
             ax.text(
@@ -196,6 +207,17 @@ def _draw_observations(
                 va="center",
                 zorder=2,
             )
+            if index in removed_cones:
+                ax.text(
+                    px,
+                    py,
+                    "✕",
+                    color=_REMOVED_CONE_COLOUR,
+                    fontsize=14,
+                    ha="center",
+                    va="center",
+                    zorder=3,
+                )
 
     ax.text(0.0, 0.0, "C", fontsize=18, ha="center", va="center", zorder=3)
 
@@ -218,17 +240,23 @@ def _draw_observations(
 
 
 class ScenarioRenderer:
-    """Interactive scenario player with fixed axes, play/pause and reverse."""
+    """Interactive scenario player with fixed axes, play/pause and reverse.
 
-    def __init__(self, scenario: Scenario):
+    Each frame's cones are run through the policy's cone filter: removed cones get a red cross, and while playback
+    is paused the current frame's filter result is logged.
+    """
+
+    def __init__(self, scenario: Scenario, cone_filter_config: ConeFilterConfig | None = None):
         """Load every step and build the interactive figure.
 
         :param scenario: Scenario whose steps are loaded and played.
+        :param cone_filter_config: The cone filter settings, or None to read them from config/ai4r_policy.yaml.
         """
         self._scenario = scenario
         self._frames: list[tuple[CarObservations, CarActions]] = list(scenario.steps())
         if not self._frames:
             raise ValueError(f"Scenario has no steps: {scenario.scenario_path}")
+        self._cone_filter_config = cone_filter_config or load_cone_filter_config()
 
         self._index = 0
         self._playing = False
@@ -314,16 +342,30 @@ class ScenarioRenderer:
 
         self._index = index
         observations = self._frames[index][0]
+        reasons = explain_cone_filter(observations.cones, self._cone_filter_config) or []
+        title = self._title_for_index(index)
+        if observations.cones is not None:
+            kept_count = sum(reason is None for reason in reasons)
+            title += f"  |  cones kept {kept_count}/{len(reasons)}"
         _draw_observations(
             self._ax,
             observations,
-            title=self._title_for_index(index),
+            title=title,
+            removed_cones={i for i, reason in enumerate(reasons) if reason is not None},
         )
         self._ax.set_xlim(xlim)
         self._ax.set_ylim(ylim)
         if self._slider.val != index:
             self._slider.set_val(index)
         self._fig.canvas.draw_idle()
+        if not self._playing:
+            self._log_cone_filter()
+
+    def _log_cone_filter(self):
+        """Log the cone filter's result for the current frame."""
+        cones = self._frames[self._index][0].cones
+        _LOGGER.info("%s\n%s", self._title_for_index(self._index), format_cone_filter_report(
+            cones, explain_cone_filter(cones, self._cone_filter_config), self._cone_filter_config))
 
     def _set_playing(self, playing: bool):
         """Start or stop timed playback.
@@ -338,6 +380,7 @@ class ScenarioRenderer:
             self._timer.start()
         else:
             self._timer.stop()
+            self._log_cone_filter()
         self._fig.canvas.draw_idle()
 
     def _step_interval_s(self, from_index: int, to_index: int) -> float:
@@ -385,10 +428,12 @@ class ScenarioRenderer:
         index = int(value)
         if index == self._index:
             return
-        # Scrubbing pauses playback so the user keeps control of position.
-        if self._playing:
-            self._set_playing(False)
+        # Scrubbing pauses playback so the user keeps control of position. The new frame is shown first, so pausing
+        # logs its cone filter result.
+        playing = self._playing
         self._show_frame(index)
+        if playing:
+            self._set_playing(False)
 
     def _on_play_clicked(self, _event: MouseEvent):
         """Toggle play and pause.
