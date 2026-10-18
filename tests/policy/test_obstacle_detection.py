@@ -14,6 +14,7 @@ from policy.control.control import ControlConfig
 from policy.input_output import (CarObservations, LidarCartesian, LidarCartesianPoint, ObservedCarState, PolicyState,
                                  Position, SensorAge)
 from policy.lane_detection.lane_detection import LaneDetectionConfig, detect_lanes
+from policy.memory import CarMemory
 from policy.obstacle_detection.obstacle_detection import (ObstacleDetectionConfig, detect_lane_obstacles,
                                                           detect_obstacles, nearest_in_band)
 from policy.obstacle_detection.obstacles import LaneObstacle, ObstacleDetection
@@ -195,9 +196,9 @@ def test_nearest_in_band_only_counts_objects_reaching_into_it():
 def test_obstacle_beyond_the_stopping_distance_does_not_change_the_drive(points):
     """1 m ahead is beyond the default stopping distance: (0.6 s + 0.05 s) * 0.5 m/s + 0.2 m = 0.53 m."""
     without_lidar = movement_policy()
-    expected = without_lidar.step(observe(lane_cones()))
+    expected = without_lidar.step(observe(lane_cones()), CarMemory())
     policy = movement_policy()
-    actions = policy.step(dataclasses.replace(observe(lane_cones()), lidar_cartesian=lidar(points)))
+    actions = policy.step(dataclasses.replace(observe(lane_cones()), lidar_cartesian=lidar(points)), CarMemory())
     assert (actions.drive_action, actions.steering_action) == (expected.drive_action, expected.steering_action)
     assert without_lidar.obstacles is None and without_lidar.obstacle_distance_m is None
     assert policy.obstacles.path_clear == (not points)
@@ -207,7 +208,7 @@ def test_obstacle_beyond_the_stopping_distance_does_not_change_the_drive(points)
 def drives(policy, points, first):
     """Whether the movement policy drives the car in a straight 1 m lane with lidar returns at the points."""
     observations = dataclasses.replace(observe(lane_cones(), first=first), lidar_cartesian=lidar(points))
-    return policy.step(observations).drive_action > 0.0
+    return policy.step(observations, CarMemory()).drive_action > 0.0
 
 
 def test_obstacle_in_the_lane_stops_the_car_until_a_new_run():
@@ -230,7 +231,7 @@ def test_objects_outside_the_cars_way_do_not_stop_it(points):
 
 def test_without_a_lane_the_straight_corridor_is_checked():
     policy = movement_policy()
-    policy.step(dataclasses.replace(observe([]), lidar_cartesian=lidar(box(AHEAD_M, 0.0))))
+    policy.step(dataclasses.replace(observe([]), lidar_cartesian=lidar(box(AHEAD_M, 0.0))), CarMemory())
     assert policy.lane_obstacles is None
     assert policy.obstacle_distance_m == pytest.approx(1.0, abs=0.02)
 
@@ -256,8 +257,8 @@ def test_a_short_obstacle_stopping_distance_needs_braking():
 def test_obstacle_in_the_lane_brakes_the_car_straight_from_driving():
     policy = MovementPolicy(MpcConfig(), ConeFilterConfig(), ControlConfig(brake_action=0.3))
     near_box = box(CONFIG.car_front_m + 0.4, 0.0, width=0.2)
-    drive = [policy.step(dataclasses.replace(observe(lane_cones(), first=step == 0), lidar_cartesian=lidar(near_box)))
-             .drive_action for step in range(2)]
+    drive = [policy.step(dataclasses.replace(observe(lane_cones(), first=step == 0), lidar_cartesian=lidar(near_box)),
+                         CarMemory()).drive_action for step in range(2)]
     assert drive[0] > 0.0
     assert drive[1] == -0.3
 

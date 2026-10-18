@@ -15,6 +15,7 @@ from policy.input_output import (CarObservations, ConeBatch, ConeColour, ConeDet
                                  LidarCartesianPoint, ObservedCarState, PolicyState, Position, SensorAge, WheelSpeed)
 from policy.lane_detection.lanes import LaneArc, LaneDetection, LaneStatus
 from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
+from policy.memory import CarMemory
 from policy.obstacle_detection.obstacles import LaneObstacle
 from policy.policy_runner import MovementPolicy
 
@@ -247,6 +248,7 @@ def drive_past(lane_width_m, boxes, steps=140, dt=0.1):
     x = y = heading = 0.0
     speed = config.target_speed_m_per_s
     trace = []
+    car_memory = CarMemory()
     for step in range(steps):
         def in_car(px, py):
             dx, dy = px - x, py - y
@@ -261,7 +263,7 @@ def drive_past(lane_width_m, boxes, steps=140, dt=0.1):
         observations = CarObservations(ConeBatch(seen, SensorAge(0.0, None), 0.0), None, None, lidar,
                                        ObservedCarState(None, None, None, WheelSpeed(speed, SensorAge(0.0, None))),
                                        PolicyState(0.0 if step == 0 else dt, step * dt, step == 0))
-        policy.step(observations)
+        policy.step(observations, car_memory)
         mpc = policy.action_policy
         trace.append((x, y, heading, mpc.avoidance_offset_m))
         commanded = mpc.previous_speed_m_per_s
