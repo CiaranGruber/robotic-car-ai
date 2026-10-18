@@ -322,3 +322,17 @@ def test_car_stops_for_a_second_box_too_close_to_move_across_for():
     assert policy.action_policy.stopped_for_obstacle
     assert trace[-1][0] > 3.5 + BOX_LENGTH_M
     assert trace[-1][0] + CAR_FRONT_M < 8.0
+
+
+@pytest.mark.parametrize("gap_m", [1.6, 2.0])
+def test_car_passes_boxes_on_both_edges_on_one_line(gap_m):
+    # As on the car on 15 Oct: a box on each edge of a 1.0 m lane, the second gap_m after the first. The middle line
+    # clears both, but once the second came into view the car stopped beside the first, or once it reached the first
+    # it moved back to that box's own line and then stopped for the second
+    boxes = [(3.5, 0.25, 0.45), (3.5 + BOX_LENGTH_M + gap_m, -0.45, -0.25)]
+    policy, trace = drive_past(1.0, boxes, steps=240)
+    assert not policy.action_policy.stopped_for_obstacle
+    # Both sides stay clear of the boxes' inner faces
+    assert max(left for _, left in sides_beside(trace, boxes[0][0])) < 0.25
+    assert min(right for right, _ in sides_beside(trace, boxes[1][0])) > -0.25
+    assert trace[-1][0] > boxes[1][0] + BOX_LENGTH_M
