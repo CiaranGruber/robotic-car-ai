@@ -14,6 +14,7 @@ from policy.control.control import CarController, ControlConfig
 from policy.input_output import CarActions, CarObservations, ConeBatch
 from policy.lane_detection.lane_detection import LaneDetectionConfig, LaneDetector
 from policy.lane_detection.lanes import LaneDetection
+from policy.memory import CarMemory
 from policy.obstacle_detection.obstacle_detection import (ObstacleDetectionConfig, detect_lane_obstacles,
                                                           detect_obstacles, nearest_in_band)
 from policy.obstacle_detection.obstacles import LaneObstacle, ObstacleDetection
@@ -101,10 +102,11 @@ class MovementPolicy:
         """Distance in metres from the car's front to the nearest obstacle in its way in the latest step, math.inf when
         its way is clear, or None without fresh lidar points."""
 
-    def step(self, observations: CarObservations) -> CarActions:
+    def step(self, observations: CarObservations, memory: CarMemory) -> CarActions:
         """Runs the movement policy for the car using the observations provided to determine the actions to take
 
         :param observations: The observations received by the car
+        :param memory: The memory stored by the car
         :return: The actions for the car to take given the observations
         """
         if self.action_policy_name == "open_space":
