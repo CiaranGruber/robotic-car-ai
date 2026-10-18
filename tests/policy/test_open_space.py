@@ -20,6 +20,7 @@ from policy.control.control import ControlConfig  # noqa: E402
 from policy.input_output import (  # noqa: E402
     CarObservations, ConeBatch, ConeColour, ConeDetection, ObservedCarState, PolicyState, Position, RcInput,
     SensorAge, WheelSpeed)
+from policy.memory import CarMemory  # noqa: E402
 from policy.policy_runner import MovementPolicy  # noqa: E402
 
 FORWARDS = (0.6, 0.0)
@@ -203,7 +204,7 @@ def test_movement_policy_open_space_drives_round_a_cone_within_the_drive_limit()
     """The whole chain: plausible cones, open-space policy, then control."""
     control_config = ControlConfig()
     movement = MovementPolicy(MpcConfig(), ConeFilterConfig(), control_config, OpenSpaceConfig(), "open_space")
-    actions = movement.step(observe(cones=[cone(1.0, 0.1, ConeColour.BLUE)], first_step=True, wheel_speed=0.3))
+    actions = movement.step(observe(cones=[cone(1.0, 0.1, ConeColour.BLUE)], first_step=True, wheel_speed=0.3), CarMemory())
     assert 0.0 < actions.drive_action <= control_config.max_drive_action
     assert actions.steering_action > control_config.steering_centre_action  # right, away from the cone (car 20 map)
     assert actions.debug1 < 0.0  # the chosen heading in degrees
@@ -212,7 +213,7 @@ def test_movement_policy_open_space_drives_round_a_cone_within_the_drive_limit()
 
 def test_movement_policy_open_space_stops_when_the_rc_drive_is_released():
     movement = MovementPolicy(MpcConfig(), ConeFilterConfig(), ControlConfig(), OpenSpaceConfig(), "open_space")
-    actions = movement.step(observe(cones=[], rc=(0.0, 0.0), first_step=True))
+    actions = movement.step(observe(cones=[], rc=(0.0, 0.0), first_step=True), CarMemory())
     assert actions.drive_action == 0.0 and actions.steering_action == ControlConfig().steering_centre_action
     assert actions.debug2 == float(OpenSpaceStatus.WAITING_FOR_RC)
 

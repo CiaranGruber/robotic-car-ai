@@ -113,6 +113,16 @@ class _Group:
     """The line beside them, in metres left of the lane centre, or None when no gap beside them is wide enough."""
     locked: bool
     """Whether the car's front has reached one of them, so the side it passes them on no longer changes."""
+    lowest_m: float | None = None
+    """Lowest line in metres left of the lane centre that still keeps the clearances beside them, or None."""
+    highest_m: float | None = None
+    """Highest such line, or None."""
+
+    def allows(self, offset_m: float) -> bool:
+        """
+        :return: Whether a line offset_m left of the lane centre keeps the clearances beside them.
+        """
+        return self.lowest_m is not None and self.lowest_m <= offset_m <= self.highest_m
 
 
 class LaneAvoidance:
@@ -233,6 +243,11 @@ class LaneAvoidance:
             if group.offset_m is None:
                 # No room beside it: it does not change the line, and MpcPolicy stops if it is in the car's way
                 continue
+            # Close behind the previous group: stay on its line when that line also clears this group, so the car
+            # does not ramp across the lane and back between them
+            if planned and group.allows(planned[-1].offset_m) and not _can_join(planned[-1], group, usual_m,
+                                                                              curvature_room):
+                group = dataclasses.replace(group, offset_m=planned[-1].offset_m)
             # Too close to the previous group to ramp between them: pass both on one line, or drop the later one
             while planned and not _can_join(planned[-1], group, usual_m, curvature_room):
                 if planned[-1].locked:
@@ -298,13 +313,19 @@ class LaneAvoidance:
                 chosen = current
         if chosen is None:
             offset_m = None
+        elif locked and previous_m is not None and chosen[2] <= previous_m <= chosen[3]:
+            # Beside them on a line that still clears them: keep it, rather than move to the middle of the gap, which
+            # changes as the obstacles ahead are passed or come into view
+            offset_m = previous_m
         elif chosen[2] <= chosen[3]:
             # The middle of the free gap, moved only as far as the clearances need
             offset_m = min(max((chosen[0] + chosen[1]) / 2.0, chosen[2]), chosen[3])
         else:
             # Beside them with the gap now too narrow: hold the line rather than move it into them
             offset_m = previous_m
-        return _Group(obstacles, start_m, end_m, offset_m, locked)
+        if chosen is None or chosen[2] > chosen[3]:
+            return _Group(obstacles, start_m, end_m, offset_m, locked)
+        return _Group(obstacles, start_m, end_m, offset_m, locked, chosen[2], chosen[3])
 
 
 def _moved_back(obstacle: LaneObstacle, driven_m: float) -> LaneObstacle:

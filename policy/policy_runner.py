@@ -14,6 +14,7 @@ from policy.control.control import CarController, ControlConfig
 from policy.input_output import CarActions, CarObservations, ConeBatch
 from policy.lane_detection.lane_detection import LaneDetectionConfig, LaneDetector
 from policy.lane_detection.lanes import LaneDetection
+from policy.memory import CarMemory
 from policy.obstacle_detection.obstacle_detection import (ObstacleDetectionConfig, detect_lane_obstacles,
                                                           detect_obstacles, nearest_in_band)
 from policy.obstacle_detection.obstacles import LaneObstacle, ObstacleDetection
@@ -101,10 +102,11 @@ class MovementPolicy:
         """Distance in metres from the car's front to the nearest obstacle in its way in the latest step, math.inf when
         its way is clear, or None without fresh lidar points."""
 
-    def step(self, observations: CarObservations) -> CarActions:
+    def step(self, observations: CarObservations, memory: CarMemory) -> CarActions:
         """Runs the movement policy for the car using the observations provided to determine the actions to take
 
         :param observations: The observations received by the car
+        :param memory: The memory stored by the car
         :return: The actions for the car to take given the observations
         """
         if self.action_policy_name == "open_space":
@@ -172,14 +174,17 @@ class MovementPolicy:
                 return nearest_in_band(self.lane_obstacles, min(car_m, line_m) - half_width_m,
                                        max(car_m, line_m) + half_width_m)
             lowest_m, highest_m = path.offset_range(0.0, self.avoidance.config.lookahead_m)
-            margin_m = half_width_m + max(0.0, lowest_m - car_m, car_m - highest_m)
+            # Widen the band towards the car's side only: a car right of the line sweeps more of the lane to the right
+            # while it moves back onto it, but no more to the left
+            right_margin_m = half_width_m + max(0.0, lowest_m - car_m)
+            left_margin_m = half_width_m + max(0.0, car_m - highest_m)
             # base_link is beside an obstacle's near side when the car's front reaches it, and a car length past its
             # far side when the rear leaves it
             car_length_m = self.avoidance.car_length_m
             in_way = math.inf
             for obstacle in self.lane_obstacles:
                 right_m, left_m = path.offset_range(obstacle.distance_m, obstacle.far_distance_m + car_length_m)
-                in_way = min(in_way, nearest_in_band([obstacle], right_m - margin_m, left_m + margin_m))
+                in_way = min(in_way, nearest_in_band([obstacle], right_m - right_margin_m, left_m + left_margin_m))
             return in_way
         if self.obstacles is not None:
             return self.obstacles.in_path_distance_m

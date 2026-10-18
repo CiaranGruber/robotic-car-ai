@@ -4,9 +4,11 @@ import json
 import logging
 from dataclasses import dataclass, replace
 from datetime import datetime
-from enum import IntEnum
+from enum import IntEnum, Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from policy.memory import CarMemory
 
 if TYPE_CHECKING:
     from policy.input_output import CarActions, CarObservations
@@ -27,6 +29,9 @@ OBSERVATIONS_LOG_SUFFIX = "_observations.json"
 
 ACTIONS_LOG_SUFFIX = "_actions.json"
 """Filename suffix of the actions data log, after the stem."""
+
+MEMORY_LOG_SUFFIX = "_memory.json"
+"""Filename suffix of the memory data log, after the stem."""
 
 CONFIG_LOG_SUFFIX = "_config.json"
 """Filename suffix of the policy settings saved with a data-log pair, after the stem."""
@@ -60,21 +65,52 @@ _LOG_LEVELS = {
 class LoggingParameters:
     """Startup settings for policy data logging and standard Python logging.
 
-    Data logging (CarObservations / CarActions) is separate from standard Python logging.
+    Data logging (CarObservations, CarMemory and CarActions) is separate from standard Python
+    logging.
     logging_folder is required when is_data_logging or log_to_file is true.
     """
     is_data_logging: bool
-    """When true, record CarObservations and CarActions each policy step."""
-    logging_folder: str
+    """When true, record CarObservations, CarMemory and CarActions each policy step."""
+    log_folder: Path
     """Directory for data-log and/or general Python log files when either is enabled."""
     log_level: LogLevel
     """Python logging level."""
     log_to_file: bool
     """When true, send general Python logs to a timestamped file under logging_folder."""
-    observations_log_filename: str | None
-    """Observations JSON filename for the current active run, otherwise None."""
-    actions_log_filename: str | None
-    """Actions JSON filename for the current active run, otherwise None."""
+    stem: str | None
+    """The data log stem if generated"""
+
+    @property
+    def started(self) -> bool:
+        return self.stem is not None
+
+    @property
+    def observations_log_path(self) -> Path:
+        """Observations JSON filename for the current active run, otherwise None."""
+        if not self.started:
+            raise ValueError("Attempted to get the observations log path but logging has not started")
+        return self.log_folder / f"{self.stem}{OBSERVATIONS_LOG_SUFFIX}"
+
+    @property
+    def memory_log_path(self) -> Path:
+        """Memory JSON filename for the current active run, otherwise None."""
+        if not self.started:
+            raise ValueError("Attempted to get the memory log path but logging has not started")
+        return self.log_folder / f"{self.stem}{MEMORY_LOG_SUFFIX}"
+
+    @property
+    def actions_log_path(self) -> Path:
+        """Actions JSON filename for the current active run, otherwise None."""
+        if not self.started:
+            raise ValueError("Attempted to get the actions log path but logging has not started")
+        return self.log_folder / f"{self.stem}{ACTIONS_LOG_SUFFIX}"
+
+    @property
+    def settings_log_path(self) -> Path:
+        """Settings JSON filename for the current active run, otherwise None."""
+        if not self.started:
+            raise ValueError("Attempted to get the settings log path but logging has not started")
+        return self.log_folder / f"{self.stem}{CONFIG_LOG_SUFFIX}"
 
 
 def _is_usable_log_folder(logging_folder: str) -> bool:
@@ -124,11 +160,10 @@ def validate_parameters(
         folder = DEFAULT_LOG_FOLDER
     return LoggingParameters(
         is_data_logging=bool(is_data_logging),
-        logging_folder=folder,
+        log_folder=Path(folder),
         log_level=_resolve_log_level(log_level),
         log_to_file=bool(log_to_file),
-        observations_log_filename=None,
-        actions_log_filename=None,
+        stem=None,
     )
 
 
@@ -249,47 +284,42 @@ def setup_logging(logging_params: LoggingParameters):
     :param logging_params: The parameters for logging.
     """
     if logging_params.log_to_file or logging_params.is_data_logging:
-        Path(logging_params.logging_folder).mkdir(parents=True, exist_ok=True)
+        Path(logging_params.log_folder).mkdir(parents=True, exist_ok=True)
 
     config: dict = {"level": logging_params.log_level}
     if logging_params.log_to_file:
         config["filename"] = str(
-            Path(logging_params.logging_folder) / _get_general_log_filename()
+            Path(logging_params.log_folder) / _get_general_log_filename()
         )
     logging.basicConfig(**config)
 
 
 def start_data_log(logging_params: LoggingParameters,
                    settings: dict[str, Any] | None = None) -> LoggingParameters:
-    """Open a new observations and actions log named for the current local time.
+    """Open a new observations, memory and actions log named for the current local time.
 
-    Both files share one stem, the time to the second, and an existing pair is never replaced
+    The three files share one stem, the time to the second, and an existing set is never replaced
     (see _new_data_log_stem). When data logging is disabled, the parameters are returned
     unchanged and nothing is written.
 
     :param logging_params: Validated logging parameters.
     :param settings: The policy settings this run uses, by parameter name, or None. They are
-        saved as <stem>_config.json beside the pair, so each recording keeps the settings it was
-        made with even after the YAML changes. Values must be JSON-serialisable.
+        saved at settings_log_path, so each recording keeps the settings it was made with even
+        after the YAML changes. Values must be JSON-serialisable.
     :return: Parameters whose data-log filenames match the current local time.
     """
     if not logging_params.is_data_logging:
         return logging_params
-    folder = Path(logging_params.logging_folder)
-    folder.mkdir(parents=True, exist_ok=True)
-    stem = _new_data_log_stem(folder)
-    observations_log_filename = f"{stem}{OBSERVATIONS_LOG_SUFFIX}"
-    actions_log_filename = f"{stem}{ACTIONS_LOG_SUFFIX}"
+    logging_params.log_folder.mkdir(parents=True, exist_ok=True)
+    stem = _new_data_log_stem(logging_params.log_folder)
+    params = replace(logging_params, stem=stem)
     if settings is not None:
-        (folder / f"{stem}{CONFIG_LOG_SUFFIX}").write_text(
-            json.dumps(settings, ensure_ascii=False, indent="\t", sort_keys=True) + "\n", encoding="utf-8")
-    _init_json_array_file(folder / observations_log_filename)
-    _init_json_array_file(folder / actions_log_filename)
-    return replace(
-        logging_params,
-        observations_log_filename=observations_log_filename,
-        actions_log_filename=actions_log_filename,
-    )
+        params.settings_log_path.write_text(json.dumps(settings, ensure_ascii=False, indent="\t", sort_keys=True) + "\n", encoding="utf-8")
+    # Init arrays
+    _init_json_array_file(params.observations_log_path)
+    _init_json_array_file(params.memory_log_path)
+    _init_json_array_file(params.actions_log_path)
+    return params
 
 
 def log_input(observations: CarObservations, logging_params: LoggingParameters):
@@ -298,10 +328,20 @@ def log_input(observations: CarObservations, logging_params: LoggingParameters):
     :param observations: The observations passed to the policy for this step.
     :param logging_params: The parameters for logging.
     """
-    if not logging_params.is_data_logging or not logging_params.observations_log_filename:
+    if not logging_params.started:
         return
-    path = Path(logging_params.logging_folder) / logging_params.observations_log_filename
-    _write_log_record(path, observations.serialise(), "observations")
+    _write_log_record(logging_params.observations_log_path, observations.serialise(), "observations")
+
+
+def log_memory(memory: CarMemory, logging_params: LoggingParameters):
+    """Record the car memory for one step.
+
+    :param memory: The car memory at this step. The current set, from memory.data, is written.
+    :param logging_params: The parameters for logging.
+    """
+    if not logging_params.started:
+        return
+    _write_log_record(logging_params.memory_log_path, memory.data.serialise(), "memory")
 
 
 def log_output(actions: CarActions, logging_params: LoggingParameters):
@@ -310,7 +350,6 @@ def log_output(actions: CarActions, logging_params: LoggingParameters):
     :param actions: The actions chosen by the policy for this step.
     :param logging_params: The parameters for logging.
     """
-    if not logging_params.is_data_logging or not logging_params.actions_log_filename:
+    if not logging_params.started:
         return
-    path = Path(logging_params.logging_folder) / logging_params.actions_log_filename
-    _write_log_record(path, actions.serialise(), "actions")
+    _write_log_record(logging_params.actions_log_path, actions.serialise(), "actions")

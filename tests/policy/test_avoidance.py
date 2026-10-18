@@ -15,6 +15,7 @@ from policy.input_output import (CarObservations, ConeBatch, ConeColour, ConeDet
                                  LidarCartesianPoint, ObservedCarState, PolicyState, Position, SensorAge, WheelSpeed)
 from policy.lane_detection.lanes import LaneArc, LaneDetection, LaneStatus
 from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
+from policy.memory import CarMemory
 from policy.obstacle_detection.obstacles import LaneObstacle
 from policy.policy_runner import MovementPolicy
 
@@ -247,6 +248,7 @@ def drive_past(lane_width_m, boxes, steps=140, dt=0.1):
     x = y = heading = 0.0
     speed = config.target_speed_m_per_s
     trace = []
+    car_memory = CarMemory()
     for step in range(steps):
         def in_car(px, py):
             dx, dy = px - x, py - y
@@ -261,7 +263,7 @@ def drive_past(lane_width_m, boxes, steps=140, dt=0.1):
         observations = CarObservations(ConeBatch(seen, SensorAge(0.0, None), 0.0), None, None, lidar,
                                        ObservedCarState(None, None, None, WheelSpeed(speed, SensorAge(0.0, None))),
                                        PolicyState(0.0 if step == 0 else dt, step * dt, step == 0))
-        policy.step(observations)
+        policy.step(observations, car_memory)
         mpc = policy.action_policy
         trace.append((x, y, heading, mpc.avoidance_offset_m))
         commanded = mpc.previous_speed_m_per_s
@@ -320,3 +322,17 @@ def test_car_stops_for_a_second_box_too_close_to_move_across_for():
     assert policy.action_policy.stopped_for_obstacle
     assert trace[-1][0] > 3.5 + BOX_LENGTH_M
     assert trace[-1][0] + CAR_FRONT_M < 8.0
+
+
+@pytest.mark.parametrize("gap_m", [1.6, 2.0])
+def test_car_passes_boxes_on_both_edges_on_one_line(gap_m):
+    # As on the car on 15 Oct: a box on each edge of a 1.0 m lane, the second gap_m after the first. The middle line
+    # clears both, but once the second came into view the car stopped beside the first, or once it reached the first
+    # it moved back to that box's own line and then stopped for the second
+    boxes = [(3.5, 0.25, 0.45), (3.5 + BOX_LENGTH_M + gap_m, -0.45, -0.25)]
+    policy, trace = drive_past(1.0, boxes, steps=240)
+    assert not policy.action_policy.stopped_for_obstacle
+    # Both sides stay clear of the boxes' inner faces
+    assert max(left for _, left in sides_beside(trace, boxes[0][0])) < 0.25
+    assert min(right for right, _ in sides_beside(trace, boxes[1][0])) > -0.25
+    assert trace[-1][0] > boxes[1][0] + BOX_LENGTH_M

@@ -73,10 +73,11 @@ from policy.data_logging.data_logging import (
     DEFAULT_LOG_LEVEL_NAME,
     setup_logging,
     start_data_log,
-    validate_parameters,
+    validate_parameters, log_memory,
 )
 from policy.input_output import ConeColour, convert_observations, convert_actions
 from policy.lane_detection.lane_detection import LaneDetectionConfig
+from policy.memory import CarMemory
 from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
 from policy.policy_runner import MovementPolicy
 
@@ -226,6 +227,8 @@ class PolicyNode(Node):
         self._validate_parameters()
         self.add_on_set_parameters_callback(self._reject_clock_change)
         setup_logging(self.logging_params)
+
+        self.memory = CarMemory()
 
         # TO ADD A STUDENT PARAMETER, follow these THREE steps:
         # 1. Declare it here, for example:
@@ -1115,8 +1118,10 @@ class PolicyNode(Node):
             is_first_policy_step=is_first_policy_step,
             logging_params=self.logging_params,
         )
-        actions = self.movement_policy.step(observations)
+        log_memory(self.memory, self.logging_params)
+        actions = self.movement_policy.step(observations, self.memory)
         drive_action, steering_action, camera_pan_action, debug1, debug2 = convert_actions(actions, self.logging_params)
+        self.memory.step()
 
         # =====================================
         # END OF: INSERT POLICY CODE ABOVE HERE
