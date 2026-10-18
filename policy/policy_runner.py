@@ -174,14 +174,17 @@ class MovementPolicy:
                 return nearest_in_band(self.lane_obstacles, min(car_m, line_m) - half_width_m,
                                        max(car_m, line_m) + half_width_m)
             lowest_m, highest_m = path.offset_range(0.0, self.avoidance.config.lookahead_m)
-            margin_m = half_width_m + max(0.0, lowest_m - car_m, car_m - highest_m)
+            # Widen the band towards the car's side only: a car right of the line sweeps more of the lane to the right
+            # while it moves back onto it, but no more to the left
+            right_margin_m = half_width_m + max(0.0, lowest_m - car_m)
+            left_margin_m = half_width_m + max(0.0, car_m - highest_m)
             # base_link is beside an obstacle's near side when the car's front reaches it, and a car length past its
             # far side when the rear leaves it
             car_length_m = self.avoidance.car_length_m
             in_way = math.inf
             for obstacle in self.lane_obstacles:
                 right_m, left_m = path.offset_range(obstacle.distance_m, obstacle.far_distance_m + car_length_m)
-                in_way = min(in_way, nearest_in_band([obstacle], right_m - margin_m, left_m + margin_m))
+                in_way = min(in_way, nearest_in_band([obstacle], right_m - right_margin_m, left_m + left_margin_m))
             return in_way
         if self.obstacles is not None:
             return self.obstacles.in_path_distance_m
