@@ -23,9 +23,9 @@ def test_runs_started_in_the_same_second_get_separate_matching_pairs(tmp_path, m
     first = start_data_log(params)
     (tmp_path / first.observations_log_filename).write_text('[\n"first run"\n]\n')
     second = start_data_log(params)
-    assert (first.observations_log_filename, first.actions_log_filename) == (
+    assert (first.observations_log_filename, first.actions_log_path) == (
         "2026-10-12_14-03-27_observations.json", "2026-10-12_14-03-27_actions.json")
-    assert (second.observations_log_filename, second.actions_log_filename) == (
+    assert (second.observations_log_filename, second.actions_log_path) == (
         "2026-10-12_14-03-27_2_observations.json", "2026-10-12_14-03-27_2_actions.json")
     # The first run's data is kept
     assert json.loads((tmp_path / first.observations_log_filename).read_text()) == ["first run"]
