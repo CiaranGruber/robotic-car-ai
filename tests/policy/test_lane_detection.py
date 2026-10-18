@@ -227,6 +227,36 @@ def test_detector_noise_keeps_a_curve():
     assert statistics.median(curvatures) == pytest.approx(0.5, rel=0.15)
 
 
+@pytest.mark.parametrize("radius_m", [1.5, 2.0, 3.0])
+def test_cones_of_another_part_of_the_track_do_not_bend_the_lane(radius_m):
+    cones = lane_cones(radius_m, 1.0, offset_m=0.1, heading_deg=5.0, width_m=0.9, spacing_m=0.3, length_m=2.4)
+    # Two yellow cones of the track further on, off to the right ahead. Fitted with the lane, they pulled it into a
+    # sharp right turn at 70 degrees to the car (2 m radius) or gave no lane (1.5 m) before RANSAC.
+    elsewhere = [ConeDetection(Position(x, y, 0.05), YELLOW, 0.9) for x, y in ((2.2, -1.2), (2.45, -0.7))]
+    lane = detect_lanes(observe(cones + elsewhere), CURVED)
+    assert lane.status == LaneStatus.BOTH_EDGES
+    assert lane.path_curvature_per_m == pytest.approx(1.0 / radius_m, rel=0.05)
+    assert lane.heading_error_rad == pytest.approx(math.radians(5.0), abs=math.radians(1.0))
+    assert lane.lateral_error_m == pytest.approx(0.1, abs=0.01)
+    assert lane.right_edge.cone_count == sum(cone.colour == YELLOW for cone in cones)
+
+
+def test_recorded_left_curve_with_cones_of_another_part_of_the_track():
+    # Car 20, 2026-10-15: filtered cones read off a plot of one logged batch (about 2 cm accuracy). The yellow row
+    # crosses ahead of the car to the left with the blue row inside it, and two yellow cones far right belong to
+    # another part of the track. Fitting all the cones first gave a right turn of -0.89 1/m at -71 degrees.
+    positions = {YELLOW: [(0.94, -0.68), (1.24, -0.60), (1.70, -0.28), (1.71, 0.00), (2.18, -1.20), (2.45, -0.70),
+                          (1.78, 0.38), (2.31, 0.82)],
+                 BLUE: [(0.42, 0.38), (0.76, 0.48), (1.05, 0.76)]}
+    cones = [ConeDetection(Position(x, y, 0.05), colour, 0.9) for colour, row in positions.items() for x, y in row]
+    lane = detect_lanes(observe(cones), CURVED)
+    assert lane.status == LaneStatus.BOTH_EDGES
+    assert lane.path_curvature_per_m > 0.3 and abs(lane.heading_error_rad) < math.radians(30.0)
+    assert lane.right_edge.colour == YELLOW
+    far_right = [(x, y) for x, y in positions[YELLOW] if y < -0.65 and x > 2.0]
+    assert all(abs(lane.right_edge.arc.signed_distance(x, y)) > CURVED.outlier_distance_m for x, y in far_right)
+
+
 # ------------------------------------------------------------------------------------------------
 # Types
 # ------------------------------------------------------------------------------------------------

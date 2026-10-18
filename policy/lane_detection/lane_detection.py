@@ -9,19 +9,23 @@ arcs around one centre point (concentric arcs), which is what a lane of constant
 curvature looks like. With curvature 0 they are parallel straight lines. Fitting both edges together lets a long row
 steady a short one, and an edge with too few cones to give a direction alone still gives its offset.
 
-The fit's unknowns are the lane's direction and curvature beside the car, and each edge's sideways offset. It
-minimises the cones' distances from their edge at right angles, with a robust loss so a few misplaced cones count
-less, then drops cones farther than config.outlier_distance_m from their edge and fits again. A small penalty on
-curvature keeps detector noise on a straight lane from looking like a curve. By default the curvature is fixed at 0
+The fit's unknowns are the lane's direction and curvature beside the car, and each edge's sideways offset. First the
+cones that agree on one lane are found by RANSAC: small samples of cones each propose a lane, and the lane that the most
+cones lie within config.outlier_distance_m of wins. Misdetected cones, or cones of another part of the track in view,
+then cannot pull the fit away from the cones that agree, which a fit of all the cones followed by dropping the farthest
+does when they pull hard enough. The agreeing cones are then fitted, minimising their distances from their edge at
+right angles with a robust loss, and every cone is checked against that fit again. A small penalty on curvature keeps
+detector noise on a straight lane from looking like a curve. By default the curvature is fixed at 0
 (config.max_curvature_per_m), for straight Stage 1 lanes.
 
 detect_lanes keeps no state between policy steps. LaneDetector wraps it and remembers only the lane width measured while
 both edges are seen, to place the centre line when one edge is seen, so lanes of any width work without setting their
-width. The work is bounded by the batch size and a fixed number of solver iterations, so it is safe to run inside the
-real-time policy step.
+width. The work is bounded by the batch size, a fixed number of RANSAC samples and a fixed number of solver iterations,
+so it is safe to run inside the real-time policy step.
 """
 from __future__ import annotations
 
+import itertools
 import math
 from dataclasses import dataclass
 
@@ -43,7 +47,12 @@ MAX_SOLVER_EVALUATIONS = 50
 """Most evaluations of the fit's distances per solve, which bounds the calculation time."""
 
 MAX_REFITS = 2
-"""Most times the fit is repeated after dropping outlier cones."""
+"""Most times the fit is repeated after the cones within config.outlier_distance_m of it change."""
+
+RANSAC_SAMPLES = 200
+"""Most samples of cones RANSAC draws for each shape of proposed lane (straight or curved), which bounds the
+calculation time. With fewer possible samples, every one is tried; otherwise a fixed random selection
+is, so a cone batch always gives the same lane."""
 
 WIDTH_SMOOTHING = 0.2
 """Fraction of the difference to each newly measured lane width that LaneDetector's remembered width moves by."""
@@ -92,8 +101,9 @@ class LaneDetectionConfig:
     real curves seen over few cones.
     """
     outlier_distance_m: float = 0.15
-    """Cones farther than this in metres from their fitted edge are left out, and the edges fitted again. Must be
-    positive. Keep it above the detector's position noise but well below half the lane width."""
+    """Cones within this distance in metres of their edge agree with a lane. RANSAC keeps the proposed lane the most
+    cones agree with, and cones farther from the fitted edges are left out. Must be positive. Keep it above the
+    detector's position noise but well below half the lane width."""
 
     def __post_init__(self):
         if self.left_colour not in ("AUTO", "BLUE", "YELLOW"):
@@ -227,29 +237,183 @@ def _fit_concentric_edges(
         config: LaneDetectionConfig) -> tuple[LaneArc, dict[ConeColour, float], dict[ConeColour, list[ConeDetection]]] | None:
     """Fits each row as an arc at its own sideways offset from one reference arc, which starts at the car's origin.
 
+    The cones that RANSAC finds agreeing on one lane (_consensus) are fitted. Every cone is then checked against the
+    fit, so a cone the first choice left out can come back, and the fit is repeated until the agreeing cones no longer
+    change.
+
     :param rows: The cones of each colour.
     :param config: The lane detection settings.
     :return: The reference arc, each found edge's offset from it in metres (positive to the left), and the cones of
-        each found edge left after dropping outliers; or None when no edge has enough cones to give a direction.
+        each found edge within config.outlier_distance_m of it; or None when no edge has enough agreeing cones to give a
+        direction, or the agreeing cones still change after MAX_REFITS refits.
     """
+    rows = {colour: row for colour, row in rows.items() if len(row) >= config.min_cones_per_edge}
+    if not any(_span(row) >= MIN_DIRECTION_SPAN_M for row in rows.values()):
+        return None
+    colours = list(rows)
+    cones = [cone for colour in colours for cone in rows[colour]]
+    xs = np.array([cone.pos.x for cone in cones])
+    ys = np.array([cone.pos.y for cone in cones])
+    edge_index = np.array([i for i, colour in enumerate(colours) for _ in rows[colour]])
+    agree = _consensus(xs, ys, edge_index, len(colours), config)
     for _ in range(MAX_REFITS + 1):
-        rows = {colour: row for colour, row in rows.items() if len(row) >= config.min_cones_per_edge}
-        if not any(_span(row) >= MIN_DIRECTION_SPAN_M for row in rows.values()):
+        # An edge with too few agreeing cones is not found
+        found = [i for i in range(len(colours))
+                 if np.count_nonzero(agree & (edge_index == i)) >= config.min_cones_per_edge]
+        agree = agree & np.isin(edge_index, found)
+        kept = {colours[i]: [cone for cone, keep, edge in zip(cones, agree, edge_index) if keep and edge == i]
+                for i in found}
+        if not any(_span(row) >= MIN_DIRECTION_SPAN_M for row in kept.values()):
             return None
-        colours = list(rows)
-        xs = np.array([cone.pos.x for colour in colours for cone in rows[colour]])
-        ys = np.array([cone.pos.y for colour in colours for cone in rows[colour]])
-        edge_index = np.array([i for i, colour in enumerate(colours) for _ in rows[colour]])
-        solution = _solve(xs, ys, edge_index, len(colours), config)
-        heading, curvature, offsets = solution[0], solution[1], solution[2:]
-        reference = LaneArc(0.0, 0.0, float(heading), float(curvature))
-        distances = np.array([reference.signed_distance(x, y) for x, y in zip(xs, ys)]) - offsets[edge_index]
-        inlier = np.abs(distances) <= config.outlier_distance_m
-        if inlier.all():
-            return reference, {colour: float(offsets[i]) for i, colour in enumerate(colours)}, rows
-        rows = {colour: [cone for cone, keep in zip(rows[colour], inlier[edge_index == i]) if keep]
-                for i, colour in enumerate(colours)}
+        solution = _solve(xs[agree], ys[agree], np.searchsorted(found, edge_index[agree]), len(found), config)
+        offsets = np.full(len(colours), np.nan)
+        offsets[found] = solution[2:]
+        distances = _distances(solution[:1], solution[1:2], offsets[None, :], xs, ys, edge_index)[0]
+        with np.errstate(invalid="ignore"):
+            now_agree = np.abs(distances) <= config.outlier_distance_m
+        if np.array_equal(now_agree, agree):
+            reference = LaneArc(0.0, 0.0, float(solution[0]), float(solution[1]))
+            return reference, {colours[i]: float(offsets[i]) for i in found}, kept
+        agree = now_agree
     return None
+
+
+def _consensus(xs: np.ndarray, ys: np.ndarray, edge_index: np.ndarray, edge_count: int,
+               config: LaneDetectionConfig) -> np.ndarray:
+    """Finds the cones that agree on one lane, by RANSAC.
+
+    Small samples of cones each propose a lane passing exactly through them (_proposals): parallel lines, and also
+    concentric circles when curves are allowed. Every sample has cones of every edge, so two tidy rows a doubtful width
+    apart still give no lane, rather than one of them being dropped. A proposal must be a plausible lane: within the
+    curvature limit, with no edge past the turning centre, and with both edges a plausible width apart. The proposal
+    with the most cones within config.outlier_distance_m of their edge wins, and of those, the one they lie closest to.
+
+    :param xs: Cone distances forwards in metres.
+    :param ys: Cone distances left in metres.
+    :param edge_index: Which edge each cone belongs to, from 0 to edge_count - 1.
+    :param edge_count: Number of edges.
+    :param config: The lane detection settings.
+    :return: Whether each cone agrees with the winning proposal; all True when no proposal is plausible, so the fit
+        starts from every cone.
+    """
+    # A fixed seed: the same cone batch always gives the same lane
+    rng = np.random.default_rng(0)
+    shapes = (False, True) if config.max_curvature_per_m > 0.0 else (False,)
+    proposals = np.vstack([_proposals(xs, ys, edge_index, edge_count, curved, rng) for curved in shapes])
+    heading, curvature, offsets = proposals[:, 0], proposals[:, 1], proposals[:, 2:]
+    # Samples with all their cones on one circle around the car's origin give an infinite curvature: not plausible
+    with np.errstate(invalid="ignore"):
+        plausible = ((np.abs(heading) < math.pi / 2.0) & (np.abs(curvature) <= config.max_curvature_per_m)
+                     & np.all(curvature[:, None] * offsets < 0.9, axis=1))
+        if edge_count == 2:
+            width = np.abs(offsets[:, 0] - offsets[:, 1])
+            plausible &= (width >= config.min_lane_width_m) & (width <= config.max_lane_width_m)
+        distances = _distances(heading, curvature, offsets, xs, ys, edge_index)
+        agree = np.abs(distances) <= config.outlier_distance_m
+    if not plausible.any():
+        return np.ones(len(xs), dtype=bool)
+    counts = np.where(plausible, np.count_nonzero(agree, axis=1), -1)
+    spread = np.where(agree, distances, 0.0) ** 2
+    best = np.lexsort((spread.sum(axis=1), -counts))[0]
+    return agree[best]
+
+
+def _proposals(xs: np.ndarray, ys: np.ndarray, edge_index: np.ndarray, edge_count: int, curved: bool,
+               rng: np.random.Generator) -> np.ndarray:
+    """Proposes lanes through samples of cones, each passing exactly through the cones of its sample.
+
+    A straight proposal solves y = slope * x + intercept of each cone's edge, from two cones of one edge and one of each
+    other. A curved one solves x^2 + y^2 = 2 a x + 2 b y + d of each cone's edge, concentric circles around (a, b), from
+    one cone more. Both are linear, so every sample is solved at once.
+
+    :param xs: Cone distances forwards in metres.
+    :param ys: Cone distances left in metres.
+    :param edge_index: Which edge each cone belongs to, from 0 to edge_count - 1.
+    :param edge_count: Number of edges.
+    :param curved: Whether to propose concentric circles instead of parallel lines.
+    :param rng: Chooses the samples when there are more than RANSAC_SAMPLES.
+    :return: One row per proposal: [heading in radians, curvature in 1/m, offset of each edge in metres].
+    """
+    size = edge_count + (2 if curved else 1)
+    samples = _samples([np.flatnonzero(edge_index == edge) for edge in range(edge_count)], size, rng)
+    sample_xs, sample_ys = xs[samples], ys[samples]
+    one_hot = (edge_index[samples][..., None] == np.arange(edge_count)).astype(float)
+    if curved:
+        matrix = np.concatenate([2.0 * sample_xs[..., None], 2.0 * sample_ys[..., None], one_hot], axis=2)
+        target = sample_xs ** 2 + sample_ys ** 2
+    else:
+        matrix = np.concatenate([sample_xs[..., None], one_hot], axis=2)
+        target = sample_ys
+    # Cones on one line, or one circle, of an edge do not fix a lane
+    solvable = np.abs(np.linalg.det(matrix)) > 1e-9
+    solution = np.linalg.solve(matrix[solvable], target[solvable][..., None])[..., 0]
+    if curved:
+        a, b = solution[:, 0], solution[:, 1]
+        squared_radii = solution[:, 2:] + (a * a + b * b)[:, None]
+        real = np.all(squared_radii > 0.0, axis=1)
+        a, b, squared_radii = a[real], b[real], squared_radii[real]
+        centre_distance = np.hypot(a, b)
+        # As in _solve: the lane ahead runs at right angles to the line from the car to the centre
+        turn = np.where(b >= 0.0, 1.0, -1.0)
+        with np.errstate(divide="ignore"):
+            curvature = turn / centre_distance
+        return np.column_stack([np.arctan2(-turn * a, turn * b), curvature,
+                                turn[:, None] * (centre_distance[:, None] - np.sqrt(squared_radii))])
+    heading = np.arctan(solution[:, 0])
+    return np.column_stack([heading, np.zeros(len(heading)), solution[:, 1:] * np.cos(heading)[:, None]])
+
+
+def _samples(members: list[np.ndarray], size: int, rng: np.random.Generator) -> np.ndarray:
+    """Chooses samples of size cones with at least one cone of each edge: every such sample when there are at most
+    RANSAC_SAMPLES, otherwise RANSAC_SAMPLES of them at random.
+
+    :param members: The cone indices of each edge.
+    :param size: Number of cones in a sample.
+    :param rng: Chooses the samples.
+    :return: One row of cone indices per sample.
+    """
+    # How many cones each edge gives to a sample: at least one each, size in all
+    splits = [split for split in itertools.product(*(range(1, len(member) + 1) for member in members))
+              if sum(split) == size]
+    counts = [math.prod(math.comb(len(member), count) for member, count in zip(members, split)) for split in splits]
+    total = sum(counts)
+    if total == 0:
+        return np.empty((0, size), dtype=int)
+    if total <= RANSAC_SAMPLES:
+        return np.array([sum(parts, ()) for split in splits
+                         for parts in itertools.product(*(itertools.combinations(member.tolist(), count)
+                                                          for member, count in zip(members, split)))])
+    # Too many to try them all: draw RANSAC_SAMPLES, each split as often as it has samples. A repeated sample only
+    # costs time.
+    chosen = rng.choice(len(splits), RANSAC_SAMPLES, p=np.array(counts) / total)
+    drawn = []
+    for index, split in enumerate(splits):
+        draws = int(np.count_nonzero(chosen == index))
+        if draws:
+            # The first cones of a random order of each edge's cones, for every draw at once
+            drawn.append(np.concatenate([member[np.argsort(rng.random((draws, len(member))), axis=1)[:, :count]]
+                                         for member, count in zip(members, split)], axis=1))
+    return np.concatenate(drawn)
+
+
+def _distances(heading: np.ndarray, curvature: np.ndarray, offsets: np.ndarray, xs: np.ndarray, ys: np.ndarray,
+               edge_index: np.ndarray) -> np.ndarray:
+    """Signed distances of the cones from their edges, at right angles and positive to the left, for several lanes, as
+    _solve measures them.
+
+    :param heading: Each lane's direction beside the car in radians.
+    :param curvature: Each lane's reference curvature in 1/m.
+    :param offsets: Each lane's edge offsets in metres, one row per lane; a NaN offset gives NaN distances.
+    :param xs: Cone distances forwards in metres.
+    :param ys: Cone distances left in metres.
+    :param edge_index: Which edge each cone belongs to.
+    :return: Distances in metres, one row per lane and one column per cone.
+    """
+    heading, curvature = heading[:, None], curvature[:, None]
+    left = -xs * np.sin(heading) + ys * np.cos(heading)
+    numerator = 2.0 * left - curvature * (xs * xs + ys * ys)
+    root = np.sqrt(np.maximum(1.0 - curvature * numerator, 1e-12))
+    return numerator / (1.0 + root) - offsets[:, edge_index]
 
 
 def _solve(xs: np.ndarray, ys: np.ndarray, edge_index: np.ndarray, edge_count: int,

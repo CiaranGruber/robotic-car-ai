@@ -429,8 +429,10 @@
       # Curvature treated as ordinary, 1/m, positive double (0.5 is a 2 m
       # radius). Smaller values pull noisy fits harder towards straight.
       typical_curvature_per_m: 0.5
-      # Cones farther than this from their fitted edge are left out and the
-      # edges refitted, metres, positive double.
+      # Cones within this of their edge agree with a lane, metres, positive
+      # double. RANSAC keeps the lane most cones agree with, so misdetected
+      # cones or cones of another part of the track cannot bend it; farther
+      # cones are left out.
       outlier_distance_m: 0.15
 
     # LOW-LEVEL CONTROL SETTINGS (ControlConfig in policy/control/control.py,
