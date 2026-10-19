@@ -27,6 +27,7 @@ POLICY_NODE = REPO_ROOT / "scripts" / "policy_node.py"
 # Top-level names that are provided by ROS / generated interface packages.
 _GENERATED_PACKAGE_ROOTS = (
     "ament_index_python",
+    "builtin_interfaces",
     "dream_interfaces",
     "geometry_msgs",
     "rcl_interfaces",
@@ -34,6 +35,7 @@ _GENERATED_PACKAGE_ROOTS = (
     "sensor_msgs",
     "std_msgs",
     "tf2_ros",
+    "visualization_msgs",
 )
 
 
