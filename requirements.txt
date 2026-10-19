@@ -6,6 +6,10 @@ numpy
 scipy
 pytest
 matplotlib  # Offline evaluation plots and scenario rendering.
+# Foxglove MCAP export of recorded drives (scripts/mcap_export.py); mcap reads the files back in its tests.
+foxglove-sdk~=0.29.2
+mcap>=1.2
+pyyaml
 # Optional, only for the RL design script tests/policy/stage1_rl.py (Task A5); it pulls in PyTorch,
 # so CI does not install it:
 # stable-baselines3>=2.3,<3

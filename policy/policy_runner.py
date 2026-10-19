@@ -90,6 +90,11 @@ class MovementPolicy:
                                        stopping_m if mpc_config.obstacle_stop_enabled else 0.0)
         self.open_space_policy = OpenSpacePolicy(open_space_config, control_config.positive_steering_turns_left)
         self.car_controller = CarController(control_config)
+        self.cones: ConeBatch | None = None
+        """The cones the latest step used, after the cone filter and the camera yaw correction, or None without fresh
+        cones."""
+        self.lanes: LaneDetection | None = None
+        """The lane detected in the latest step, or None in the open-space policy."""
         self.obstacles: ObstacleDetection | None = None
         """The lidar obstacle observation of the latest step, with a straight corridor ahead of the car, or None
         without fresh Cartesian lidar points."""
@@ -120,8 +125,10 @@ class MovementPolicy:
         if cones is not None and yaw_offset_rad != 0.0:
             observations = dataclasses.replace(observations, cones=ConeBatch(
                 rotate_cones(cones, yaw_offset_rad), cones.sensor_age, cones.acquisition_to_publish_latency_s))
+        self.cones = observations.cones
         # Detect the lane edges, centre line and where the car is in the lane
         lanes = self.lane_detector.detect(observations)
+        self.lanes = lanes
         # Find the obstacles: inside the lane when there is one, otherwise in a straight corridor ahead of the car
         self.obstacles = detect_obstacles(observations, self.obstacle_detection_config)
         self.lane_obstacles = detect_lane_obstacles(observations, lanes, self.obstacle_detection_config)
@@ -198,6 +205,7 @@ class MovementPolicy:
         """
         observations = dataclasses.replace(
             observations, cones=remove_implausible_cones(observations.cones, self.cone_filter_config))
+        self.cones = observations.cones
         instructions = self.open_space_policy.run_policy(observations)
         car_actions = self.car_controller.step(observations, instructions)
         # To plot in Foxglove: debug1 is the chosen heading in degrees (positive left), even while stopped, and
