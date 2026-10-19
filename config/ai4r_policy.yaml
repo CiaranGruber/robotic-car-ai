@@ -410,7 +410,7 @@
       # Colour of the LEFT edge's cones, string "AUTO", "BLUE" or "YELLOW".
       # "AUTO" works out each colour's side from where its edge lies relative
       # to the car, so either colour may be on the left.
-      left_colour: "AUTO"
+      left_colour: "BLUE"
       # Lane width, metres, positive double (shared default 1.0). Places the
       # centre line when only one edge is found, until both edges have been
       # seen; the width measured with both edges is used after that.
@@ -429,10 +429,8 @@
       # Curvature treated as ordinary, 1/m, positive double (0.5 is a 2 m
       # radius). Smaller values pull noisy fits harder towards straight.
       typical_curvature_per_m: 0.5
-      # Cones within this of their edge agree with a lane, metres, positive
-      # double. RANSAC keeps the lane most cones agree with, so misdetected
-      # cones or cones of another part of the track cannot bend it; farther
-      # cones are left out.
+      # Cones farther than this from their fitted edge are left out and the
+      # edges refitted, metres, positive double.
       outlier_distance_m: 0.15
 
     # LOW-LEVEL CONTROL SETTINGS (ControlConfig in policy/control/control.py,

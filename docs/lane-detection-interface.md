@@ -73,7 +73,7 @@ state = PathTrackingState(lanes.lateral_error_m, lanes.heading_error_rad, lanes.
 | `BOTH_EDGES` | Both edges, with a plausible width | Halfway between the edges |
 | `LEFT_EDGE_ONLY` | Left edge only | Half of `lane_width_m` right of the left edge |
 | `RIGHT_EDGE_ONLY` | Right edge only | Half of `lane_width_m` left of the right edge |
-| `NO_LANE` | Nothing usable: too few cones, rows too short to give a direction, agreeing cones that still change after two refits, or a doubtful lane (width outside `[min_lane_width_m, max_lane_width_m]`, edges crossed when `left_colour` is fixed, or an edge past the turning centre) | — |
+| `NO_LANE` | Nothing usable: too few cones, rows too short to give a direction, cones that still fit badly after dropping outliers, or a doubtful lane (width outside `[min_lane_width_m, max_lane_width_m]`, edges crossed when `left_colour` is fixed, or an edge past the turning centre) | — |
 
 With one edge, the centre line is only as good as the remembered width.
 
@@ -116,20 +116,8 @@ be logged and reloaded.
    starts from the better of the best straight lines and the best concentric
    circles, and a small penalty on curvature (`typical_curvature_per_m`)
    keeps detector noise from looking like a curve.
-4. Before that fit, RANSAC finds the cones that agree on one lane. Small
-   samples of cones from both edges each propose a lane through them exactly
-   (parallel lines, and concentric circles when curves are allowed). A
-   proposal must be plausible: within `max_curvature_per_m`, no edge past the
-   turning centre, and a width within `[min_lane_width_m, max_lane_width_m]`.
-   The proposal with the most cones within `outlier_distance_m` of their edge
-   wins (ties go to the tighter fit), and only those cones are fitted. Every
-   cone is then checked against the fit again, so a cone can come back, and the
-   fit is repeated at most twice until the agreeing cones settle. Misdetected
-   cones, or cones of another part of the track in view, then cannot pull the
-   fit away: fitting every cone first and dropping the farthest afterwards
-   turned such a curve into a sharp turn the other way, and then dropped the
-   cones that showed the real curve. At most 200 samples of each shape are
-   tried, so a batch takes about 1.5 ms on a laptop.
+4. Cones farther than `outlier_distance_m` from their edge are dropped and the
+   edges fitted again, at most twice.
 5. With both edges, the width is checked against
    `[min_lane_width_m, max_lane_width_m]`. Outside it, or with crossed edges,
    the lane is doubtful: `NO_LANE`.
@@ -151,7 +139,7 @@ noise a straight lane's median curvature is 0.04 1/m (a 25 m radius).
 | `min_lane_width_m`, `max_lane_width_m` | 0.3, 3.0 | Plausible measured width; the car is about 0.2 m wide |
 | `max_curvature_per_m` | 0.0 | 0.0 straight edges (Stage 1); 2.0 for curved roads (0.5 m radius) |
 | `typical_curvature_per_m` | 0.5 | Curvature treated as ordinary (2 m radius); smaller pulls harder towards straight |
-| `outlier_distance_m` | 0.15 | Cones within this of their edge agree with a lane (RANSAC); farther ones are left out |
+| `outlier_distance_m` | 0.15 | Cones farther than this from their edge are left out |
 
 **Curved roads need two settings:** `lane_detection.max_curvature_per_m: 2.0`
 and `cone_filter.check_straight_rows: false`. The cone filter's row check
