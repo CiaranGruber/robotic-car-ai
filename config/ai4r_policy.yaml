@@ -176,6 +176,17 @@
       # logs are instead written to the console.
       log_to_file: false
 
+    # Live drawing of the policy for Foxglove (policy/visualisation.py).
+    visualisation:
+      # How often to publish policy_visualisation/markers (visualization_msgs/
+      # MarkerArray in policy_frame_id): the detected and used cones, the lane,
+      # the obstacles, the avoidance line, the MPC's predicted path and the car
+      # with a text summary, as the policy saw them. Hz, double >= 0.0; 0.0
+      # publishes nothing. At most one drawing per policy step, after its
+      # actions are published; a drawing failure is logged and never stops the
+      # policy. Open it with docs/foxglove/live_layout.json.
+      publish_rate_hz: 10.0
+
     # MPC SETTINGS (MpcConfig in policy/action_policy/mpc.py, which checks them;
     # invalid values stop the node from starting). Starting values follow the
     # shared defaults in docs/movement-policy-tasks.md where one exists; record

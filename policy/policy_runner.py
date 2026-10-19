@@ -14,6 +14,7 @@ from policy.control.control import CarController, ControlConfig
 from policy.input_output import CarActions, CarObservations, ConeBatch
 from policy.lane_detection.lane_detection import LaneDetectionConfig, LaneDetector
 from policy.lane_detection.lanes import LaneDetection
+from policy.memory import CarMemory
 from policy.obstacle_detection.obstacle_detection import (ObstacleDetectionConfig, detect_lane_obstacles,
                                                           detect_obstacles, nearest_in_band)
 from policy.obstacle_detection.obstacles import LaneObstacle, ObstacleDetection
@@ -89,6 +90,11 @@ class MovementPolicy:
                                        stopping_m if mpc_config.obstacle_stop_enabled else 0.0)
         self.open_space_policy = OpenSpacePolicy(open_space_config, control_config.positive_steering_turns_left)
         self.car_controller = CarController(control_config)
+        self.cones: ConeBatch | None = None
+        """The cones the latest step used, after the cone filter and the camera yaw correction, or None without fresh
+        cones."""
+        self.lanes: LaneDetection | None = None
+        """The lane detected in the latest step, or None in the open-space policy."""
         self.obstacles: ObstacleDetection | None = None
         """The lidar obstacle observation of the latest step, with a straight corridor ahead of the car, or None
         without fresh Cartesian lidar points."""
@@ -101,10 +107,11 @@ class MovementPolicy:
         """Distance in metres from the car's front to the nearest obstacle in its way in the latest step, math.inf when
         its way is clear, or None without fresh lidar points."""
 
-    def step(self, observations: CarObservations) -> CarActions:
+    def step(self, observations: CarObservations, memory: CarMemory) -> CarActions:
         """Runs the movement policy for the car using the observations provided to determine the actions to take
 
         :param observations: The observations received by the car
+        :param memory: The memory stored by the car
         :return: The actions for the car to take given the observations
         """
         if self.action_policy_name == "open_space":
@@ -118,8 +125,10 @@ class MovementPolicy:
         if cones is not None and yaw_offset_rad != 0.0:
             observations = dataclasses.replace(observations, cones=ConeBatch(
                 rotate_cones(cones, yaw_offset_rad), cones.sensor_age, cones.acquisition_to_publish_latency_s))
+        self.cones = observations.cones
         # Detect the lane edges, centre line and where the car is in the lane
         lanes = self.lane_detector.detect(observations)
+        self.lanes = lanes
         # Find the obstacles: inside the lane when there is one, otherwise in a straight corridor ahead of the car
         self.obstacles = detect_obstacles(observations, self.obstacle_detection_config)
         self.lane_obstacles = detect_lane_obstacles(observations, lanes, self.obstacle_detection_config)
@@ -172,14 +181,17 @@ class MovementPolicy:
                 return nearest_in_band(self.lane_obstacles, min(car_m, line_m) - half_width_m,
                                        max(car_m, line_m) + half_width_m)
             lowest_m, highest_m = path.offset_range(0.0, self.avoidance.config.lookahead_m)
-            margin_m = half_width_m + max(0.0, lowest_m - car_m, car_m - highest_m)
+            # Widen the band towards the car's side only: a car right of the line sweeps more of the lane to the right
+            # while it moves back onto it, but no more to the left
+            right_margin_m = half_width_m + max(0.0, lowest_m - car_m)
+            left_margin_m = half_width_m + max(0.0, car_m - highest_m)
             # base_link is beside an obstacle's near side when the car's front reaches it, and a car length past its
             # far side when the rear leaves it
             car_length_m = self.avoidance.car_length_m
             in_way = math.inf
             for obstacle in self.lane_obstacles:
                 right_m, left_m = path.offset_range(obstacle.distance_m, obstacle.far_distance_m + car_length_m)
-                in_way = min(in_way, nearest_in_band([obstacle], right_m - margin_m, left_m + margin_m))
+                in_way = min(in_way, nearest_in_band([obstacle], right_m - right_margin_m, left_m + left_margin_m))
             return in_way
         if self.obstacles is not None:
             return self.obstacles.in_path_distance_m
@@ -193,6 +205,7 @@ class MovementPolicy:
         """
         observations = dataclasses.replace(
             observations, cones=remove_implausible_cones(observations.cones, self.cone_filter_config))
+        self.cones = observations.cones
         instructions = self.open_space_policy.run_policy(observations)
         car_actions = self.car_controller.step(observations, instructions)
         # To plot in Foxglove: debug1 is the chosen heading in degrees (positive left), even while stopped, and

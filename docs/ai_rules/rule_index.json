@@ -6,7 +6,7 @@
     },
     {
         "name": "0.01_coding_standards",
-        "description": "Coding standards for dependencies, tests, upload exclusions, docstrings and logging.",
+        "description": "Coding standards that must be followed when working in the codebase.",
         "when_to_use": "always"
     },
     {
@@ -42,6 +42,11 @@
     {
         "name": "2.04_managing_wheel_files",
         "description": "Vendoring, installing and upload exclusions for custom Python wheels.",
+        "when_to_use": "when_applicable"
+    },
+    {
+        "name": "2.05_car_memory",
+        "description": "Storing data across policy steps in CarMemory.",
         "when_to_use": "when_applicable"
     },
     {

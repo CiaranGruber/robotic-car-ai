@@ -1,0 +1,139 @@
+{
+  "configById": {
+    "3D!replay": {
+      "cameraState": {
+        "perspective": false,
+        "distance": 7,
+        "phi": 0,
+        "thetaOffset": 90,
+        "targetOffset": [1.5, 0, 0],
+        "target": [0, 0, 0],
+        "targetOrientation": [0, 0, 0, 1],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "followMode": "follow-pose",
+      "followTf": "base_link",
+      "scene": {"transforms": {"showLabel": false}},
+      "transforms": {},
+      "topics": {
+        "/cones/detected": {"visible": true},
+        "/cones/used": {"visible": true},
+        "/lidar/points": {"visible": true, "pointSize": 3, "pointShape": "circle", "colorMode": "flat", "flatColor": "#9a9a9aff"},
+        "/lane": {"visible": true},
+        "/obstacles": {"visible": true},
+        "/plan/avoidance": {"visible": true},
+        "/plan/mpc": {"visible": true},
+        "/fiducials": {"visible": true},
+        "/car": {"visible": true}
+      },
+      "layers": {
+        "grid": {
+          "visible": true,
+          "frameLocked": true,
+          "label": "Grid",
+          "instanceId": "grid",
+          "layerId": "foxglove.Grid",
+          "frameId": "base_link",
+          "size": 10,
+          "divisions": 20,
+          "lineWidth": 1,
+          "color": "#248eff40",
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0]
+        }
+      },
+      "publish": {
+        "type": "point",
+        "poseTopic": "/move_base_simple/goal",
+        "pointTopic": "/clicked_point",
+        "poseEstimateTopic": "/initialpose",
+        "poseEstimateXDeviation": 0.5,
+        "poseEstimateYDeviation": 0.5,
+        "poseEstimateThetaDeviation": 0.26179939
+      },
+      "imageMode": {}
+    },
+    "Plot!actions": {
+      "title": "Actions: replayed vs logged",
+      "paths": [
+        {"value": "/policy/state.replayed.steering_action", "enabled": true, "timestampMethod": "receiveTime", "label": "steer (replayed)"},
+        {"value": "/policy/state.logged.steering_action", "enabled": true, "timestampMethod": "receiveTime", "label": "steer (logged)"},
+        {"value": "/policy/state.replayed.drive_action", "enabled": true, "timestampMethod": "receiveTime", "label": "drive (replayed)"},
+        {"value": "/policy/state.logged.drive_action", "enabled": true, "timestampMethod": "receiveTime", "label": "drive (logged)"}
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240
+    },
+    "Plot!lane": {
+      "title": "Lane",
+      "paths": [
+        {"value": "/policy/state.lane.lateral_error_m", "enabled": true, "timestampMethod": "receiveTime", "label": "lateral error (m, + left)"},
+        {"value": "/policy/state.lane.heading_error_deg", "enabled": true, "timestampMethod": "receiveTime", "label": "heading error (deg, + left)"},
+        {"value": "/policy/state.lane.lane_width_m", "enabled": true, "timestampMethod": "receiveTime", "label": "lane width (m)"}
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240
+    },
+    "Plot!speed": {
+      "title": "Speed and obstacle",
+      "paths": [
+        {"value": "/policy/state.wheel_speed_m_per_s", "enabled": true, "timestampMethod": "receiveTime", "label": "wheel speed (m/s)"},
+        {"value": "/policy/state.obstacle_distance_m", "enabled": true, "timestampMethod": "receiveTime", "label": "obstacle in the way (m)"}
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240
+    },
+    "RawMessages!state": {
+      "topicPath": "/policy/state",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": "all"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {"speed": 0.5},
+  "layout": {
+    "direction": "row",
+    "first": "3D!replay",
+    "second": {
+      "direction": "column",
+      "first": {
+        "direction": "column",
+        "first": "Plot!actions",
+        "second": "Plot!lane",
+        "splitPercentage": 50
+      },
+      "second": {
+        "direction": "column",
+        "first": "Plot!speed",
+        "second": "RawMessages!state",
+        "splitPercentage": 40
+      },
+      "splitPercentage": 55
+    },
+    "splitPercentage": 60
+  }
+}

@@ -145,6 +145,7 @@ sensor modes reuse the same cached representations and freshness handling.
 | `policy_fsm_state_value`, `policy_fsm_state_string` | `std_msgs/Int8`, `std_msgs/String` | Output; reliable, depth 10; current state and reason |
 | `imu_heading_angle` | `std_msgs/Float32` | Output; reliable, depth 10; valid tared heading in degrees |
 | `debug1`, `debug2` | `std_msgs/Float32` | Output; reliable, depth 10; optional student scalars |
+| `policy_visualisation/markers` | `visualization_msgs/MarkerArray` | Output; reliable, depth 10; the policy's cones, lane, obstacles and plans in `policy_frame_id`, at most `visualisation.publish_rate_hz` (`docs/foxglove/live_layout.json`) |
 
 All QoS is volatile. Standard ROS parameter/introspection services and TF
 subscriptions also exist. Finite actions are clipped to `[-1,1]`; invalid

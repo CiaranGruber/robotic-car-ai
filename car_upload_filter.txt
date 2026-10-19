@@ -6,6 +6,8 @@
 # or rsync never looks inside.
 
 - .git
+- .verification/
+- .env
 - .idea/
 - .venv/
 - .vscode/
@@ -26,6 +28,7 @@
 - tests/policy/*
 - tests/*
 - scenarios/
+- *.mcap
 - __pycache__
 - .pytest_cache/
 - build/

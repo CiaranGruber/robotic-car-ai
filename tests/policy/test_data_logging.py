@@ -21,25 +21,27 @@ def test_runs_started_in_the_same_second_get_separate_matching_pairs(tmp_path, m
     monkeypatch.setattr(data_logging, "datetime", FixedTime)
     params = validate_parameters(True, str(tmp_path), "info", False)
     first = start_data_log(params)
-    (tmp_path / first.observations_log_filename).write_text('[\n"first run"\n]\n')
+    first.observations_log_path.write_text('[\n"first run"\n]\n')
     second = start_data_log(params)
-    assert (first.observations_log_filename, first.actions_log_filename) == (
-        "2026-10-12_14-03-27_observations.json", "2026-10-12_14-03-27_actions.json")
-    assert (second.observations_log_filename, second.actions_log_filename) == (
-        "2026-10-12_14-03-27_2_observations.json", "2026-10-12_14-03-27_2_actions.json")
+    assert (first.observations_log_path, first.actions_log_path) == (
+        tmp_path / "2026-10-12_14-03-27_observations.json",
+        tmp_path / "2026-10-12_14-03-27_actions.json")
+    assert (second.observations_log_path, second.actions_log_path) == (
+        tmp_path / "2026-10-12_14-03-27_2_observations.json",
+        tmp_path / "2026-10-12_14-03-27_2_actions.json")
     # The first run's data is kept
-    assert json.loads((tmp_path / first.observations_log_filename).read_text()) == ["first run"]
+    assert json.loads(first.observations_log_path.read_text()) == ["first run"]
 
 
 def test_run_settings_are_saved_beside_the_pair(tmp_path, monkeypatch):
     monkeypatch.setattr(data_logging, "datetime", FixedTime)
     settings = {"control.max_drive_action": 0.6, "required_sensors": ["cone_detections", "wheel_speed"]}
-    start_data_log(validate_parameters(True, str(tmp_path), "info", False), settings)
-    assert json.loads((tmp_path / "2026-10-12_14-03-27_config.json").read_text()) == settings
+    first = start_data_log(validate_parameters(True, str(tmp_path), "info", False), settings)
+    assert json.loads(first.settings_log_path.read_text()) == settings
     # A later run in the same second does not replace them
     later = start_data_log(validate_parameters(True, str(tmp_path), "info", False), {"other": 1})
-    assert later.observations_log_filename == "2026-10-12_14-03-27_2_observations.json"
-    assert json.loads((tmp_path / "2026-10-12_14-03-27_config.json").read_text()) == settings
+    assert later.observations_log_path == tmp_path / "2026-10-12_14-03-27_2_observations.json"
+    assert json.loads(first.settings_log_path.read_text()) == settings
 
 
 def test_nothing_is_written_without_data_logging(tmp_path):

@@ -16,6 +16,7 @@ from policy.control.control import (CarController, ControlConfig, SpeedControlle
                                     steering_for_curvature)
 from policy.input_output import (  # noqa: E402
     CarActions, CarObservations, ConeBatch, ObservedCarState, PolicyState, SensorAge, WheelSpeed)
+from policy.memory import CarMemory  # noqa: E402
 from policy.policy_runner import MovementPolicy  # noqa: E402
 from tests.policy.test_mpc import lane_cones  # noqa: E402
 
@@ -171,7 +172,7 @@ def test_steering_direction_follows_the_map_sign():
 def test_movement_policy_turns_back_to_the_lane_centre_within_the_drive_limit():
     """The whole chain: cones, MPC, then control. The car is 0.3 m left of the lane centre."""
     actions = MovementPolicy(MpcConfig(), ConeFilterConfig(), CONFIG).step(
-        observations(0.3, dt=0.0, first=True, cones=lane_cones(0.3, 0.0)))
+        observations(0.3, dt=0.0, first=True, cones=lane_cones(0.3, 0.0)), CarMemory())
     assert isinstance(actions, CarActions)
     assert actions.steering_action > CONFIG.steering_centre_action  # right, with positive steering turning right
     assert 0.0 < actions.drive_action <= CONFIG.max_drive_action
@@ -181,12 +182,12 @@ def test_movement_policy_turns_back_to_the_lane_centre_within_the_drive_limit():
 def test_movement_policy_publishes_the_lane_state_on_debug1_and_debug2():
     """debug1 is the lateral error in metres and debug2 the heading error in radians, for Foxglove."""
     actions = MovementPolicy(MpcConfig(), ConeFilterConfig(), CONFIG).step(
-        observations(0.3, dt=0.0, first=True, cones=lane_cones(0.3, 0.1)))
+        observations(0.3, dt=0.0, first=True, cones=lane_cones(0.3, 0.1)), CarMemory())
     assert actions.debug1 == pytest.approx(0.3) and actions.debug2 == pytest.approx(0.1)
 
 
 def test_movement_policy_stops_without_a_lane():
-    actions = MovementPolicy(MpcConfig(), ConeFilterConfig(), CONFIG).step(observations(0.5, dt=0.0, first=True, cones=[]))
+    actions = MovementPolicy(MpcConfig(), ConeFilterConfig(), CONFIG).step(observations(0.5, dt=0.0, first=True, cones=[]), CarMemory())
     assert actions.drive_action == 0.0
     assert actions.steering_action == CONFIG.steering_centre_action  # the MPC asks to stop, steering straight
     assert actions.debug1 is None and actions.debug2 is None

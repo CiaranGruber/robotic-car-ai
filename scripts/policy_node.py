@@ -57,8 +57,11 @@ from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from rclpy.time import Time
 from rcl_interfaces.msg import ParameterDescriptor, SetParametersResult
+from builtin_interfaces.msg import Duration
+from geometry_msgs.msg import Point
 from sensor_msgs.msg import Imu, LaserScan
-from std_msgs.msg import Float32, Int8, String, UInt16
+from std_msgs.msg import ColorRGBA, Float32, Header, Int8, String, UInt16
+from visualization_msgs.msg import Marker, MarkerArray
 from dream_interfaces.msg import (ConeDetection, ConeDetections, DriveAndSteer,
                                   FiducialDetections)
 from tf2_ros import Buffer, TransformException, TransformListener
@@ -73,12 +76,14 @@ from policy.data_logging.data_logging import (
     DEFAULT_LOG_LEVEL_NAME,
     setup_logging,
     start_data_log,
-    validate_parameters,
+    validate_parameters, log_memory,
 )
 from policy.input_output import ConeColour, convert_observations, convert_actions
 from policy.lane_detection.lane_detection import LaneDetectionConfig
+from policy.memory import CarMemory
 from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
 from policy.policy_runner import MovementPolicy
+from policy.visualisation import COLOURS, LINE_WIDTH_M, StepDrawer
 
 # These values and the request/status topics match the previous AI4R policy.
 FSM_STATE_NOT_PUBLISHING_ACTIONS = 1
@@ -171,6 +176,51 @@ def roll_pitch_yaw(q):
             math.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z)))
 
 
+def visualisation_markers(layers, frame_id, stamp, lifetime_s):
+    """Converts a policy/visualisation.py drawing into markers, one namespace per layer.
+
+    The first marker deletes the previous drawing, so a layer that is now empty disappears.
+    """
+    header = Header(frame_id=frame_id, stamp=stamp)
+    lifetime = Duration(sec=int(lifetime_s), nanosec=int(lifetime_s % 1.0 * 1e9))
+    markers = [Marker(header=header, action=Marker.DELETEALL)]
+
+    def rgba(colour):
+        return ColorRGBA(r=float(colour[0]), g=float(colour[1]), b=float(colour[2]), a=float(colour[3]))
+
+    def add(namespace, marker_type, colour):
+        marker = Marker(header=header, ns=namespace, id=len(markers), type=marker_type, action=Marker.ADD,
+                        lifetime=lifetime, color=rgba(colour))
+        marker.pose.orientation.w = 1.0
+        markers.append(marker)
+        return marker
+
+    for name, layer in layers.items():
+        for line in layer.lines:
+            marker = add(name, Marker.LINE_STRIP, line.colour)
+            marker.scale.x = LINE_WIDTH_M
+            points = line.points + line.points[:1] if line.closed else line.points
+            marker.points = [Point(x=float(x), y=float(y), z=0.0) for x, y in points]
+        for diameter in sorted({sphere.diameter_m for sphere in layer.spheres}):
+            spheres = [sphere for sphere in layer.spheres if sphere.diameter_m == diameter]
+            marker = add(name, Marker.SPHERE_LIST, COLOURS["text"])
+            marker.scale.x = marker.scale.y = marker.scale.z = float(diameter)
+            marker.points = [Point(x=float(sphere.x), y=float(sphere.y), z=0.0) for sphere in spheres]
+            marker.colors = [rgba(sphere.colour) for sphere in spheres]
+        for box in layer.boxes:
+            marker = add(name, Marker.CUBE, box.colour)
+            marker.pose.position.x, marker.pose.position.y, marker.pose.position.z = map(float, box.position)
+            (marker.pose.orientation.x, marker.pose.orientation.y, marker.pose.orientation.z,
+             marker.pose.orientation.w) = map(float, box.orientation)
+            marker.scale.x, marker.scale.y, marker.scale.z = map(float, box.size)
+        for text in layer.texts:
+            marker = add(name, Marker.TEXT_VIEW_FACING, COLOURS["text"])
+            marker.pose.position.x, marker.pose.position.y, marker.pose.position.z = map(float, text.position)
+            marker.scale.z = 0.08
+            marker.text = text.text
+    return MarkerArray(markers=markers)
+
+
 def wrap_angle(angle):
     return math.atan2(math.sin(angle), math.cos(angle))
 
@@ -194,6 +244,7 @@ class PolicyNode(Node):
             "logging.logging_folder": DEFAULT_LOG_FOLDER,
             "logging.log_level": DEFAULT_LOG_LEVEL_NAME,
             "logging.log_to_file": False,
+            "visualisation.publish_rate_hz": 10.0,
         }
         defaults.update({f"sensor_timeout_s.{name}": 0.5 for name in SENSORS})
         for name, default in defaults.items():
@@ -215,6 +266,7 @@ class PolicyNode(Node):
         self.status_period_s = self.get_parameter("status_period_s").value
         self.timestamp_tolerance_s = self.get_parameter("timestamp_tolerance_s").value
         self.policy_frame_id = self.get_parameter("policy_frame_id").value
+        self.visualisation_rate_hz = self.get_parameter("visualisation.publish_rate_hz").value
         self.logging_params = validate_parameters(
             self.get_parameter("logging.is_data_logging").value,
             self.get_parameter("logging.logging_folder").value,
@@ -226,6 +278,8 @@ class PolicyNode(Node):
         self._validate_parameters()
         self.add_on_set_parameters_callback(self._reject_clock_change)
         setup_logging(self.logging_params)
+
+        self.memory = CarMemory()
 
         # TO ADD A STUDENT PARAMETER, follow these THREE steps:
         # 1. Declare it here, for example:
@@ -293,6 +347,12 @@ class PolicyNode(Node):
         self.heading_publisher = self.create_publisher(Float32, "imu_heading_angle", 10)
         self.debug1_publisher = self.create_publisher(Float32, "debug1", 10)
         self.debug2_publisher = self.create_publisher(Float32, "debug2", 10)
+        # The policy's own lane, obstacles and plans for Foxglove (policy/visualisation.py), drawn after
+        # the actions of a step are published.
+        self.visualisation_publisher = self.create_publisher(MarkerArray, "policy_visualisation/markers", 10)
+        self.step_drawer = StepDrawer()
+        self.visualised_step = None
+        self._last_visualisation_at = -math.inf
 
         self.create_subscription(ConeDetections, "cone_detections",
                                  self.cone_detection_callback, reliable_one)
@@ -359,6 +419,9 @@ class PolicyNode(Node):
             raise ValueError("timestamp_tolerance_s must be finite and nonnegative")
         if not valid_frame(self.policy_frame_id):
             raise ValueError("policy_frame_id must be a nonempty frame without whitespace or leading /")
+        if (not finite_number(self.visualisation_rate_hz) or self.visualisation_rate_hz < 0.0
+                or self.visualisation_rate_hz > 1e9):
+            raise ValueError("visualisation.publish_rate_hz must be finite, nonnegative and at most 1e9")
         if self.get_parameter("use_sim_time").value:
             raise ValueError("use_sim_time=true is unsupported for this live-robot policy")
 
@@ -751,6 +814,23 @@ class PolicyNode(Node):
             self.debug1_publisher.publish(Float32(data=float(debug1)))
         if debug2 is not None:
             self.debug2_publisher.publish(Float32(data=float(debug2)))
+        self._publish_visualisation(now)
+
+    def _publish_visualisation(self, now):
+        # After the actions, so drawing never delays them, and at most visualisation.publish_rate_hz.
+        # A drawing failure is only reported: it never stops the policy.
+        step, self.visualised_step = self.visualised_step, None
+        if (step is None or self.visualisation_rate_hz <= 0.0
+                or now - self._last_visualisation_at < 1.0 / self.visualisation_rate_hz):
+            return
+        self._last_visualisation_at = now
+        try:
+            layers = self.step_drawer.draw(self.movement_policy, *step)
+            self.visualisation_publisher.publish(visualisation_markers(
+                layers, self.policy_frame_id, self.get_clock().now().to_msg(),
+                max(0.5, 2.0 / self.visualisation_rate_hz)))
+        except Exception:
+            self._warn("visualisation", "Policy visualisation failed:\n" + traceback.format_exc())
 
     def calculate_policy_actions(self, observations, sensor_age_s, sensor_stamp_ns,
                                  dt, policy_elapsed_s, is_first_policy_step):
@@ -1115,8 +1195,12 @@ class PolicyNode(Node):
             is_first_policy_step=is_first_policy_step,
             logging_params=self.logging_params,
         )
-        actions = self.movement_policy.step(observations)
+        log_memory(self.memory, self.logging_params)
+        actions = self.movement_policy.step(observations, self.memory)
         drive_action, steering_action, camera_pan_action, debug1, debug2 = convert_actions(actions, self.logging_params)
+        self.memory.step()
+        # Drawn on policy_visualisation/markers once the actions are published
+        self.visualised_step = (observations, actions)
 
         # =====================================
         # END OF: INSERT POLICY CODE ABOVE HERE
