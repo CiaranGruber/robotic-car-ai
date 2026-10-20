@@ -9,7 +9,7 @@ import logging
 import math
 
 from policy.action_policy.lane_path import LanePath
-from policy.action_policy.mpc import MpcConfig, MpcController, PathTrackingState
+from policy.action_policy.mpc import MpcConfig, MpcController, PathTrackingState, inside_offset_limit_m
 from policy.action_policy.reference import reference_from_cones, rotate_cones
 from policy.control.actions import DriveCommand, Instruction
 from policy.input_output import CarObservations
@@ -30,18 +30,21 @@ class MpcPolicy:
         """
         self.config = config
         self.controller = MpcController(config)
-        self.lane_offset_m = config.lane_offset_m
-        """Where in the lane to drive, in metres from the centre line, positive to the left. Starts at
-        mpc.lane_offset_m; a manoeuvre such as the hook turn may change it between steps. It is kept
-        mpc.edge_clearance_m from both lane edges and shrinks on curves (followed_offset_m)."""
         self.avoidance_path: LanePath | None = None
-        """The line to follow past obstacles in the lane, or None to follow lane_offset_m. Set before each step to the
-        line LaneAvoidance plans; the MPC follows it over its whole horizon. That line is already kept clear of the
-        cones, so it is followed as it is."""
+        """The line to follow past obstacles in the lane, or None to follow the usual line (usual_offset_m). Set before
+        each step to the line LaneAvoidance plans; the MPC follows it over its whole horizon. That line is already kept
+        clear of the cones, so it is followed as it is."""
         self.reset()
 
     def reset(self):
         """Forgets the previous run. This is done on the first step after entering the publishing-policy state."""
+        self.lane_side = self.config.lane_side
+        """Which part of the lane to drive along: "CENTRE", "LEFT" or "RIGHT" (mpc.lane_side). Each run starts at
+        mpc.lane_side; a manoeuvre such as the hook turn may change it between steps."""
+        self.lane_offset_m = self.config.lane_offset_m
+        """Where in the lane to drive while lane_side is "CENTRE", in metres from the centre line, positive to the
+        left. Each run starts at mpc.lane_offset_m; a manoeuvre may change it between steps. It is kept
+        mpc.edge_clearance_m from both lane edges (usual_offset_m)."""
         self.previous_curvature_per_m = 0.0
         """Curvature requested at the previous step in 1/m."""
         self.previous_speed_m_per_s = 0.0
@@ -79,6 +82,10 @@ class MpcPolicy:
         then stays stopped for the rest of the run, even if the obstacle goes."""
         self.last_solve_time_s = 0.0
         """Calculation time of the latest solve in seconds."""
+        self.side_offset_m = None
+        """The line followed away from obstacles, in metres left of the lane centre, as moved towards
+        target_offset_m by the latest usable lane, at most mpc.offset_change_per_m per metre driven. None before the
+        first usable lane in this run, which starts it at the target."""
 
     def followed_offset_m(self, lane_width_m: float, path_curvature_per_m: float = 0.0) -> float:
         """The offset from the lane centre actually followed beside the car: avoidance_path's while passing obstacles,
@@ -92,19 +99,71 @@ class MpcPolicy:
             return self.avoidance_path.offset_at(0.0)
         return self.usual_offset_m(lane_width_m, path_curvature_per_m)
 
-    def usual_offset_m(self, lane_width_m: float, path_curvature_per_m: float = 0.0) -> float:
-        """The offset from the lane centre followed away from obstacles: lane_offset_m, limited so the line stays
-        edge_clearance_m from both edges of a lane this wide, and shrunk in proportion to the path's curvature until it
-        is nothing at offset_fade_curvature_per_m.
+    def offset_limits_m(self, lane_width_m: float, path_curvature_per_m: float = 0.0) -> tuple[float, float]:
+        """The range of lines the car may follow across a lane: at least edge_clearance_m from both edges, and on a
+        curve at most halfway to its turning centre (inside_offset_limit_m).
 
         :param lane_width_m: Width of the lane in metres.
         :param path_curvature_per_m: Curvature of the lane's centre line in 1/m.
-        :return: The offset in metres, positive to the left; 0.0 when the lane is too narrow to move over at all.
+        :return: The lowest and highest offset in metres left of the lane centre; both 0.0 when the lane is too narrow
+            to move over at all.
         """
         config = self.config
         room = max(0.0, lane_width_m / 2.0 - config.edge_clearance_m)
-        fade = max(0.0, 1.0 - abs(path_curvature_per_m) / config.offset_fade_curvature_per_m)
-        return min(max(self.lane_offset_m, -room), room) * fade
+        lowest, highest = -room, room
+        if path_curvature_per_m > 0.0:
+            highest = min(highest, inside_offset_limit_m(path_curvature_per_m))
+        elif path_curvature_per_m < 0.0:
+            lowest = max(lowest, -inside_offset_limit_m(path_curvature_per_m))
+        return lowest, highest
+
+    def target_offset_m(self, lane_width_m: float, path_curvature_per_m: float = 0.0) -> float:
+        """The line lane_side and lane_offset_m ask for: as far over as offset_limits_m allows on the "LEFT" or
+        "RIGHT" side, or lane_offset_m within those limits for "CENTRE".
+
+        :param lane_width_m: Width of the lane in metres.
+        :param path_curvature_per_m: Curvature of the lane's centre line in 1/m.
+        :return: The offset in metres left of the lane centre.
+        """
+        lowest, highest = self.offset_limits_m(lane_width_m, path_curvature_per_m)
+        if self.lane_side == "LEFT":
+            return highest
+        if self.lane_side == "RIGHT":
+            return lowest
+        return min(max(self.lane_offset_m, lowest), highest)
+
+    def usual_offset_m(self, lane_width_m: float, path_curvature_per_m: float = 0.0) -> float:
+        """The offset from the lane centre followed away from obstacles: side_offset_m, the line moving gradually
+        towards target_offset_m, kept within offset_limits_m for this lane.
+
+        Before the first usable lane of the run it is the target. It is moved on in run_policy, so a caller before
+        run_policy in a step (the obstacle avoidance) gets the line one step behind, a few millimetres at most.
+
+        :param lane_width_m: Width of the lane in metres.
+        :param path_curvature_per_m: Curvature of the lane's centre line in 1/m.
+        :return: The offset in metres, positive to the left.
+        """
+        lowest, highest = self.offset_limits_m(lane_width_m, path_curvature_per_m)
+        if self.side_offset_m is None:
+            return self.target_offset_m(lane_width_m, path_curvature_per_m)
+        return min(max(self.side_offset_m, lowest), highest)
+
+    def _move_side_offset(self, lane_width_m: float, path_curvature_per_m: float, distance_m: float):
+        """Moves side_offset_m towards target_offset_m by at most offset_change_per_m * distance_m, then into the
+        lane's limits.
+
+        :param lane_width_m: Width of this step's lane in metres.
+        :param path_curvature_per_m: Curvature of this step's lane centre line in 1/m.
+        :param distance_m: Distance driven since the previous step in metres.
+        """
+        target = self.target_offset_m(lane_width_m, path_curvature_per_m)
+        if self.side_offset_m is None:
+            self.side_offset_m = target
+            return
+        step = self.config.offset_change_per_m * distance_m
+        moved = min(max(target, self.side_offset_m - step), self.side_offset_m + step)
+        lowest, highest = self.offset_limits_m(lane_width_m, path_curvature_per_m)
+        self.side_offset_m = min(max(moved, lowest), highest)
 
     def run_policy(self, observations: CarObservations, lanes: LaneDetection | None,
                    obstacle_distance_m: float | None = None) -> list[Instruction]:
@@ -143,9 +202,11 @@ class MpcPolicy:
             raise ValueError("MPC wheel speed must be finite and nonnegative")
         if not math.isfinite(observations.policy.dt) or observations.policy.dt < 0.0:
             raise ValueError("MPC policy dt must be finite and nonnegative")
+        step_distance_m = 0.0
         if not observations.policy.is_first_policy_step:
             travelled_speed = self.previous_speed_m_per_s if measured_speed is None else measured_speed
-            self.distance_since_plan_m += travelled_speed * observations.policy.dt
+            step_distance_m = travelled_speed * observations.policy.dt
+            self.distance_since_plan_m += step_distance_m
             if self.farthest_cone_ahead_m is not None:
                 self.farthest_cone_ahead_m -= self._conservative_speed(observations) * observations.policy.dt
         if self._obstacle_within_stopping_distance(observations, obstacle_distance_m):
@@ -163,6 +224,7 @@ class MpcPolicy:
         self.farthest_cone_ahead_m = (max(cone.pos.x for cone in cones)
                                       - self._conservative_speed(observations) * cones.sensor_age)
         prediction_speed = self.config.target_speed_m_per_s if measured_speed is None else float(measured_speed)
+        self._move_side_offset(lane_width_m, state.path_curvature_per_m, step_distance_m)
         offset = self.followed_offset_m(lane_width_m, state.path_curvature_per_m)
         solution = self.controller.solve(state, self.previous_curvature_per_m, cones.sensor_age,
                                          speed_m_per_s=prediction_speed, lateral_offset_m=offset,
