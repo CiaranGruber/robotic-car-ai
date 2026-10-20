@@ -7,6 +7,10 @@
 
 - .git
 - .verification/
+- .test-artifacts/
+# Explicitly offline centreline experiment; not a selectable robot policy.
+- policy/action_policy/corridor_experiment.py
+- policy/lane_detection/corridor.py
 - .env
 - .idea/
 - .venv/

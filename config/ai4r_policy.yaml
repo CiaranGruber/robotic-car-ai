@@ -196,6 +196,14 @@
       # Default 0.5: Car Control's speed controller was checked at 0.5 on car
       # 20 and may not start the car below 0.4.
       target_speed_m_per_s: 0.5
+      # Slow for measured lane bends AND the planned steering, either direction.
+      # Boolean; speed interpolates between these curvature thresholds, 1/m.
+      turn_slowdown_enabled: true
+      # Tight-turn speed, positive m/s, capped at target speed. 0.4 retains the
+      # existing speed feedback; lower speeds use feedforward-only control.
+      turn_speed_m_per_s: 0.4
+      turn_start_curvature_per_m: 0.15
+      turn_full_curvature_per_m: 0.45
       # Number of predicted steps: INTEGER >= 1. More steps cost more calculation
       # time (Task A6). Keep target_speed_m_per_s * step_s * horizon_steps within
       # the camera range (measured about 2.5 m); the default predicts 0.6 m ahead.
@@ -443,6 +451,50 @@
       # Cones farther than this from their fitted edge are left out and the
       # edges refitted, metres, positive double.
       outlier_distance_m: 0.15
+      # Experimental temporal geometry, OFF until local replay/simulation and
+      # human review. The existing cone-to-edge arc fitter is unchanged.
+      # Forward-only, planar/no-slip assumption: wheel speed is UNSIGNED and
+      # cannot detect rollback. Requires fresh wheel speed AND body gyro yaw.
+      # Reverse RC, invalid motion or a long gap clears temporal evidence.
+      # One-side fallback: follow the last accepted TWO-edge lane, transported
+      # with fresh speed/gyro. Requires a consistent fresh visible edge; no
+      # initial two-edge lane or invalid motion uses existing lane-loss handling.
+      single_edge_hold_enabled: true
+      # Positive seconds (<= 2) / forward metres from original two-edge frame.
+      # Single-edge frames never renew these limits. Neither side visible uses
+      # existing bounded lane-loss/end handling, not automatic goal completion.
+      single_edge_hold_max_age_s: 1.5
+      single_edge_hold_max_distance_m: 0.8
+      memory_enabled: false
+      continuity_enabled: false
+      # Remember a missing cone for at most these seconds / travelled metres.
+      # Age includes camera latency; repeated frames never renew a track.
+      memory_max_age_s: 0.6
+      memory_max_distance_m: 0.5
+      # Same-colour association radius, metres, positive; keep below spacing.
+      memory_match_distance_m: 0.15
+      # INTEGER 1..256, bounds stored tracks and fitting work.
+      memory_max_tracks: 64
+      # Maximum motion-sample age / policy gap, seconds, positive doubles.
+      # Gap <= 0.5 s; memory age <= 2 s. Missing history is never extrapolated.
+      motion_max_age_s: 0.15
+      motion_max_gap_s: 0.2
+      # Positive speed / absolute gyro yaw bounds, m/s and rad/s.
+      motion_max_speed_m_per_s: 2.0
+      motion_max_yaw_rate_rad_per_s: 4.0
+      # Whole-fit acceptance: motion-compensated change <= noise slack +
+      # rate * elapsed acquisition seconds. Checks position and heading near
+      # the car and up to 1 m ahead, plus curvature; all positive doubles.
+      continuity_max_lateral_rate_m_per_s: 0.5
+      continuity_max_heading_rate_rad_per_s: 1.0
+      continuity_max_curvature_rate_per_m_s: 2.0
+      continuity_lateral_slack_m: 0.10
+      continuity_heading_slack_rad: 0.20
+      continuity_curvature_slack_per_m: 0.1
+      # Rejected geometry uses the existing bounded lane-loss behaviour (it
+      # may follow the previous plan briefly). An expired accepted reference
+      # cannot admit a new branch until temporal state resets. Memory never
+      # makes stale sensor data fresh or extends the fresh cone horizon.
 
     # LOW-LEVEL CONTROL SETTINGS (ControlConfig in policy/control/control.py,
     # which checks them; invalid values stop the node from starting). They turn

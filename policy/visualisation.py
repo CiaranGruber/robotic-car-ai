@@ -128,7 +128,9 @@ class StepDrawer:
             "cones/detected": Layer(spheres=[Sphere(cone.pos.x, cone.pos.y, 0.05, COLOURS["detected"])
                                              for cone in observations.cones or []]),
             "cones/used": Layer(spheres=[Sphere(cone.pos.x, cone.pos.y, 0.08, CONE_COLOURS[cone.colour])
-                                         for cone in policy.cones or []]),
+                                         for cone in policy.cones or []],
+                                texts=[Text((cone.pos.x, cone.pos.y, 0.12), "remembered")
+                                       for cone in policy.remembered_cones]),
             "lane": Layer(lines=_lane_lines(policy.lanes)),
             "obstacles": _obstacle_layer(policy),
             "plan/avoidance": Layer(lines=_avoidance_lines(policy)),
@@ -146,12 +148,21 @@ def summary(policy: MovementPolicy, observations: CarObservations, actions: CarA
     lane = "open space" if lanes is None else lanes.status.name
     if lanes is not None and lanes.has_lane:
         lane += f"  lateral {lanes.lateral_error_m:+.2f} m  heading {math.degrees(lanes.heading_error_rad):+.1f} deg"
+    if (policy.lane_detector.config.single_edge_hold_enabled
+            and observations.car.ang_velocity is None):
+        lane += "  lane memory unavailable: no gyro"
+    if policy.lane_prediction_active:
+        lane += "  following previous two-edge lane"
+    if policy.remembered_cones or policy.lane_fit_rejected:
+        lane += f"  remembered {len(policy.remembered_cones)}  rejected {policy.lane_fit_rejected}"
     obstacle = policy.obstacle_distance_m
     speed = observations.car.wheel_speed
     return "\n".join((
         f"t {observations.policy.policy_elapsed_s:.2f} s  {lane}",
         "obstacle " + ("unknown" if obstacle is None else "clear" if math.isinf(obstacle) else f"{obstacle:.2f} m"),
         "speed " + ("unknown" if speed is None else f"{float(speed):.2f} m/s")
+        + (f"  requested {policy.action_policy.previous_speed_m_per_s:.2f} m/s"
+           if policy.action_policy_name == "mpc" else "")
         + f"  drive {actions.drive_action:+.2f}  steer {actions.steering_action:+.2f}"))
 
 

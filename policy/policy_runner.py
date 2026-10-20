@@ -14,6 +14,7 @@ from policy.control.control import CarController, ControlConfig
 from policy.input_output import CarActions, CarObservations, ConeBatch
 from policy.lane_detection.lane_detection import LaneDetectionConfig, LaneDetector
 from policy.lane_detection.lanes import LaneDetection
+from policy.lane_detection.temporal import detect_temporal_lane
 from policy.memory import CarMemory
 from policy.obstacle_detection.obstacle_detection import (ObstacleDetectionConfig, detect_lane_obstacles,
                                                           detect_obstacles, nearest_in_band)
@@ -91,8 +92,13 @@ class MovementPolicy:
         self.open_space_policy = OpenSpacePolicy(open_space_config, control_config.positive_steering_turns_left)
         self.car_controller = CarController(control_config)
         self.cones: ConeBatch | None = None
-        """The cones the latest step used, after the cone filter and the camera yaw correction, or None without fresh
-        cones."""
+        """The lane-fitting cones after filtering/yaw correction, including optional remembered geometry."""
+        self.remembered_cones = []
+        """Predicted cones used only for lane fitting, in the current cone acquisition frame."""
+        self.lane_fit_rejected = False
+        """Whether the temporal continuity guard rejected this step's lane fit."""
+        self.lane_prediction_active = False
+        """Whether one fresh edge supports a transported previous two-edge lane."""
         self.lanes: LaneDetection | None = None
         """The lane detected in the latest step, or None in the open-space policy."""
         self.obstacles: ObstacleDetection | None = None
@@ -125,9 +131,12 @@ class MovementPolicy:
         if cones is not None and yaw_offset_rad != 0.0:
             observations = dataclasses.replace(observations, cones=ConeBatch(
                 rotate_cones(cones, yaw_offset_rad), cones.sensor_age, cones.acquisition_to_publish_latency_s))
-        self.cones = observations.cones
         # Detect the lane edges, centre line and where the car is in the lane
-        lanes = self.lane_detector.detect(observations)
+        # Temporal cones only support geometry: endpoint inference and the MPC's horizon keep fresh-only inputs.
+        lanes, self.cones = detect_temporal_lane(observations, memory, self.lane_detector)
+        self.remembered_cones = list(self.cones[len(observations.cones):]) if self.cones is not None else []
+        self.lane_fit_rejected = memory.data.lane_tracking.rejected
+        self.lane_prediction_active = memory.data.lane_tracking.holding_single_edge
         self.lanes = lanes
         # Find the obstacles: inside the lane when there is one, otherwise in a straight corridor ahead of the car
         self.obstacles = detect_obstacles(observations, self.obstacle_detection_config)
@@ -142,7 +151,9 @@ class MovementPolicy:
             if self.lane_path is not None and self.lane_path.segments else None)
         self.obstacle_distance_m = self._obstacle_distance_m(lanes)
         # Determine the policy to take based upon the car location; an obstacle in the car's way stops it
-        instructions = self.action_policy.run_policy(observations, lanes, self.obstacle_distance_m)
+        instructions = self.action_policy.run_policy(
+            observations, lanes, self.obstacle_distance_m,
+            lane_support_m=lanes.visible_until_m if self.lane_prediction_active else None)
         # The car actions to determine
         car_actions = self.car_controller.step(observations, instructions)
         # Hold the camera at zero pan: the camera's fixed transform to base_link assumes it, and any pan rotates every

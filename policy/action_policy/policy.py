@@ -105,10 +105,24 @@ class MpcPolicy:
         fade = max(0.0, 1.0 - abs(path_curvature_per_m) / config.offset_fade_curvature_per_m)
         return min(max(self.lane_offset_m, -room), room) * fade
 
+    def speed_for_curvature(self, curvature_per_m: float) -> float:
+        """Requested speed in m/s, interpolated down on bends of either sign."""
+        config = self.config
+        if not config.turn_slowdown_enabled:
+            return config.target_speed_m_per_s
+        fraction = min(1.0, max(0.0, (abs(curvature_per_m) - config.turn_start_curvature_per_m)
+                               / (config.turn_full_curvature_per_m - config.turn_start_curvature_per_m)))
+        return config.target_speed_m_per_s + fraction * (min(config.turn_speed_m_per_s,
+                                                            config.target_speed_m_per_s)
+                                                        - config.target_speed_m_per_s)
+
     def run_policy(self, observations: CarObservations, lanes: LaneDetection | None,
-                   obstacle_distance_m: float | None = None) -> list[Instruction]:
+                   obstacle_distance_m: float | None = None,
+                   lane_support_m: float | None = None) -> list[Instruction]:
         """Chooses the instructions for the car to follow from the observations and detected lanes
 
+        :param lane_support_m: Optional remaining supported centre arc at cone acquisition, metres. A held lane
+            must cover latency, the prediction horizon and stopping travel; otherwise stop for this run.
         :param observations: The observations taken by the car at the current policy step
         :param lanes: The lanes detected by the lane detection module, followed when given. When None (no cone
             data, or a caller without lane detection such as the Stage 1 simulation harness), the reference path is
@@ -157,11 +171,23 @@ class MpcPolicy:
         if cones is None or state is None:
             # No lane or a doubtful lane
             return [self._command_without_lane(observations)]
+        requested_speed = self.speed_for_curvature(state.path_curvature_per_m)
+        if lane_support_m is not None:
+            speed = max(requested_speed, self._conservative_speed(observations))
+            required = speed * (float(cones.sensor_age) + self.config.step_s * self.config.horizon_steps
+                                + self.config.stop_distance_per_speed_s)
+            if not math.isfinite(lane_support_m) or lane_support_m <= required:
+                self.stopped_for_lane_loss = True
+                self.plan_curvatures_per_m = None
+                return [self._command(0.0, 0.0)]
         self.lane_lost_s = 0.0
         # The cones were seen sensor_age ago, so the car has driven on since
         self.farthest_cone_ahead_m = (max(cone.pos.x for cone in cones)
                                       - self._conservative_speed(observations) * cones.sensor_age)
-        prediction_speed = self.config.target_speed_m_per_s if measured_speed is None else float(measured_speed)
+        if lane_support_m is not None:
+            self.farthest_cone_ahead_m = min(self.farthest_cone_ahead_m, lane_support_m
+                                           - self._conservative_speed(observations) * cones.sensor_age)
+        prediction_speed = requested_speed if measured_speed is None else float(measured_speed)
         offset = self.followed_offset_m(lane_width_m, state.path_curvature_per_m)
         solution = self.controller.solve(state, self.previous_curvature_per_m, cones.sensor_age,
                                          speed_m_per_s=prediction_speed, lateral_offset_m=offset)
@@ -178,7 +204,10 @@ class MpcPolicy:
             self.stopped_for_solver_failure = True
             self.plan_curvatures_per_m = None
             return [self._command(0.0, 0.0)]
-        return [self._command(self.config.target_speed_m_per_s, curvature)]
+        # Plan curvature also catches steering corrections and the beginning of an approaching bend.
+        requested_speed = min(requested_speed, self.speed_for_curvature(
+            max(abs(float(k)) for k in solution.curvatures_per_m)))
+        return [self._command(requested_speed, curvature)]
 
     def _command_without_lane(self, observations: CarObservations) -> DriveCommand:
         """Chooses the command when the lane is missing or doubtful (the Task A7 rule).
@@ -216,6 +245,10 @@ class MpcPolicy:
         self.lane_lost_step_count += 1
         # No extrapolation beyond the horizon by repeating the last curvature.
         step = int(self.distance_since_plan_m / self.plan_step_distance_m)
+        if config.turn_slowdown_enabled:
+            # Loss of visual evidence must never accelerate out of an already slowed turn.
+            speed = min(speed, self.previous_speed_m_per_s, self.speed_for_curvature(
+                max(abs(float(k)) for k in self.plan_curvatures_per_m[step:])))
         return self._command(speed, float(self.plan_curvatures_per_m[step]))
 
     def _obstacle_within_stopping_distance(self, observations: CarObservations,

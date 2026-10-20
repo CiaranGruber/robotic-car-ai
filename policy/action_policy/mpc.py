@@ -33,6 +33,14 @@ class MpcConfig:
     The default is the speed Car Control's speed controller was checked at on car 20; below 0.4 m/s it may not start
     the car (docs/mpc-lab-calibration.md).
     """
+    turn_slowdown_enabled: bool = False
+    """Reduce requested speed as detected or planned absolute curvature increases."""
+    turn_speed_m_per_s: float = 0.4
+    """Speed cap on tight turns, m/s, positive. Never increases the normal target speed."""
+    turn_start_curvature_per_m: float = 0.15
+    """Begin reducing speed at this absolute curvature, 1/m, finite and nonnegative."""
+    turn_full_curvature_per_m: float = 0.45
+    """Reach the turn speed cap here, 1/m, strictly above turn_start_curvature_per_m."""
     horizon_steps: int = 12
     """Number of predicted steps. Must be an integer of at least 1."""
     step_s: float = 0.1
@@ -179,6 +187,13 @@ class MpcConfig:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f"mpc.{name} must be an integer of at least 1")
+        if not isinstance(self.turn_slowdown_enabled, bool):
+            raise ValueError("mpc.turn_slowdown_enabled must be true or false")
+        if not (math.isfinite(self.turn_speed_m_per_s) and self.turn_speed_m_per_s > 0
+                and math.isfinite(self.turn_start_curvature_per_m) and self.turn_start_curvature_per_m >= 0
+                and math.isfinite(self.turn_full_curvature_per_m)
+                and self.turn_full_curvature_per_m > self.turn_start_curvature_per_m):
+            raise ValueError("Invalid MPC turn speed or curvature thresholds")
         if not isinstance(self.obstacle_stop_enabled, bool):
             raise ValueError(f"mpc.obstacle_stop_enabled must be true or false, not {self.obstacle_stop_enabled}")
         for name in ("target_speed_m_per_s", "step_s", "max_curvature_per_m", "curvature_weight", "lane_width_m"):

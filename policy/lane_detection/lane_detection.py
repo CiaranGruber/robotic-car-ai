@@ -94,8 +94,64 @@ class LaneDetectionConfig:
     outlier_distance_m: float = 0.15
     """Cones farther than this in metres from their fitted edge are left out, and the edges fitted again. Must be
     positive. Keep it above the detector's position noise but well below half the lane width."""
+    memory_enabled: bool = False
+    """Opt-in forward-only cone tracking. Requires fresh wheel speed and body gyro yaw; not reverse/rollback safe."""
+    continuity_enabled: bool = False
+    """Reject lane fits that jump relative to the motion-compensated accepted arc. Uses the same motion contract."""
+    single_edge_hold_enabled: bool = False
+    """With one fresh edge, predict the last accepted two-edge lane instead of refitting its centre. Requires motion."""
+    single_edge_hold_max_age_s: float = 1.5
+    """Maximum seconds since the original two-edge observation, including latency; one-edge frames never renew it."""
+    single_edge_hold_max_distance_m: float = 0.8
+    """Maximum measured forward travel since the original two-edge observation, metres."""
+    memory_max_age_s: float = 0.6
+    """Maximum time since a cone was actually observed, seconds; repeated batches never renew it."""
+    memory_max_distance_m: float = 0.5
+    """Maximum forward travel since a cone was observed, metres."""
+    memory_match_distance_m: float = 0.15
+    """Maximum same-colour association distance in metres. Fresh positions replace matched tracks."""
+    memory_max_tracks: int = 64
+    """Bound on remembered cones, integer 1..256; newest tracks retained first."""
+    motion_max_age_s: float = 0.15
+    """Maximum wheel-speed and gyro sample ages in seconds."""
+    motion_max_gap_s: float = 0.2
+    """Maximum interval between policy motion samples in seconds; larger gaps clear temporal evidence."""
+    motion_max_speed_m_per_s: float = 2.0
+    """Maximum admitted unsigned forward speed, m/s. Forward-only motion is an explicit operating assumption."""
+    motion_max_yaw_rate_rad_per_s: float = 4.0
+    """Maximum admitted absolute body gyro yaw rate in rad/s."""
+    continuity_max_lateral_rate_m_per_s: float = 0.5
+    """Maximum centreline displacement rate after motion compensation, m/s, over the shared supported horizon."""
+    continuity_max_heading_rate_rad_per_s: float = 1.0
+    """Maximum centreline heading change rate after motion compensation, rad/s."""
+    continuity_max_curvature_rate_per_m_s: float = 2.0
+    """Maximum change in lane curvature per second, 1/(m s)."""
+    continuity_lateral_slack_m: float = 0.10
+    """Position noise allowance per accepted comparison, metres; added to rate times elapsed acquisition time."""
+    continuity_heading_slack_rad: float = 0.20
+    """Heading noise allowance in radians."""
+    continuity_curvature_slack_per_m: float = 0.1
+    """Curvature noise allowance, 1/m."""
 
     def __post_init__(self):
+        for name in ("memory_enabled", "continuity_enabled", "single_edge_hold_enabled"):
+            if not isinstance(getattr(self, name), bool):
+                raise ValueError(f"lane_detection.{name} must be boolean")
+        for name in ("memory_max_age_s", "memory_max_distance_m", "memory_match_distance_m", "motion_max_age_s",
+                     "motion_max_gap_s", "motion_max_speed_m_per_s", "motion_max_yaw_rate_rad_per_s",
+                     "continuity_max_lateral_rate_m_per_s", "continuity_max_heading_rate_rad_per_s",
+                     "continuity_max_curvature_rate_per_m_s", "continuity_lateral_slack_m",
+                     "continuity_heading_slack_rad", "continuity_curvature_slack_per_m",
+                     "single_edge_hold_max_age_s", "single_edge_hold_max_distance_m"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not math.isfinite(value) or value <= 0.0:
+                raise ValueError(f"lane_detection.{name} must be finite and positive")
+        if not 0.0 < self.memory_max_age_s <= 2.0 or not 0.0 < self.motion_max_gap_s <= 0.5:
+            raise ValueError("Lane memory age must be <= 2 s and motion sample gap <= 0.5 s")
+        if self.single_edge_hold_max_age_s > 2.0:
+            raise ValueError("lane_detection.single_edge_hold_max_age_s must be <= 2 s")
+        if isinstance(self.memory_max_tracks, bool) or not isinstance(self.memory_max_tracks, int) or not 1 <= self.memory_max_tracks <= 256:
+            raise ValueError("lane_detection.memory_max_tracks must be an integer in 1..256")
         if self.left_colour not in ("AUTO", "BLUE", "YELLOW"):
             raise ValueError(f"lane_detection.left_colour must be \"AUTO\", \"BLUE\" or \"YELLOW\", "
                              f"not {self.left_colour!r}")

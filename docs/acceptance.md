@@ -4,6 +4,300 @@ Status: the implementation passes the software gate on `jah`. Version 0.1.0
 identifies a release only through its published annotated tag and successful
 release CI. Physical vehicle acceptance remains unperformed.
 
+## Turn slowing and failed-fit fallback, 2026-10-19
+
+Follow-up simulation requested by the owner: ran 30 closed-loop comparisons
+(six layouts, five policy modes) using
+`PYTHONPATH="$PWD" .venv/bin/python build/turn-simulation-check/run.py`.
+`build/turn-simulation-check/summary.json` records the source hashes and metrics;
+`trajectories.png` and `requested-speeds.png` show geometry and commanded speeds.
+The current slowdown mode completes four smooth layouts without contact or
+excursion, requests 0.4 m/s in tight turns, and uses four saved-lane steps during
+the smooth U's inner-edge occlusion. Both angular layouts still fail to finish,
+with footprint excursions of 0.324 m and 0.326 m; the occluded angular case
+contacts one cone. All six current-policy solves avoid solver-failure latches.
+These deterministic nominal-car cases include valid simulated gyro and speed;
+they do not reproduce the physical recordings' missing gyro or overspeed.
+
+
+User requested lower speed on turns and improved saved-lane fallback when lane
+fitting fails. The local policy YAML now enables `mpc.turn_slowdown_enabled`.
+Requested speed interpolates from the normal 0.5 m/s at absolute curvature
+0.15 1/m to 0.4 m/s at 0.45 1/m, for either turn direction. Both detected lane
+curvature and the maximum absolute planned steering curvature constrain speed.
+The turn cap never raises a lower cruise target. The 0.4 m/s cap keeps existing
+wheel-speed feedback active; below its configured 0.4 threshold the current
+controller uses feedforward only. Actual MPC prediction continues using measured
+speed, including overspeed, and support/stopping checks retain conservative
+measured/previous/requested speed. Lane-loss following cannot accelerate above
+its preceding slowed request or the remaining cached plan's turn speed cap.
+The requested speed is now shown in the existing Foxglove summary.
+
+A failed fresh arc fit (`NO_LANE`) can now validate current cones directly
+against the original accepted two-edge boundaries. At least one side needs
+fresh same-colour support, residual tolerance, minimum count and 0.25 m span;
+no new arc fit is required. This preserves the original motion, age, distance,
+remaining extent and controller horizon/stopping bounds. It never renews the
+original reference. Empty detections still use the bounded cached-plan loss/end
+behavior and stop; no unlimited blind lane extension was introduced.
+
+The five recent physical recordings, from 18:30:04 through 18:32:57, contain
+**no gyro samples in any frame** (54, 112, 116, 1582 and 918 recovered frames).
+Consequently their motion-compensated lane memory cannot activate. The recent
+terminal buffer records the IMU service being stopped; no service was started
+or configuration changed on the car during this work. Foxglove now explicitly
+shows `lane memory unavailable: no gyro` in this condition. Recorded peak wheel
+speeds in the four moving logs are 1.425, 1.538, 1.617 and 1.487 m/s, despite a
+0.5 m/s cruise setting. Lower requested speed is not physical speed validation.
+
+Open-loop candidate replay is in `build/turn-speed-review/summary.json`, with
+settings per run, source hashes and reproducible driver beside it. Slower
+positive commands occur in 0, 20, 19, 22 and 25 frames respectively; no memory
+hold activates without gyro. The candidate still latches lane loss in three
+moving recordings and an obstacle stop in 18:31:36. Recorded trajectories do not
+respond to the candidate commands, so no collision-avoidance claim follows.
+
+Local closed-loop comparison is in `build/turn-speed-simulation/summary.json`
+and `trajectories.png`. Straight, smooth 90-degree, smooth U and occluded smooth
+U cases complete without cone contact or corridor excursion. The angular U
+still fails to complete: both angular cases leave the corridor and the occluded
+case touches one cone. Lower speed cannot remove the existing steering geometry
+limit. Physical testing and upload remain not run.
+
+Software verification: `574 passed, 3 skipped, 1 existing xfailed` from the
+policy tests. New cases exercise signed curvature scheduling, planned-steering
+slowing, measured-speed prediction, lower cruise targets, invalid parameters,
+no acceleration after lane loss and saved-boundary support after failed fitting.
+The pinned-interface fast gate was attempted and remains blocked by absent
+`.verification/dependencies/dream_interfaces`. A read-only Astra review found
+no concrete remaining defects; it is not hardware qualification.
+
+## Missing-side lane fallback, 2026-10-19
+
+User requested reuse of the pre-generated lane when one side disappears. The
+existing per-colour edge fitter is unchanged. With
+`lane_detection.single_edge_hold_enabled`, fresh-only fitted evidence determines
+BOTH/ONE/NONE; remembered cones cannot manufacture two visible sides. An accepted
+two-edge centre arc, width and colour roles are stored in serializable lane
+tracking memory. One-edge observations transport this arc using acquisition-time
+wheel/gyro odometry, re-anchor it nearest the car, and require fresh same-colour
+support within the configured residual tolerance and at least 0.25 m span.
+The saved side colours prevent a single-edge AUTO side flip.
+
+The original two-edge acquisition bounds prediction to 1.5 s and 0.8 m; duplicate
+or single-edge frames never renew these bounds. Missing motion, inconsistent
+support, no initial two-edge reference, or exhausted bounds do not authorize
+prediction. Neither edge visible uses existing bounded lane-loss/end handling;
+it does not prove goal completion. The MPC additionally requires enough saved
+arc for camera latency, its whole planning horizon and coasting stopping travel,
+using the maximum of target, previous requested and measured speed. Insufficient
+support latches a zero-command lane-loss stop and clears the plan. Fresh input
+cones remain unchanged for the controller and endpoint evidence, and its last
+seen distance is capped by supported arc extent during a hold.
+
+The local policy YAML enables this fallback; the config-class default remains
+false for backward-compatible replay of older saved configurations. No live
+robot configuration, upload, service restart or vehicle enable was performed.
+Foxglove summary identifies when the previous two-edge lane is being followed.
+
+Software evidence: `558 passed, 3 skipped, 1 existing xfailed` from
+`.venv/bin/python -m pytest tests/policy -q`, including 13 fallback regressions
+covering turning-frame transport, colour roles, expiry, missing support/motion,
+serialization, reacquisition and controller support bounds including stationary
+starts. The required pinned-interface fast gate was attempted but could not
+start: `.verification/dependencies/dream_interfaces` is absent. Hardware
+qualification remains not run.
+
+Local kinematic results are in `build/single-edge-hold-simulation/summary.json`
+and `trajectories.png`. The smooth U with inner-edge occlusion completes with
+five held steps, no cone contact and no footprint excursion. The requested
+three-segment angular U remains unsuccessful under the car-20 steering profile:
+one case touches a cone and both angular cases leave the corridor. This feature
+does not resolve that steering/geometry limitation.
+
+Open-loop replay of the 261 recovered complete frames from car .21 is recorded
+in `build/car21-obstacle-review/single-edge-hold.json`. With the feature disabled,
+all actions still match the original recording; original obstacle stop is frame
+28 (1.531 s). With the feature enabled, the saved lane is selected at frames
+25..33, but the controller support bound stops at frame 25 (1.364 s): the saved
+extent cannot cover prediction and stopping travel at the recorded speed. There
+is no obstacle latch in this candidate replay, but it does not keep driving or
+complete the U-turn. The observations file was truncated during copying; this
+is a prefix comparison, not a changed-action physical outcome.
+
+## Experimental cone memory and lane continuity, 2026-10-19
+
+### Connected-centreline experiment and steering feasibility
+
+The owner authorized continued work against the same angular U. The unchanged
+3 m cross leg and 0.8 m corridor span only 3.8 m vertically. Car 20's admitted
+simulation left curvature is 0.48 1/m. Any intended forward left-winding turn
+from heading 0 to pi requires at least `2 / 0.48 = 4.167 m` vertical travel,
+even for a point car: between the last heading-zero point and first heading-pi
+point, `sin(heading) >= 0` and `dheading/ds <= k`, so integrating
+`dy/ds >= sin(heading) * dheading/ds / k` gives `dy >= 2/k`. Intermediate right
+steering within that heading interval does not evade the bound. This rules out
+this intended route under that profile, not arbitrary opposite-winding routes
+or a differently calibrated real vehicle. `left_uturn_span_check` implements
+this necessary screen; a pass is not a clearance/feasibility certificate.
+
+The offline `OfflineCorridorPolicy` experiment retains the existing cone filter
+and lane-edge observer, but follows a connected polyline of opposite-colour
+gate midpoints rather than sending another single-arc reference to the MPC.
+Mixed-colour Delaunay triangles establish gate connectivity, with bounded cone
+counts, widths and same-colour gaps. Local world-frame tracks are smoothed,
+transformed to the current frame using measured motion, and used for forward
+lookahead. Candidate curvatures obey explicit steering and change limits;
+sampled cone/rectangle rollouts reject collisions, and missing route/motion
+after driving starts latches a stop. All lasting state is serialisable through
+CarMemory; origin resets also clear the smoothed map. Source modules are
+excluded from car upload and are **not selectable through MovementPolicy or
+ROS**. This follower lacks runtime lidar/obstacle integration, braking-distance
+qualification, swept-corridor certification and measured timing guarantees.
+
+The expanded comparison keeps identical angular cone positions, spacing and
+placement jitter, and evaluates five camera-noise seeds, with/without 0.4 s
+inner-edge occlusion at camera times 8.0..8.4 s, at both 0.4 and 0.5 m/s. It
+preserves the original 0.48/0.92 left/right limits as a failing control and
+separately labels a **hypothetical, uncalibrated** 1.2/1.2 1/m steering profile.
+The latter changes only the model's steering limits; camera noise/latency,
+steering/speed lag, footprint, trim, layout and collision/completion checks stay
+the same. The comparison includes the original constrained arc pipeline and
+an unconstrained arc pipeline with the same 2 s / 1 m memory budget as the
+connected follower. The connected follower uses 1.2 m lookahead, a 0.3 position
+update fraction and 4 1/(m s) curvature-change limit. These are experiment
+settings, not accepted robot defaults.
+
+Run `MPLCONFIGDIR=/private/tmp/ai4r-temporal-mpl .venv/bin/python -m
+tests.policy.corridor_experiment` for the comparison and source hashes under
+`build/corridor-experiment`. The measured-limit case remains infeasible and
+the experimental follower can contact cones there: the numerical experiment
+does not waive the analytical bound. Successful hypothetical cases establish
+only that a connected path can handle the angular layout with sufficiently
+tight steering; they do not establish a physical fix.
+
+With the hypothetical 1.2/1.2 profile, connected-centreline following at 0.4 m/s
+passed **10/10** cases (five seeds, with/without occlusion), with no cone
+contacts or corridor excursions; worst body clearance was about 0.053 m.
+Both arc baselines passed 0/10. The longer-memory unconstrained arc baseline
+contacted cones even where it reached the endpoint, so endpoint position alone
+is not counted as a pass. At 0.5 m/s the connected follower passed only 4/10;
+contacts and corridor excursions remain in the results. Under measured car-20
+limits every pipeline passed 0/10 at both speeds, as expected from the bound.
+The prototype therefore improves this explicit hypothetical experiment but
+is not a robust high-speed or measured-profile solution. Plot trajectories
+show seed 0 at 0.4 m/s; the JSON includes all 120 pipeline/case runs.
+
+The final local policy suite passed 545 tests, with 3 optional skips and
+1 existing expected failure. Sixteen new experiment regressions check route
+topology, degeneracy/gap rejection, necessary steering bounds, positive
+hypothetical cases across five noise seeds, serialization, map reset and
+rollout spacing at the maximum admitted speed. An Astra read-only review
+checked the feasibility proof, frame/reset contracts and rollout bounds.
+The required fast gate was attempted again and cannot run without the absent
+pinned `dream_interfaces` checkout. No physical robot configuration, deployment
+or driving was changed. The actual car's left-turn calibration and gyro-enabled
+recording remain prerequisites for a meaningful physical comparison.
+
+### Angular-layout correction
+
+The owner clarified that physical cones form three straight lines rather than
+a smooth turn. The follow-up simulation assumes a squared U: two parallel
+legs joined by a perpendicular segment, with two three-segment boundaries.
+This is an explicit provisional interpretation, not a measured reproduction;
+three parallel rows with a shared middle divider would be a different layout.
+Each centreline leg is 3 m, corridor width 0.8 m, cone spacing nominally 0.5 m
+with independent 0.8..1.2 spacing factors, and placement offsets up to 0.025 m
+per axis, fixed placement seed 17. Camera noise is applied separately.
+
+`AngularUTurn` uses a polygonal scoring corridor with open entrance/exit
+extensions and vehicle-edge intersection checks, including concave inner-corner
+excursions when every vehicle corner lies inside. Positive intrusion magnitudes
+are sampled lower bounds, not exact maximum body penetration. The sharp
+polyline is a scoring reference, not a feasible infinite-curvature command.
+
+Re-running `python -m tests.policy.temporal_lane_simulation --output
+build/temporal-lanes-angular` compares the original four cases with angular U
+and angular U with inner-edge occlusion during camera times 4.0..4.4 s.
+Both angular cases **fail completion** in every mode. Baseline contacts two
+cones, memory alone contacts one, and memory plus constraints contacts none
+but stops after about 2.1 m, before the first turn. The constraints therefore
+do not solve this layout. The current single-arc fit and the measured car-20
+turning limits remain material limitations. Do not infer physical feasibility
+from these assumed dimensions or the previous smooth-turn successes.
+
+Artifacts and source hashes are in `build/temporal-lanes-angular/summary.json`
+and `trajectories.png`. The final local policy suite passed 529 tests, with
+3 optional skips and 1 existing expected failure, including 11 new angular
+geometry/scoring regressions. No runtime policy tuning or car configuration
+changed in this simulation correction. The previously missing pinned ROS
+interfaces checkout still prevents the required fast gate.
+
+### Initial temporal implementation
+
+The local candidate on `feature/cone-memory-continuity` retains the existing
+cone filtering and concentric-arc edge fitter. It adds opt-in forward-only
+planar cone memory, with same-colour position association, measured wheel
+speed/body gyro integration, acquisition-time pose interpolation, and bounded
+track age/travel/count. Original cone ages are preserved; fresh-only cones
+still supply the MPC's endpoint/horizon evidence. A fresh inlier must support
+the fitted lane. Remembered cones are labelled in the existing Foxglove layer.
+
+The optional continuity guard transports the accepted arc to each new image's
+frame and checks lateral, wrapped heading and curvature changes against noise
+allowances plus rates times elapsed acquisition time. It compares only shared
+supported extent and rejects whole fits, rather than creating inconsistent
+clipped geometry. Rejections do not renew accepted evidence or learned width.
+Expired references remain rejected until temporal reset. Missing motion,
+stream loss, reverse RC, clock discontinuity and policy entry clear temporal
+evidence. Existing bounded lane-loss plan following may precede a latched stop;
+this is not an immediate-stop mechanism. Unsigned speed cannot detect rollback
+or independently establish forward travel. Both features default **off**.
+
+On local macOS/Python 3.12, `.venv/bin/python -m pytest tests/policy -q` passed
+518 tests, with 3 optional RL tests skipped and 1 existing expected failure.
+Twenty-four temporal regressions cover frame motion/latency, floating-point
+history boundaries, duplicate expiry, motion loss, resets, fresh-inlier support,
+association bounds, partial occlusion, whole-fit rejection, recovery, rates and
+backward-compatible memory serialisation. An Astra read-only review identified
+fresh-support, supported-extent, interpolation and reset issues; regression
+tests cover the fixes. Implementation remained Solo.
+
+Reproduce the local comparison with:
+
+```bash
+MPLCONFIGDIR=/private/tmp/ai4r-temporal-mpl .venv/bin/python \
+  -m tests.policy.temporal_lane_simulation --output build/temporal-lanes \
+  --recording .test-artifacts/lane-replay/2026-10-19_13-30-55/2026-10-19_13-30-55_observations.json
+```
+
+The fixed-seed kinematic simulation uses the existing measured car-20 response,
+0.5 m/s target, 2.5 m turn radius, camera noise/latency, and measured-motion
+simulation inputs. Baseline, memory alone and memory plus constraints each
+completed straight, 90-degree, 180-degree and briefly occluded-inner-edge
+180-degree cases without cone contacts or leaving the lane. These easy cases
+do not reproduce the reported physical failure. Memory alone increased curve
+error; it is not an established improvement. The local summary, trajectory
+plot and comparison MCAPs are under `build/temporal-lanes`; the summary records
+source hashes and dependency versions. This is a no-slip kinematic model, not
+physical qualification or a worst-case timing bound.
+
+The 109-step physical recording has **no gyro observations**. Default replay
+matches all recorded drive/steering actions, but the recording cannot evaluate
+motion compensation: memory remains unavailable and the enabled guard reports
+no lane throughout. No gyro was invented from steering requests. Record fresh
+body gyro and wheel-speed observations before using this experiment on a car.
+
+The required `AI4R_INTERFACES_SOURCE="$PWD/.verification/dependencies/dream_interfaces"
+bash tools/verify_fast.sh` was attempted and failed because the pinned checkout
+is absent. No ROS build, deployment, live configuration change or physical
+driving was performed. Human diff review remains required before merge.
+
+Repository rules followed: `0.00_root_rule.md`, `0.01_coding_standards.md`,
+`2.00_adding_sensors_and_observations.md`, `2.01_branching_strategy.md`,
+`2.02_adding_parameters.md`, `2.03_adding_and_using_test_data.md`,
+`2.05_car_memory.md` and `3.02_creating_real_scenario_data.md`.
+
 ## Evidence ownership
 
 The offline gate in CONTRIBUTING.md builds and tests the installed policy with

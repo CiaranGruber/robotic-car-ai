@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from policy.control.actions import DriveCommand  # noqa: E402
 from policy.input_output import (  # noqa: E402
     ConeBatch, ConeColour, ConeDetection, ObservedCarState, PolicyState, Position, SensorAge, WheelSpeed,
-    CarObservations,
+    CarObservations, AngularVelocity,
 )
 from real_car_measurements import LAB_CAR  # noqa: E402
 from stage1_scenarios import (  # noqa: E402
@@ -131,6 +131,8 @@ class CurveCase:
     """The lab car with the camera pan held at zero."""
     seed: int = 0
     max_duration_s: float = 40.0
+    inner_occlusion_s: tuple[float, float] | None = None
+    """Optional camera-time interval hiding the blue/left edge for temporal-memory experiments."""
 
 
 @dataclass
@@ -242,14 +244,19 @@ def run_curve(case: CurveCase, policy, lanes_from=None) -> CurveResult:
         log["heading"].append(heading)
         log["lateral"].append(lateral)
         if step % steps_per_policy == 0:
-            pending.append(detections(cones, (x, y, heading), car, rng))
+            detected = detections(cones, (x, y, heading), car, rng)
+            if case.inner_occlusion_s is not None and case.inner_occlusion_s[0] <= step * SIM_STEP_S < case.inner_occlusion_s[1]:
+                detected = [c for c in detected if c.colour != ConeColour.BLUE]
+            pending.append(detected)
             batch = pending.pop(0) if len(pending) > delay_steps else None
             first = step == 0
             observations = CarObservations(
-                cones=None if batch is None else ConeBatch(batch, SensorAge(car.detection_latency_s, None),
+                cones=None if batch is None else ConeBatch(batch, SensorAge(
+                    car.detection_latency_s, round((100 + step * SIM_STEP_S - car.detection_latency_s) * 1e9)),
                                                            acquisition_to_publish_latency_s=0.0),
                 fiducials=None, lidar_scan=None, lidar_cartesian=None,
-                car=ObservedCarState(None, None, None, WheelSpeed(speed, SensorAge(0.0, None))),
+                car=ObservedCarState(None, AngularVelocity(0.0, 0.0, speed * driven_curvature, SensorAge(0.0, None)),
+                                     None, WheelSpeed(speed, SensorAge(0.0, None))),
                 policy=PolicyState(dt=0.0 if first else POLICY_PERIOD_S, policy_elapsed_s=step * SIM_STEP_S,
                                    is_first_policy_step=first),
             )
@@ -273,9 +280,13 @@ def run_curve(case: CurveCase, policy, lanes_from=None) -> CurveResult:
             if abs(cx - x) < 0.5 and abs(cy - y) < 0.5 and distance_to_body(cx, cy, x, y, heading) < CONE_RADIUS_M:
                 touched.add(index)
         if 0.0 <= s <= end_s:
-            for corner_x, corner_y in body_corners(x, y, heading):
-                _, corner_lateral, _ = centre.locate(corner_x, corner_y)
-                max_outside = max(max_outside, abs(corner_lateral) - lane.width_m / 2.0)
+            corners = body_corners(x, y, heading)
+            if hasattr(lane, "footprint_outside_distance"):
+                max_outside = max(max_outside, lane.footprint_outside_distance(corners))
+            else:
+                for corner_x, corner_y in corners:
+                    _, corner_lateral, _ = centre.locate(corner_x, corner_y)
+                    max_outside = max(max_outside, abs(corner_lateral) - lane.width_m / 2.0)
             centre.locate(x, y)
         if s >= end_s or (step > 50 and speed < 0.02 and command.speed_m_per_s == 0.0):
             break
