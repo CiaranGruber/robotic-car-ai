@@ -323,7 +323,7 @@ def pipelines() -> dict:
         return found
 
     def lane_detection(curves: bool):
-        filter_config = ConeFilterConfig(max_forward_m=2.5, check_straight_rows=not curves)
+        filter_config = ConeFilterConfig(check_straight_rows=not curves)
         detector = LaneDetector(LaneDetectionConfig(left_colour="AUTO", max_curvature_per_m=2.0 if curves else 0.0))
         return lambda observations: detector.detect(
             dataclasses.replace(observations, cones=filter_cones(observations.cones, filter_config)))

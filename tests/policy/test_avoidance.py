@@ -4,24 +4,26 @@ Run from the repository root with: python3 -m pytest tests/policy/test_avoidance
 """
 import math
 
+import numpy as np
 import pytest
 
 from policy.action_policy.avoidance import AvoidanceConfig, LaneAvoidance
-from policy.action_policy.lane_path import LanePath, PathSegment
+from policy.action_policy.lane_path import LanePath, LineState, PathSegment, move_length_m
 from policy.action_policy.mpc import MpcConfig
 from policy.cone_filter.cone_filter import ConeFilterConfig
 from policy.control.control import ControlConfig
 from policy.input_output import (CarObservations, ConeBatch, ConeColour, ConeDetection, LidarCartesian,
                                  LidarCartesianPoint, ObservedCarState, PolicyState, Position, SensorAge, WheelSpeed)
 from policy.lane_detection.lanes import LaneArc, LaneDetection, LaneStatus
-from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
 from policy.memory import CarMemory
+from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
 from policy.obstacle_detection.obstacles import LaneObstacle
 from policy.policy_runner import MovementPolicy
 
 CAR_FRONT_M = ObstacleDetectionConfig().car_front_m
 CAR = AvoidanceConfig()
 CAR_LENGTH_M = CAR_FRONT_M + CAR.car_rear_m
+HALF_WIDTH_M = CAR.car_width_m / 2.0
 
 
 def lane(width_m, curvature_per_m=0.0):
@@ -50,18 +52,67 @@ def beside(path, item):
     return path.offset_range(item.distance_m, item.far_distance_m + CAR_LENGTH_M)
 
 
-def ramp_m(change_m, curvature_per_m=CAR.max_ramp_curvature_per_m):
-    return math.pi * math.sqrt(abs(change_m) / (2.0 * curvature_per_m))
+def approach(avoidance, item, width_m=1.0, steps=200):
+    """Drives at 0.05 m per step towards an obstacle first seen 2.5 m ahead; the lidar loses it 0.25 m ahead.
+
+    :return: For each step, how far the car's front has driven and the planned line.
+    """
+    lines = []
+    for step in range(steps):
+        driven_m = 0.05 * step
+        ahead = obstacle(item.right_m, item.left_m, item.distance_m - driven_m, item.far_distance_m - driven_m)
+        lines.append((driven_m, plan(avoidance, [ahead] if ahead.distance_m > 0.25 else [], width_m,
+                                     first=step == 0)))
+    return lines
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# The line: quintic polynomials in the lane's Frenet frame
+# ---------------------------------------------------------------------------------------------------------------
+def values(state):
+    return state.offset_m, state.slope, state.curvature_per_m
+
+
+def test_a_move_matches_the_offset_slope_and_curvature_at_both_ends():
+    start, end = LineState(0.1, -0.2, 0.3), LineState(-0.05, 0.1, -0.2)
+    move = PathSegment.move(1.0, 2.5, start, end)
+    assert values(move.state_at(1.0)) == pytest.approx(values(start))
+    assert values(move.state_at(2.5)) == pytest.approx(values(end))
+    assert PathSegment.hold(0.0, 1.0, 0.2).state_at(0.4) == LineState(0.2)
+
+
+def test_the_shortest_move_is_as_sharp_as_allowed():
+    move = PathSegment.move(0.0, move_length_m(0.2, 0.3), LineState(0.0), LineState(0.2))
+    # Found from 41 points along it, which can miss the very peak slightly
+    assert move.peak_curvature_per_m() == pytest.approx(0.3, rel=0.01)
+    assert move_length_m(0.0, 0.3) == 0.0 and move_length_m(0.1, 0.0) == math.inf
 
 
 def test_path_offsets_follow_its_segments():
-    path = LanePath(0.0, (PathSegment(1.0, 2.0, 0.0, 0.2), PathSegment(2.0, 3.0, 0.2, 0.2)))
+    path = LanePath(0.0, (PathSegment.move(1.0, 2.0, LineState(0.0), LineState(0.2)), PathSegment.hold(2.0, 3.0, 0.2)))
     assert (path.offset_at(0.5), path.offset_at(1.5), path.offset_at(2.5), path.offset_at(4.0)) == pytest.approx(
         (0.0, 0.1, 0.2, 0.0))
     assert path.offset_range(0.0, 2.5) == pytest.approx((0.0, 0.2))
-    assert path.offset_range(1.2, 1.4) == pytest.approx((path.offset_at(1.2), path.offset_at(1.4)))
+    moved = path.moved_back(1.2, 0.0)
+    assert all(moved.offset_at(s_m) == pytest.approx(path.offset_at(s_m + 1.2)) for s_m in np.arange(0.0, 3.0, 0.1))
+    assert values(moved.state_at(0.0)) == pytest.approx(values(path.state_at(1.2)))
 
 
+def test_the_turned_body_is_checked_beside_the_obstacle():
+    avoidance = LaneAvoidance(CAR, CAR_FRONT_M)
+    item = obstacle(-0.30, -0.10, 1.0, 1.2)
+    on_line = LanePath(0.175, ())
+    assert not avoidance.in_way(on_line, item, CAR.obstacle_clearance_m, CAR.obstacle_clearance_m)
+    assert avoidance.in_way(on_line, item, 0.2, 0.2)
+    # Moving right across the lane while beside it: the rear swings left, but the front turns into it
+    across = LanePath(0.175, (PathSegment.move(1.0, 2.0, LineState(0.175), LineState(-0.175)),
+                              PathSegment.hold(2.0, 5.0, -0.175)))
+    assert avoidance.in_way(across, item, 0.0, 0.0)
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# One step's plan
+# ---------------------------------------------------------------------------------------------------------------
 def test_clear_lane_keeps_the_usual_line():
     avoidance = LaneAvoidance(CAR, CAR_FRONT_M)
     assert plan(avoidance, []).segments == ()
@@ -79,27 +130,24 @@ def test_passes_through_the_middle_of_the_free_gap(right_m, left_m, expected_m):
     path = plan(LaneAvoidance(CAR, CAR_FRONT_M), [item])
     assert beside(path, item) == pytest.approx((expected_m, expected_m))
     # The car's sides stay clear of the obstacle and the cones by the clearances
-    half_width_m = CAR.car_width_m / 2.0
-    assert expected_m - half_width_m >= left_m + CAR.obstacle_clearance_m or (
-        expected_m + half_width_m <= right_m - CAR.obstacle_clearance_m)
-    assert abs(expected_m) + half_width_m <= 0.5 - CAR.cone_radius_m - CAR.cone_clearance_m
-    # Still on the usual line beside the car: the ramp starts later
+    assert expected_m - HALF_WIDTH_M >= left_m + CAR.obstacle_clearance_m or (
+        expected_m + HALF_WIDTH_M <= right_m - CAR.obstacle_clearance_m)
+    assert abs(expected_m) + HALF_WIDTH_M <= 0.5 - CAR.cone_radius_m - CAR.cone_clearance_m
+    # Still on the usual line beside the car: the move starts later
     assert path.offset_at(0.0) == 0.0
 
 
-def test_ramps_are_smooth_and_within_the_curvature_limit():
+def test_moves_are_smooth_and_within_the_curvature_limit():
     item = obstacle(-0.30, -0.10)
     path = plan(LaneAvoidance(CAR, CAR_FRONT_M), [item])
-    start_m = item.distance_m - CAR.pass_distance_m
-    end_m = item.far_distance_m + CAR_LENGTH_M + CAR.pass_distance_m
-    length_m = ramp_m(0.175)
-    assert path.offset_at(start_m - length_m) == pytest.approx(0.0)
-    assert path.offset_at(end_m + length_m) == pytest.approx(0.0)
-    step_m = 0.01
-    offsets = [path.offset_at(i * step_m) for i in range(round(6.0 / step_m))]
-    assert max(abs(b - a) for a, b in zip(offsets, offsets[1:])) < 0.002
-    curvatures = [(a - 2.0 * b + c) / step_m ** 2 for a, b, c in zip(offsets, offsets[1:], offsets[2:])]
-    assert max(abs(value) for value in curvatures) <= CAR.max_ramp_curvature_per_m * 1.01
+    s_m = np.arange(0.0, 8.0, 0.005)
+    offsets, slopes, curvatures = path.sample(s_m)
+    # Offset, slope and curvature all change continuously, from and back to the usual line
+    assert offsets[0] == offsets[-1] == 0.0
+    assert np.max(np.abs(np.diff(offsets))) < 0.001
+    assert np.max(np.abs(np.diff(slopes))) < 0.002
+    assert np.max(np.abs(np.diff(curvatures))) < 0.02
+    assert np.max(np.abs(curvatures)) <= CAR.max_ramp_curvature_per_m * 1.001
 
 
 @pytest.mark.parametrize("width_m, right_m, left_m", [
@@ -110,85 +158,140 @@ def test_no_room_keeps_the_usual_line(width_m, right_m, left_m):
     assert plan(LaneAvoidance(CAR, CAR_FRONT_M), [obstacle(right_m, left_m)], width_m).segments == ()
 
 
-def test_passes_on_the_side_with_more_room():
+def test_passes_on_the_side_that_needs_the_smaller_move():
     item = obstacle(-0.05, 0.15)
     # 1.4 m lane: 0.60 m on its right, 0.50 m on its left
-    assert beside(plan(LaneAvoidance(CAR, CAR_FRONT_M), [item], 1.4), item) == pytest.approx((-0.35, -0.35))
+    lowest_m, highest_m = beside(plan(LaneAvoidance(CAR, CAR_FRONT_M), [item], 1.4), item)
+    assert -0.65 + HALF_WIDTH_M + CAR.cone_clearance_m <= lowest_m <= highest_m <= (
+        item.right_m - HALF_WIDTH_M - CAR.obstacle_clearance_m)
 
 
-def test_side_changes_only_for_clearly_more_room():
+def test_keeps_its_side_while_that_side_stays_clear():
     avoidance = LaneAvoidance(CAR, CAR_FRONT_M)
     first = obstacle(-0.15, 0.05)
-    assert beside(plan(avoidance, [first], 1.4), first)[0] == pytest.approx(0.35)
-    # Now 0.02 m more room on its right: within side_hysteresis_m, so the car keeps passing on its left
-    nearly = obstacle(-0.09, 0.11)
-    assert beside(plan(avoidance, [nearly], 1.4, first=False, wheel_speed=0.0), nearly)[0] == pytest.approx(0.38)
-    clearly = obstacle(-0.05, 0.15)
-    assert beside(plan(avoidance, [clearly], 1.4, first=False, wheel_speed=0.0), clearly)[0] == pytest.approx(-0.35)
+    assert beside(plan(avoidance, [first], 1.4), first)[0] > 0.0
+    # Now more room on its right, but the left still leaves the clearances: the car keeps passing on its left
+    for item in (obstacle(-0.09, 0.11), obstacle(-0.05, 0.15)):
+        lowest_m, _ = beside(plan(avoidance, [item], 1.4, first=False, wheel_speed=0.0), item)
+        assert lowest_m - HALF_WIDTH_M >= item.left_m + CAR.obstacle_clearance_m - 1e-6
+    # The left no longer leaves them: the car changes to the right
+    blocked = obstacle(-0.05, 0.25)
+    assert beside(plan(avoidance, [blocked], 1.4, first=False, wheel_speed=0.0), blocked)[1] < 0.0
 
 
-def test_keeps_the_line_beside_the_obstacle_until_the_rear_has_passed_it():
+def test_a_face_seen_edge_on_still_counts():
+    # The lidar sees the side of a box along the lane as returns with no width across it
+    item = obstacle(-0.10, -0.10)
+    assert beside(plan(LaneAvoidance(CAR, CAR_FRONT_M), [item]), item)[0] >= (
+        -0.10 + HALF_WIDTH_M + CAR.obstacle_clearance_m - 1e-6)
+
+
+def test_pieces_of_one_object_are_passed_as_one():
+    pieces = [obstacle(-0.30, -0.20), obstacle(-0.19, -0.10, 2.52, 2.7)]
+    path = plan(LaneAvoidance(CAR, CAR_FRONT_M), pieces)
+    assert beside(path, obstacle(-0.30, -0.10, 2.5, 2.7)) == pytest.approx((0.175, 0.175))
+
+
+def test_keeps_clear_of_the_obstacle_until_the_rear_has_passed_it():
+    item = obstacle(-0.30, -0.10, 2.5, 2.7)
     avoidance = LaneAvoidance(CAR, CAR_FRONT_M)
-    item = obstacle(-0.30, -0.10, 0.2, 0.4)
-    assert plan(avoidance, [item]).offset_at(0.0) == pytest.approx(0.175)
-    # Out of the lidar's view beside the car: 0.05 m per step. base_link leaves the line beside it once it is
-    # 0.4 + 0.6 + 0.3 = 1.3 m on, and is back on the usual line a ramp later
-    lines = [plan(avoidance, [], first=False).offset_at(0.0) for _ in range(70)]
-    held = round(1.3 / 0.05)
-    assert lines[:held] == pytest.approx([0.175] * held)
-    assert all(b <= a for a, b in zip(lines[held:], lines[held + 1:]))
-    back = math.ceil((1.3 + ramp_m(0.175)) / 0.05)
-    assert lines[back:] == pytest.approx([0.0] * (len(lines) - back))
+    lines = approach(avoidance, item)
+    beside_car = [(driven_m, path) for driven_m, path in lines
+                  if item.distance_m <= driven_m <= item.far_distance_m + CAR_LENGTH_M]
+    assert beside_car
+    # Out of the lidar's view beside the car, the remembered obstacle is still passed with the clearance. The car may
+    # turn back as its rear passes it, because the rear then swings away from it
+    for driven_m, path in beside_car:
+        now = obstacle(item.right_m, item.left_m, item.distance_m - driven_m, item.far_distance_m - driven_m)
+        assert not avoidance.in_way(path, now, CAR.obstacle_clearance_m, CAR.obstacle_clearance_m)
+    assert beside_car[0][1].offset_at(0.0) == pytest.approx(0.175)
+    offsets = [path.offset_at(0.0) for _, path in lines]
+    # It moves over and back without jumping, and is back on the usual line once past
+    assert max(abs(b - a) for a, b in zip(offsets, offsets[1:])) < 0.02
+    assert offsets[-1] == pytest.approx(0.0)
+
+
+def test_the_line_does_not_jump_when_more_obstacles_come_into_view():
+    avoidance = LaneAvoidance(CAR, CAR_FRONT_M)
+    path = plan(avoidance, [obstacle(-0.30, -0.10, 2.5, 2.7)])
+    for step in range(1, 30):
+        driven_m = 0.05 * step
+        seen = [obstacle(-0.30, -0.10, 2.5 - driven_m, 2.7 - driven_m)]
+        if step >= 20:
+            seen.append(obstacle(0.10, 0.30, 7.0 - driven_m, 7.2 - driven_m))
+        before = path.moved_back(0.05, 0.0).state_at(0.0)
+        path = plan(avoidance, seen, first=False)
+        assert path.state_at(0.0) == pytest.approx(before, abs=1e-9)
 
 
 def test_beside_an_obstacle_the_line_is_held_rather_than_moved_into_it():
+    item = obstacle(-0.15, 0.05, 2.5, 2.7)
     avoidance = LaneAvoidance(CAR, CAR_FRONT_M)
-    plan(avoidance, [obstacle(-0.15, 0.05, 0.2, 0.4)], 1.4)
-    for _ in range(10):
-        path = plan(avoidance, [], 1.4, first=False)
-    assert path.offset_at(0.0) == pytest.approx(0.35)
+    lines = approach(avoidance, item, 1.4, steps=60)
+    held = lines[-1][1].moved_back(0.05, 0.0)
+    assert held.offset_at(0.0) > 0.0
     # The lane now looks narrower, leaving no room on either side: keep the line, rather than drive back into it
-    assert plan(avoidance, [], 1.0, first=False).offset_at(0.0) == pytest.approx(0.35)
+    narrower = plan(avoidance, [], 1.0, first=False)
+    assert all(narrower.offset_at(s_m) == pytest.approx(held.offset_at(s_m)) for s_m in np.arange(0.0, 1.0, 0.1))
 
 
-def test_without_wheel_speed_the_line_is_kept():
+@pytest.mark.parametrize("wheel_speed", [None, 0.5])
+def test_without_fresh_lidar_the_line_is_kept(wheel_speed):
     avoidance = LaneAvoidance(CAR, CAR_FRONT_M)
-    plan(avoidance, [obstacle(-0.3, -0.1, 0.2, 0.4)])
-    assert all(plan(avoidance, None, first=False, wheel_speed=None).offset_at(0.0) == pytest.approx(0.175)
-               for _ in range(100))
+    path = plan(avoidance, [obstacle(-0.3, -0.1)])
+    for _ in range(10):
+        kept = plan(avoidance, None, first=False, wheel_speed=wheel_speed)
+    # Moved back by the distance driven, if known
+    driven_m = 0.0 if wheel_speed is None else 10 * 0.05
+    assert all(kept.offset_at(s_m) == pytest.approx(path.offset_at(s_m + driven_m))
+               for s_m in np.arange(0.0, 6.0, 0.1))
 
 
 def test_new_run_and_switching_off_forget_the_line():
     avoidance = LaneAvoidance(CAR, CAR_FRONT_M)
-    plan(avoidance, [obstacle(-0.3, -0.1, 0.2, 0.4)])
+    plan(avoidance, [obstacle(-0.3, -0.1)])
     assert plan(avoidance, [], first=True).segments == ()
     assert plan(LaneAvoidance(AvoidanceConfig(enabled=False), CAR_FRONT_M), [obstacle(-0.3, -0.1)]) is None
 
 
 def test_obstacles_close_together_share_one_line():
-    near, far = obstacle(-0.30, -0.10, 1.0, 1.2), obstacle(-0.35, -0.05, 1.5, 1.7)
-    path = plan(LaneAvoidance(CAR, CAR_FRONT_M), [near, far])
-    # The narrower gap, beside the second, sets the line for both: the middle of -0.05 to 0.45
-    assert path.offset_range(near.distance_m, far.far_distance_m + CAR_LENGTH_M) == pytest.approx((0.20, 0.20))
+    near, far = obstacle(-0.30, -0.10, 2.5, 2.7), obstacle(-0.35, -0.05, 3.0, 3.2)
+    lowest_m, highest_m = plan(LaneAvoidance(CAR, CAR_FRONT_M), [near, far]).offset_range(
+        near.distance_m, far.far_distance_m + CAR_LENGTH_M)
+    # One line beside both, clear of the one reaching further in
+    assert lowest_m == pytest.approx(highest_m)
+    assert lowest_m - HALF_WIDTH_M >= far.left_m + CAR.obstacle_clearance_m - 1e-6
 
 
-def test_obstacles_on_alternate_sides_give_an_s_shaped_line_when_the_car_can_turn_that_sharply():
-    first, second = obstacle(-0.30, -0.10, 0.3), obstacle(0.10, 0.30, 2.5)
-    path = plan(LaneAvoidance(AvoidanceConfig(max_ramp_curvature_per_m=2.0), CAR_FRONT_M), [first, second])
-    assert beside(path, first) == pytest.approx((0.175, 0.175))
-    assert beside(path, second) == pytest.approx((-0.175, -0.175))
-    # Too sharp for the default ramps, and no one line passes both: only the first is passed, and the MPC stops for
-    # the second if it is in the car's way
+def test_obstacles_on_alternate_sides_are_planned_together():
+    first, second = obstacle(-0.30, -0.10, 2.5, 2.7), obstacle(0.10, 0.30, 6.5, 6.7)
     path = plan(LaneAvoidance(CAR, CAR_FRONT_M), [first, second])
     assert beside(path, first) == pytest.approx((0.175, 0.175))
+    assert beside(path, second) == pytest.approx((-0.175, -0.175))
+    # Only 0.6 m apart, they reach too far in to weave between: the first is passed, and the MPC stops for the
+    # second if it is in the car's way
+    second = obstacle(0.10, 0.30, 3.3, 3.5)
+    path = plan(LaneAvoidance(CAR, CAR_FRONT_M), [first, second])
+    assert beside(path, first)[0] >= -0.10 + HALF_WIDTH_M + CAR.obstacle_clearance_m - 1e-6
     assert beside(path, second)[0] >= 0.0
 
 
+def test_weaves_through_a_0_6_m_gap_with_the_car_turned_between_the_obstacles():
+    # 0.8 m lane: each obstacle ends 0.20 m short of the centre line, too far in for one straight line past both
+    avoidance = LaneAvoidance(CAR, CAR_FRONT_M)
+    first, second = obstacle(-0.30, -0.20, 2.5, 2.7), obstacle(0.20, 0.30, 3.3, 3.5)
+    path = plan(avoidance, [first, second], 0.8)
+    clearance_m = CAR.obstacle_clearance_m
+    assert not avoidance.in_way(path, first, clearance_m, clearance_m)
+    assert not avoidance.in_way(path, second, clearance_m, clearance_m)
+    assert beside(path, first)[1] > 0.0 > beside(path, second)[0]
+
+
 @pytest.mark.parametrize("curvature_per_m, plans", [
-    (0.5, False),  # Turning left as sharply as the car can (0.48 1/m): no room for a ramp
+    (0.5, False),  # Turning left as sharply as the car can (0.48 1/m): no room for a move
     (-0.5, True),  # Turning right, where the car can reach 0.92 1/m
 ])
-def test_ramps_keep_within_the_cars_limits_on_curves(curvature_per_m, plans):
+def test_moves_keep_within_the_cars_limits_on_curves(curvature_per_m, plans):
     avoidance = LaneAvoidance(CAR, CAR_FRONT_M, max_left_curvature_per_m=0.48, max_right_curvature_per_m=0.92)
     path = plan(avoidance, [obstacle(-0.30, -0.10)], curvature_per_m=curvature_per_m)
     assert bool(path.segments) == plans
@@ -197,7 +300,8 @@ def test_ramps_keep_within_the_cars_limits_on_curves(curvature_per_m, plans):
 @pytest.mark.parametrize("change", [
     {"enabled": 1}, {"car_width_m": 0.0}, {"car_rear_m": -0.1}, {"cone_radius_m": math.nan},
     {"cone_clearance_m": -0.1}, {"obstacle_clearance_m": math.inf}, {"pass_distance_m": -0.1},
-    {"max_ramp_curvature_per_m": 0.0}, {"side_hysteresis_m": -0.1}, {"lookahead_m": math.nan},
+    {"max_ramp_curvature_per_m": 0.0}, {"deviation_weight": -1.0}, {"smoothness_weight": math.nan},
+    {"clearance_weight": math.inf}, {"change_weight": -0.1},
 ])
 def test_invalid_settings_are_rejected(change):
     with pytest.raises(ValueError):
@@ -211,7 +315,7 @@ def test_passing_line_must_clear_the_obstacle_check():
                        avoidance_config=AvoidanceConfig(obstacle_clearance_m=0.05))
 
 
-def test_ramps_must_be_within_the_cars_curvature_limits():
+def test_moves_must_be_within_the_cars_curvature_limits():
     with pytest.raises(ValueError):
         MovementPolicy(MpcConfig(max_curvature_per_m=0.48), ConeFilterConfig(), ControlConfig(),
                        avoidance_config=AvoidanceConfig(max_ramp_curvature_per_m=0.5))
@@ -234,7 +338,7 @@ def drive_past(lane_width_m, boxes, steps=140, dt=0.1):
 
     :param boxes: For each box, the distance along the lane from the car's starting origin to its near side, and its
         right and left sides across the lane.
-    :return: The movement policy, and for each step the car's (x, y, heading) and the followed line.
+    :return: The movement policy, and for each step the car's (x, y, heading) and the line's offset beside it.
     """
     config = MpcConfig(stop_distance_per_speed_s=2.1, obstacle_stop_distance_per_speed_s=2.1)
     policy = MovementPolicy(config, ConeFilterConfig(), ControlConfig())
@@ -265,7 +369,7 @@ def drive_past(lane_width_m, boxes, steps=140, dt=0.1):
                                        PolicyState(0.0 if step == 0 else dt, step * dt, step == 0))
         policy.step(observations, car_memory)
         mpc = policy.action_policy
-        trace.append((x, y, heading, mpc.avoidance_offset_m))
+        trace.append((x, y, heading, None if mpc.avoidance_path is None else mpc.avoidance_path.offset_at(0.0)))
         commanded = mpc.previous_speed_m_per_s
         speed = commanded if commanded >= speed else speed + (commanded - speed) * dt / 2.1
         heading += speed * mpc.previous_curvature_per_m * dt
@@ -274,26 +378,45 @@ def drive_past(lane_width_m, boxes, steps=140, dt=0.1):
     return policy, trace
 
 
-def sides_beside(trace, box_x):
-    """The car's right and left sides at each step its body is beside the box at box_x."""
-    half_width_m = CAR.car_width_m / 2.0
-    return [(y - half_width_m, y + half_width_m) for x, y, _, _ in trace
-            if x + CAR_FRONT_M > box_x and x - CAR.car_rear_m < box_x + BOX_LENGTH_M]
+def body_outline(x, y, heading, step_m=0.01):
+    """Points every step_m around the car's body, a rectangle turned to its heading."""
+    rear_m, front_m = CAR.car_rear_m, CAR_FRONT_M
+    along = np.arange(-rear_m, front_m + step_m / 2, step_m)
+    across = np.arange(-HALF_WIDTH_M, HALF_WIDTH_M + step_m / 2, step_m)
+    u = np.concatenate([along, along, np.full(across.shape, front_m), np.full(across.shape, -rear_m)])
+    w = np.concatenate([np.full(along.shape, HALF_WIDTH_M), np.full(along.shape, -HALF_WIDTH_M), across, across])
+    return x + u * math.cos(heading) - w * math.sin(heading), y + u * math.sin(heading) + w * math.cos(heading)
+
+
+def gap_to_box(trace, box):
+    """The smallest distance in metres between the car's turned body and a box over the drive; 0.0 if they touch."""
+    box_x, right_m, left_m = box
+    gap_m = math.inf
+    for x, y, heading, _ in trace:
+        px, py = body_outline(x, y, heading)
+        dx = np.maximum(np.maximum(box_x - px, px - (box_x + BOX_LENGTH_M)), 0.0)
+        dy = np.maximum(np.maximum(right_m - py, py - left_m), 0.0)
+        gap_m = min(gap_m, float(np.min(np.hypot(dx, dy))))
+    return gap_m
+
+
+def widest_reach(trace):
+    """The farthest the car's body reaches across the lane from its centre line over the drive, in metres."""
+    return max(float(np.max(np.abs(body_outline(x, y, heading)[1]))) for x, y, heading, _ in trace)
 
 
 @pytest.mark.parametrize("lane_width_m, right_m, left_m", [
-    (1.0, -0.30, -0.10),  # The line moves to 0.175 m, 0.15 m from the box and from the cones
+    (1.0, -0.30, -0.10),
     (0.8, -0.38, -0.12),  # The lab's lane: a 0.47 m gap leaves 0.11 m either side
 ], ids=["1m-lane", "0.8m-lane"])
 def test_car_drives_around_a_box_with_room_beside_it_and_returns_to_the_line(lane_width_m, right_m, left_m):
-    policy, trace = drive_past(lane_width_m, [(3.5, right_m, left_m)])
+    box = (3.5, right_m, left_m)
+    policy, trace = drive_past(lane_width_m, [box])
     assert not policy.action_policy.stopped_for_obstacle
-    sides = sides_beside(trace, 3.5)
-    assert sides, "the car did not reach the box"
-    # The car's right side stays clear of the box, and its left side clear of the cones' inner side, by nearly the
-    # clearances (the MPC follows the line within 1 cm)
-    assert min(right for right, _ in sides) > left_m + CAR.obstacle_clearance_m - 0.01
-    assert max(left for _, left in sides) < lane_width_m / 2.0 - CAR.cone_radius_m - CAR.cone_clearance_m + 0.01
+    # The body stays clear of the box and of the cones' inner side by nearly the clearances (the MPC follows the
+    # line within 1 cm)
+    assert gap_to_box(trace, box) > CAR.obstacle_clearance_m - 0.01
+    assert widest_reach(trace) < lane_width_m / 2.0 - CAR.cone_radius_m - CAR.cone_clearance_m + 0.01
     assert any(offset is not None for _, _, _, offset in trace)
     # Back on the centre line once past
     assert abs(trace[-1][1]) < 0.05 and (trace[-1][3] is None or abs(trace[-1][3]) < 1e-9)
@@ -311,28 +434,45 @@ def test_car_weaves_between_boxes_on_alternate_sides():
     boxes = [(3.5, -0.30, -0.10), (8.5, 0.10, 0.30)]
     policy, trace = drive_past(1.0, boxes, steps=240)
     assert not policy.action_policy.stopped_for_obstacle
-    assert min(right for right, _ in sides_beside(trace, 3.5)) > -0.10 + CAR.obstacle_clearance_m - 0.01
-    assert max(left for _, left in sides_beside(trace, 8.5)) < 0.10 - CAR.obstacle_clearance_m + 0.01
+    assert min(gap_to_box(trace, box) for box in boxes) > CAR.obstacle_clearance_m - 0.01
     assert trace[-1][0] > 8.5 + BOX_LENGTH_M
 
 
-def test_car_stops_for_a_second_box_too_close_to_move_across_for():
-    # Seen 2.5 m ahead, with 1.25 m to stop: too little to ramp 0.29 m across, no sharper than 0.3 1/m
-    policy, trace = drive_past(1.0, [(3.5, -0.30, -0.10), (8.0, 0.10, 0.30)], steps=240)
+def test_car_moves_across_for_a_second_box_soon_after_the_first():
+    # The second box comes into view while the car is moving back from the first: one move takes it across
+    boxes = [(3.5, -0.30, -0.10), (6.5, 0.10, 0.30)]
+    policy, trace = drive_past(1.0, boxes, steps=240)
+    assert not policy.action_policy.stopped_for_obstacle
+    assert min(gap_to_box(trace, box) for box in boxes) > CAR.obstacle_clearance_m - 0.01
+
+
+@pytest.mark.parametrize("lane_width_m, inner_m", [(0.8, 0.20), (1.0, 0.20)])
+def test_car_weaves_through_a_0_6_m_gap_between_boxes_on_alternate_sides(lane_width_m, inner_m):
+    # Each box ends inner_m short of the centre line, so no straight line passes both; the car turns between them,
+    # its rear still beside the first while its front passes the second
+    edge_m = lane_width_m / 2.0 - 0.02
+    boxes = [(3.5, -edge_m, -inner_m), (3.5 + BOX_LENGTH_M + 0.6, inner_m, edge_m)]
+    policy, trace = drive_past(lane_width_m, boxes, steps=200)
+    assert not policy.action_policy.stopped_for_obstacle
+    assert min(gap_to_box(trace, box) for box in boxes) > CAR.obstacle_clearance_m - 0.01
+    assert trace[-1][0] > boxes[1][0] + BOX_LENGTH_M
+
+
+@pytest.mark.parametrize("inner_m", [0.15, 0.10])
+def test_car_stops_before_a_0_6_m_gap_too_tight_to_weave_through(inner_m):
+    boxes = [(3.5, -0.38, -inner_m), (4.3, inner_m, 0.38)]
+    policy, trace = drive_past(0.8, boxes, steps=200)
     assert policy.action_policy.stopped_for_obstacle
-    assert trace[-1][0] > 3.5 + BOX_LENGTH_M
-    assert trace[-1][0] + CAR_FRONT_M < 8.0
+    assert min(gap_to_box(trace, box) for box in boxes) > 0.05
+    assert trace[-1][0] + CAR_FRONT_M < boxes[1][0]
 
 
 @pytest.mark.parametrize("gap_m", [1.6, 2.0])
-def test_car_passes_boxes_on_both_edges_on_one_line(gap_m):
-    # As on the car on 15 Oct: a box on each edge of a 1.0 m lane, the second gap_m after the first. The middle line
-    # clears both, but once the second came into view the car stopped beside the first, or once it reached the first
-    # it moved back to that box's own line and then stopped for the second
+def test_car_passes_boxes_on_both_edges(gap_m):
+    # As on the car on 15 Oct: a box on each edge of a 1.0 m lane, the second gap_m after the first. Once the second
+    # came into view the old planner stopped the car beside the first
     boxes = [(3.5, 0.25, 0.45), (3.5 + BOX_LENGTH_M + gap_m, -0.45, -0.25)]
     policy, trace = drive_past(1.0, boxes, steps=240)
     assert not policy.action_policy.stopped_for_obstacle
-    # Both sides stay clear of the boxes' inner faces
-    assert max(left for _, left in sides_beside(trace, boxes[0][0])) < 0.25
-    assert min(right for right, _ in sides_beside(trace, boxes[1][0])) > -0.25
+    assert min(gap_to_box(trace, box) for box in boxes) > CAR.obstacle_clearance_m - 0.01
     assert trace[-1][0] > boxes[1][0] + BOX_LENGTH_M
