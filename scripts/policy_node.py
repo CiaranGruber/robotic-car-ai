@@ -67,6 +67,7 @@ from dream_interfaces.msg import (ConeDetection, ConeDetections, DriveAndSteer,
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from policy.action_policy.avoidance import AvoidanceConfig
+from policy.action_policy.corridor import CorridorControlConfig
 from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig
 from policy.cone_filter.cone_filter import ConeFilterConfig
@@ -306,7 +307,8 @@ class PolicyNode(Node):
         for prefix, config_type in (
                 ("mpc", MpcConfig), ("open_space", OpenSpaceConfig), ("cone_filter", ConeFilterConfig),
                 ("control", ControlConfig), ("lane_detection", LaneDetectionConfig),
-                ("obstacle_detection", ObstacleDetectionConfig), ("avoidance", AvoidanceConfig)):
+                ("obstacle_detection", ObstacleDetectionConfig), ("avoidance", AvoidanceConfig),
+                ("corridor", CorridorControlConfig)):
             defaults = asdict(config_type())
             for name, default in defaults.items():
                 self.declare_parameter(f"{prefix}.{name}", default, ParameterDescriptor(read_only=True))
@@ -315,7 +317,15 @@ class PolicyNode(Node):
         self.movement_policy = MovementPolicy(
             settings["mpc"], settings["cone_filter"], settings["control"], settings["open_space"],
             self.get_parameter("action_policy").value, lane_detection_config=settings["lane_detection"],
-            obstacle_detection_config=settings["obstacle_detection"], avoidance_config=settings["avoidance"])
+            obstacle_detection_config=settings["obstacle_detection"], avoidance_config=settings["avoidance"],
+            corridor_config=settings["corridor"])
+        if self.get_parameter("action_policy").value == "corridor":
+            corridor_sensors = {"cone_detections", "wheel_speed", "imu_angular_velocity", "lidar_cartesian"}
+            if not corridor_sensors <= set(self.required_sensors):
+                raise ValueError("corridor requires cone_detections, wheel_speed, imu_angular_velocity and lidar_cartesian")
+            if settings["corridor"].reaction_allowance_s+1e-9 < (
+                    settings["corridor"].command_timeout_s+1/self.supervision_rate_hz):
+                raise ValueError("corridor reaction_allowance_s must cover command timeout plus one supervision tick")
         # Every parameter value this node runs with, saved beside each drive data log
         # (<stem>_config.json). Settings are startup-only, so reading them once is enough.
         self.parameter_values = {
@@ -331,6 +341,7 @@ class PolicyNode(Node):
         self.heading_reference = None
         self.policy_started_at = None
         self.previous_policy_step_at = None
+        self.last_corridor_command_at = None
         self._monotonic = time.monotonic
         self._last_ros_time_ns = None
         self._last_status_at = -math.inf
@@ -476,6 +487,10 @@ class PolicyNode(Node):
                 and self._age(observation, monotonic_now, ros_now_ns) < self.sensor_timeout_s[name])
 
     def health_problem(self, monotonic_now, ros_now_ns):
+        if (self.fsm_state == FSM_STATE_PUBLISHING_POLICY_ACTION
+                and self.movement_policy.action_policy_name == "corridor" and self.last_corridor_command_at is not None
+                and monotonic_now-self.last_corridor_command_at > self.movement_policy.corridor_policy.config.command_timeout_s):
+            return "Corridor policy-step deadline exceeded"
         for name in self.required_sensors:
             if not self._fresh(name, monotonic_now, ros_now_ns):
                 return f"Required sensor {name} is missing or stale"
@@ -810,6 +825,10 @@ class PolicyNode(Node):
             self._change_state(FSM_STATE_PUBLISHING_ZERO_ACTIONS, problem)
             return
         self._publish_actions(drive, steer, pan)
+        # A calculation beginning is not a new command. Refresh this only after validation/post-check and
+        # publication, so a slow callback cannot extend the preceding command's reaction budget.
+        if self.movement_policy.action_policy_name == "corridor":
+            self.last_corridor_command_at = now
         if debug1 is not None:
             self.debug1_publisher.publish(Float32(data=float(debug1)))
         if debug2 is not None:
@@ -1230,6 +1249,7 @@ class PolicyNode(Node):
             # policy-state entry; a later IMU sample does not silently re-tare.
             self.policy_started_at = now
             self.previous_policy_step_at = None
+            self.last_corridor_command_at = None
         self._change_state(requested, "Operator request")
 
     def _state_name(self, state) -> str:

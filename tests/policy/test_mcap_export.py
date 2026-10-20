@@ -23,6 +23,8 @@ def _record_data_log(tmp_path, step_count):
     :return: The data log's observations file.
     """
     settings = mcap_export.read_settings(mcap_export.DEFAULT_SETTINGS_PATH)
+    # This historical obstacle recording has no gyro; exercise the MPC logger/replay contract explicitly.
+    settings["action_policy"] = "mpc"
     policy = mcap_export.build_policy(settings)
     memory = CarMemory()
     params = start_data_log(validate_parameters(True, str(tmp_path), "info", False), settings)
@@ -70,7 +72,11 @@ def test_the_foxglove_layout_only_shows_exported_topics_and_state_values(tmp_pat
     layout = json.loads((mcap_export.REPO_ROOT / "docs" / "foxglove" / "mcap_replay_layout.json").read_text())
     panels = layout["configById"].values()
     output = tmp_path / "straight.mcap"
-    mcap_export.main(["-n", "straight_even", "-o", str(output)])
+    settings = mcap_export.read_settings(mcap_export.DEFAULT_SETTINGS_PATH)
+    settings["action_policy"] = "mpc"
+    settings_path = tmp_path/"mpc-settings.json"
+    settings_path.write_text(json.dumps(settings))
+    mcap_export.main(["-n", "straight_even", "-o", str(output), "--settings", str(settings_path)])
     with output.open("rb") as file:
         state = json.loads(next(make_reader(file).iter_messages(topics=["/policy/state"]))[2].data)
 
@@ -81,3 +87,18 @@ def test_the_foxglove_layout_only_shows_exported_topics_and_state_values(tmp_pat
         value = state
         for key in field.split("."):
             value = value[key]
+
+
+def test_corridor_export_loads_selected_settings_and_records_runtime_diagnostics(tmp_path):
+    from tests.policy.test_corridor_runtime import observations
+    settings = mcap_export.read_settings(mcap_export.DEFAULT_SETTINGS_PATH)
+    policy = mcap_export.build_policy(settings)
+    assert policy.corridor_policy.config.lookahead_m == 1.1
+    assert policy.corridor_policy.config.full_range_steering
+    memory = CarMemory()
+    obs = observations()
+    actions = policy.step(obs, memory)
+    state = mcap_export._state(policy, mcap_export.RecordedStep(obs, actions), actions)
+    assert state["action_policy"] == "corridor"
+    assert state["corridor"]["requested_speed_m_per_s"] == .4
+    assert state["corridor"]["path_points"] > 0

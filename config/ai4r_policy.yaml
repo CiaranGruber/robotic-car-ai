@@ -42,7 +42,7 @@
     # Obstacle stopping (mpc.obstacle_stop_enabled) needs the lidar: with
     # lidar_cartesian required, missing or stale lidar stops the policy in
     # publishing-zero state, and a run cannot start without it.
-    required_sensors: [cone_detections, wheel_speed, lidar_cartesian]
+    required_sensors: [cone_detections, wheel_speed, imu_angular_velocity, lidar_cartesian]
 
     # COPYABLE EXERCISES: replace the active settings above; do not add a second
     # active copy of the same key. A sensor-driven mode needs no rate setting.
@@ -147,11 +147,75 @@
     # Which policy chooses where to drive (MovementPolicy in
     # policy/policy_runner.py, which checks it): a string,
     #   mpc:        follow the lane between the yellow and blue cone rows.
+    #   corridor:   connected polyline lane with motion memory, fixed camera,
+    #               normalized control and swept-footprint lidar stopping.
     #   open_space: drive into the open space between the cones, of any colour,
     #               ONLY while the operator holds the RC drive forwards. Releasing
     #               it stops the car; RC steering picks the preferred side. Use the
     #               open-space exercise settings above.
-    action_policy: mpc
+    action_policy: corridor
+
+    # FIXED-CAMERA CONNECTED CORRIDOR TEST. Revert action_policy to mpc to use
+    # the previous arc-based controller. This mode needs ALL four active
+    # required_sensors above, including fresh body gyro; no gyro means no start.
+    # Stops latch until an explicit state-2 then state-3 request. Empty cones
+    # stop; one visible supported boundary can continue a bounded saved route.
+    # Lidar checks the commanded curved footprint, without excluding cone hits.
+    # No obstacle avoidance lane changes are attempted in this mode.
+    corridor:
+      # Target and hard observed-speed stop limit, m/s, positive doubles;
+      # target < overspeed <= 2. Target must retain control's speed feedback.
+      target_speed_m_per_s: 0.4
+      overspeed_m_per_s: 0.7
+      # Planning curvature bounds, 1/m, positive <= 2. Left 1.0 uses the
+      # owner's approximate 1m radius, NOT a measured steering calibration.
+      # Existing control steering map and normalized limits still apply and
+      # may saturate. This cannot increase a mechanical steering limit.
+      max_left_curvature_per_m: 1.0
+      max_right_curvature_per_m: 0.92
+      # Explicit TEST assumption: map these curvature limits to full normalized
+      # steering using control.max_steering_action and the existing direction/
+      # centre. Intermediate response is assumed linear. true affects CORRIDOR
+      # ONLY; false retains control's measured car20 slopes (which clip at
+      # ~.64/m left, so cannot represent the reported 1m turn). This does not
+      # alter mechanical limits or DREAM's servo/PWM calibration. Confirm the
+      # real response during testing; reported radius is approximate.
+      full_range_steering: true
+      # Assumed first-order steering settling time, seconds in (0,1]. Lidar
+      # rollouts start at measured gyro/speed curvature, then settle toward
+      # each candidate. This is a test-model assumption, not measured dynamics.
+      steering_settle_s: 0.15
+      # Independent supervision stops stale corridor commands after this step
+      # deadline, seconds >0. Reaction budget also covers one supervision tick;
+      # startup rejects a budget smaller than timeout+1/supervision_rate_hz.
+      # reaction_allowance_s <= .5; lidar/braking support includes its travel.
+      command_timeout_s: 0.2
+      reaction_allowance_s: 0.25
+      # SOFT preference: distance from cone CENTRE to body, m in (0,width/2].
+      # Weight double [0,100]; 0 disables this cost. Favours room before the
+      # stopping guard is reached; it never overrides hard cone/lidar checks.
+      preferred_cone_clearance_m: 0.2
+      clearance_cost_weight: 3.0
+      # Cone gate width bounds and largest connected same-colour gap, metres.
+      min_width_m: 0.3
+      max_width_m: 1.4
+      max_cone_gap_m: 0.9
+      # INTEGER 4..256; bounds geometry work. Metres, positive doubles below.
+      max_cones: 96
+      # Path pursuit distance, m. Observed corners are rounded at the planning
+      # radius before pursuit; the cone/curved lidar guards still admit motion.
+      lookahead_m: 1.1
+      # Owner-reported lane width, needed to offset a fresh single boundary.
+      nominal_width_m: 1.0
+      route_memory_enabled: true
+      # Original two-colour anchor expires after either time or travel limit.
+      # A separately generated rounded route has the same bounds. Retained
+      # routes/duplicate frames never renew anchors. A new full route fitted
+      # from current cones may anchor a new rounded plan, including one known
+      # boundary. Short terminal fits cannot do so. Seconds <= 8, metres <= 3;
+      # current supporting cones and valid motion remain necessary.
+      route_max_age_s: 6.5
+      route_max_distance_m: 2.6
 
     # Logging settings (policy/data_logging/data_logging.py).
     logging:

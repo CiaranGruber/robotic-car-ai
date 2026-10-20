@@ -4,6 +4,7 @@ import dataclasses
 import math
 
 from policy.action_policy.avoidance import AvoidanceConfig, LaneAvoidance
+from policy.action_policy.corridor import CorridorControlConfig, CorridorPolicy
 from policy.action_policy.lane_path import LanePath
 from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig, OpenSpacePolicy
@@ -20,7 +21,7 @@ from policy.obstacle_detection.obstacle_detection import (ObstacleDetectionConfi
                                                           detect_obstacles, nearest_in_band)
 from policy.obstacle_detection.obstacles import LaneObstacle, ObstacleDetection
 
-ACTION_POLICIES = ("mpc", "open_space")
+ACTION_POLICIES = ("mpc", "open_space", "corridor")
 """Valid names for the action_policy parameter in config/ai4r_policy.yaml."""
 
 
@@ -34,7 +35,8 @@ class MovementPolicy:
                  open_space_config: OpenSpaceConfig = OpenSpaceConfig(), action_policy: str = "mpc",
                  lane_detection_config: LaneDetectionConfig = LaneDetectionConfig(),
                  obstacle_detection_config: ObstacleDetectionConfig = ObstacleDetectionConfig(),
-                 avoidance_config: AvoidanceConfig = AvoidanceConfig()):
+                 avoidance_config: AvoidanceConfig = AvoidanceConfig(),
+                 corridor_config: CorridorControlConfig = CorridorControlConfig()):
         """
         :param mpc_config: The MPC settings, from the mpc parameters in config/ai4r_policy.yaml.
         :param cone_filter_config: The cone filter settings, from the cone_filter parameters in
@@ -43,7 +45,8 @@ class MovementPolicy:
         :param open_space_config: The open-space settings, from the open_space parameters in config/ai4r_policy.yaml.
         :param action_policy: Which policy chooses the instructions, from the action_policy parameter:
             "mpc" follows the cone lane, and "open_space" drives into the open space between the cones while the
-            operator holds the RC drive forwards. A ValueError is raised for any other name.
+            operator holds the RC drive forwards. "corridor" follows a connected cone path with fixed pan
+            and curved-footprint lidar stopping. A ValueError is raised for any other name.
         :param lane_detection_config: The lane detection settings, from the lane_detection parameters in
             config/ai4r_policy.yaml.
         :param obstacle_detection_config: The obstacle detection settings, from the obstacle_detection parameters in
@@ -90,7 +93,23 @@ class MovementPolicy:
         self.avoidance = LaneAvoidance(avoidance_config, obstacle_detection_config.car_front_m, max_left, max_right,
                                        stopping_m if mpc_config.obstacle_stop_enabled else 0.0)
         self.open_space_policy = OpenSpacePolicy(open_space_config, control_config.positive_steering_turns_left)
+        if action_policy == "corridor" and corridor_config.full_range_steering:
+            # Explicit experimental endpoint scaling: the reported curvature limits correspond to full
+            # normalized steering. This is a provisional response assumption, not a hardware recalibration.
+            if abs(control_config.steering_centre_action) >= control_config.max_steering_action:
+                raise ValueError("Corridor endpoint scaling needs centre inside steering limits")
+            left = math.copysign(control_config.max_steering_action,
+                                 control_config.steering_left_action_per_curvature)
+            right = -left
+            control_config = dataclasses.replace(control_config,
+                steering_left_action_per_curvature=(left-control_config.steering_centre_action)
+                                                   /corridor_config.max_left_curvature_per_m,
+                steering_right_action_per_curvature=(right-control_config.steering_centre_action)
+                                                    /-corridor_config.max_right_curvature_per_m)
         self.car_controller = CarController(control_config)
+        self.corridor_policy = (CorridorPolicy(corridor_config, mpc_config, obstacle_detection_config,
+                                               avoidance_config, control_config)
+                                if action_policy == "corridor" else None)
         self.cones: ConeBatch | None = None
         """The lane-fitting cones after filtering/yaw correction, including optional remembered geometry."""
         self.remembered_cones = []
@@ -122,6 +141,8 @@ class MovementPolicy:
         """
         if self.action_policy_name == "open_space":
             return self._open_space_step(observations)
+        if self.action_policy_name == "corridor":
+            return self._corridor_step(observations, memory)
         # Remove the cone outliers, so every later stage uses the same plausible cones
         observations = dataclasses.replace(
             observations, cones=filter_cones(observations.cones, self.cone_filter_config))
@@ -168,6 +189,29 @@ class MovementPolicy:
                 car_actions, debug1=lane_state.lateral_error_m, debug2=lane_state.heading_error_rad)
         # Return final car actions
         return car_actions
+
+    def _corridor_step(self, observations, memory):
+        # The corridor engine owns its cone filtering and acquisition-aligned geometry. Never feed the old
+        # single-arc lane to its lidar check or bypass the existing normalized actuation controller.
+        cones = observations.cones
+        yaw = math.radians(self.action_policy.config.camera_yaw_offset_deg)
+        if cones is not None and yaw:
+            observations = dataclasses.replace(observations, cones=ConeBatch(
+                rotate_cones(cones, yaw), cones.sensor_age, cones.acquisition_to_publish_latency_s))
+        instructions = self.corridor_policy.run_policy(observations, memory)
+        self.cones = observations.cones
+        self.remembered_cones = []
+        self.lanes, self.lane_path, self.lane_obstacles = None, None, None
+        self.lane_fit_rejected = self.lane_prediction_active = False
+        self.obstacles = self.corridor_policy.obstacles
+        self.obstacle_distance_m = None if self.obstacles is None else self.obstacles.in_path_distance_m
+        actions = self.car_controller.step(observations, instructions)
+        # Physical panning would invalidate the producer's fixed optical TF. Zero during driving; node-level
+        # stop/watchdog publication still sends None to hold the previous pan target.
+        actions.camera_pan_action = 0.0
+        actions.debug1 = self.corridor_policy.last_command.curvature_per_m
+        actions.debug2 = self.corridor_policy.last_command.speed_m_per_s
+        return actions
 
     def _obstacle_distance_m(self, lanes: LaneDetection | None) -> float | None:
         """Finds how far ahead the nearest obstacle in the car's way is, from this step's obstacles.

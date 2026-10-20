@@ -203,13 +203,20 @@ def detections(cones, pose, car: CarProfile, rng) -> list[ConeDetection]:
     return sorted(found, key=lambda d: d.pos.x)
 
 
-def run_curve(case: CurveCase, policy, lanes_from=None) -> CurveResult:
+def run_curve(case: CurveCase, policy, lanes_from=None, *, camera=None, lidar_from=None,
+              braking_distance_per_speed_s=None) -> CurveResult:
     """Drives a policy along a curved lane.
 
     :param case: The lane, start and car.
     :param policy: Anything with run_policy(observations, lanes) returning instructions with one DriveCommand.
     :param lanes_from: Optional lane detection, observations -> LaneDetection or None, passed to the policy as
         lanes. None passes lanes=None, so the MPC fits the lane from the cones itself.
+    :param camera: Optional simulated camera with capture/to_body/aim_path/advance methods. Its acquisition pose travels
+        with the delayed image; the default retains the existing fixed-camera behavior.
+    :param lidar_from: Optional test sensor generator (world cones, body pose, time), returning Cartesian lidar.
+    :param braking_distance_per_speed_s: Optional ASSUMED braking plant. After the existing speed dead time d,
+        linearly stop over 2*(this value-d) seconds, so total braking distance is initial speed times this value.
+        Only negative-effort braking commands use it; None retains the original coasting behavior.
     :return: The trajectory and metrics.
     """
     lane, car = case.lane, case.car
@@ -235,6 +242,9 @@ def run_curve(case: CurveCase, policy, lanes_from=None) -> CurveResult:
     max_s = -RUN_IN_M
     step = 0
     time_constant = car.speed_time_constant_s or 0.3
+    brake_elapsed, brake_initial_speed = None, 0.
+    if braking_distance_per_speed_s is not None and braking_distance_per_speed_s <= car.speed_dead_time_s:
+        raise ValueError("Braking distance/speed must exceed the brake response delay")
     while step * SIM_STEP_S < case.max_duration_s:
         s, lateral, _ = centre.locate(x, y)
         max_s = max(max_s, s)
@@ -244,17 +254,24 @@ def run_curve(case: CurveCase, policy, lanes_from=None) -> CurveResult:
         log["heading"].append(heading)
         log["lateral"].append(lateral)
         if step % steps_per_policy == 0:
-            detected = detections(cones, (x, y, heading), car, rng)
+            detected = (detections(cones, (x, y, heading), car, rng) if camera is None
+                        else camera.capture(cones, (x, y, heading), car, rng, step * SIM_STEP_S))
             if case.inner_occlusion_s is not None and case.inner_occlusion_s[0] <= step * SIM_STEP_S < case.inner_occlusion_s[1]:
-                detected = [c for c in detected if c.colour != ConeColour.BLUE]
+                if camera is None:
+                    detected = [c for c in detected if c.colour != ConeColour.BLUE]
+                else:
+                    detected = camera.occlude(detected, ConeColour.BLUE)
             pending.append(detected)
             batch = pending.pop(0) if len(pending) > delay_steps else None
+            if camera is not None and batch is not None:
+                batch = camera.to_body(batch)
             first = step == 0
             observations = CarObservations(
                 cones=None if batch is None else ConeBatch(batch, SensorAge(
                     car.detection_latency_s, round((100 + step * SIM_STEP_S - car.detection_latency_s) * 1e9)),
                                                            acquisition_to_publish_latency_s=0.0),
-                fiducials=None, lidar_scan=None, lidar_cartesian=None,
+                fiducials=None, lidar_scan=None,
+                lidar_cartesian=None if lidar_from is None else lidar_from(cones, (x, y, heading), step*SIM_STEP_S),
                 car=ObservedCarState(None, AngularVelocity(0.0, 0.0, speed * driven_curvature, SensorAge(0.0, None)),
                                      None, WheelSpeed(speed, SensorAge(0.0, None))),
                 policy=PolicyState(dt=0.0 if first else POLICY_PERIOD_S, policy_elapsed_s=step * SIM_STEP_S,
@@ -263,14 +280,28 @@ def run_curve(case: CurveCase, policy, lanes_from=None) -> CurveResult:
             lanes = lanes_from(observations) if lanes_from is not None else None
             command = next(i for i in policy.run_policy(observations, lanes) if isinstance(i, DriveCommand))
             commands.append(command)
+            if camera is not None:
+                camera.aim_path(getattr(policy, "path", ()))
         # The car: speed after a dead time and a lag, curvature clipped to the steering limits plus the trim
         requested_speeds.append(command.speed_m_per_s)
-        speed += (requested_speeds.pop(0) - speed) * SIM_STEP_S / time_constant
+        delayed_speed = requested_speeds.pop(0)
+        if command.brake and braking_distance_per_speed_s is not None:
+            if brake_elapsed is None:
+                brake_elapsed, brake_initial_speed = 0., speed
+            brake_elapsed += SIM_STEP_S
+            stop_time = 2*(braking_distance_per_speed_s-car.speed_dead_time_s)
+            speed = brake_initial_speed*max(0., 1-max(0., brake_elapsed-car.speed_dead_time_s)/stop_time)
+            requested_speeds = [0.] * len(requested_speeds)
+        else:
+            brake_elapsed = None
+            speed += (delayed_speed - speed) * SIM_STEP_S / time_constant
         speed = max(speed, 0.0)
         target = (min(max(command.curvature_per_m, -car.max_right_curvature_per_m), car.max_left_curvature_per_m)
                   + car.straight_curvature_per_m)
         driven_curvature += (target - driven_curvature) * SIM_STEP_S / STEERING_TIME_CONSTANT_S
         heading += speed * driven_curvature * SIM_STEP_S / 2.0
+        if camera is not None:
+            camera.advance(command, SIM_STEP_S)
         x += speed * math.cos(heading) * SIM_STEP_S
         y += speed * math.sin(heading) * SIM_STEP_S
         heading += speed * driven_curvature * SIM_STEP_S / 2.0

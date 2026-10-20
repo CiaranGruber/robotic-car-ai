@@ -131,10 +131,14 @@ class StepDrawer:
                                          for cone in policy.cones or []],
                                 texts=[Text((cone.pos.x, cone.pos.y, 0.12), "remembered")
                                        for cone in policy.remembered_cones]),
-            "lane": Layer(lines=_lane_lines(policy.lanes)),
+            "lane": Layer(lines=([Line(list(policy.corridor_policy.path), COLOURS["centre"])]
+                                 if policy.action_policy_name == "corridor" and policy.corridor_policy.path
+                                 else _lane_lines(policy.lanes))),
             "obstacles": _obstacle_layer(policy),
             "plan/avoidance": Layer(lines=_avoidance_lines(policy)),
-            "plan/mpc": Layer(lines=_mpc_lines(policy) if solved else []),
+            "plan/mpc": Layer(lines=([Line(list(policy.corridor_policy.rollout), COLOURS["mpc"])]
+                                     if policy.action_policy_name == "corridor" and policy.corridor_policy.rollout
+                                     else _mpc_lines(policy) if solved else [])),
             "fiducials": _fiducial_layer(observations),
             "car": _car_layer(policy, observations, actions),
         }
@@ -145,7 +149,12 @@ def summary(policy: MovementPolicy, observations: CarObservations, actions: CarA
     :return: A short text of the step's lane, obstacle, speed and actions.
     """
     lanes = policy.lanes
-    lane = "open space" if lanes is None else lanes.status.name
+    lane = ("connected corridor" if policy.action_policy_name == "corridor"
+            else "open space" if lanes is None else lanes.status.name)
+    if policy.action_policy_name == "corridor" and policy.corridor_policy.stop_reason:
+        lane += "  STOP: " + policy.corridor_policy.stop_reason
+    if policy.action_policy_name == "corridor" and policy.corridor_policy.steering_limited:
+        lane += "  steering map saturated"
     if lanes is not None and lanes.has_lane:
         lane += f"  lateral {lanes.lateral_error_m:+.2f} m  heading {math.degrees(lanes.heading_error_rad):+.1f} deg"
     if (policy.lane_detector.config.single_edge_hold_enabled
@@ -162,7 +171,9 @@ def summary(policy: MovementPolicy, observations: CarObservations, actions: CarA
         "obstacle " + ("unknown" if obstacle is None else "clear" if math.isinf(obstacle) else f"{obstacle:.2f} m"),
         "speed " + ("unknown" if speed is None else f"{float(speed):.2f} m/s")
         + (f"  requested {policy.action_policy.previous_speed_m_per_s:.2f} m/s"
-           if policy.action_policy_name == "mpc" else "")
+           if policy.action_policy_name == "mpc" else
+           f"  requested {policy.corridor_policy.last_command.speed_m_per_s:.2f} m/s"
+           if policy.action_policy_name == "corridor" else "")
         + f"  drive {actions.drive_action:+.2f}  steer {actions.steering_action:+.2f}"))
 
 
@@ -205,6 +216,10 @@ def _obstacle_layer(policy: MovementPolicy) -> Layer:
     :return: The objects inside the lane, or without a lane the corridor ahead and the nearest return in it.
     """
     car_front_m = policy.obstacle_detection_config.car_front_m
+    if policy.action_policy_name == "corridor":
+        obstacles = policy.corridor_policy.obstacles
+        point = None if obstacles is None else obstacles.in_path_point
+        return Layer(spheres=[] if point is None else [Sphere(point.x, point.y, .1, COLOURS["obstacle"])])
     if policy.lane_obstacles is not None:
         centre_line = policy.lanes.centre_line
         lines = []

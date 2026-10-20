@@ -1,8 +1,319 @@
 # AI4R policy acceptance
 
-Status: the implementation passes the software gate on `jah`. Version 0.1.0
-identifies a release only through its published annotated tag and successful
-release CI. Physical vehicle acceptance remains unperformed.
+Current local candidate: experimental fixed-camera corridor mode for the owner's
+test on `10.43.254.33`. Its installed ROS gate is blocked locally; physical
+vehicle acceptance remains unperformed. Earlier software-gate and release
+records below describe their historical source snapshots.
+
+## Deployable corridor candidate: 30/30 runtime simulations, 2026-10-20
+
+The selected YAML now runs `action_policy: corridor` through `MovementPolicy`,
+the existing normalized `CarController` and ROS parameter declarations. The
+upload includes the corridor engine/geometry, package manifest and registered
+runtime test; simulation and learned-model files remain excluded. The helper
+retains the owner's `CAR_NUM=20`, resolving to confirmed target `.33`, and starts
+the required IMU with lidar. No SSH, upload, service change, vehicle enable,
+commit, merge or release was performed for this preparation.
+
+The existing cone/edge observer remains. The middle path connects cone geometry,
+rounds observed corners at the planning radius, and retains the generated route
+in motion-compensated memory. Anchors expire after 6.5 s or 2.6 m; current signed
+boundary support remains required. Supporting/duplicate frames cannot renew a
+retained anchor. A newly fitted full path can establish a new anchor, including
+from one known boundary; a fresh stronger turn can replace a retained straight.
+Short terminal straights need fresh separated cones, a learned colour role,
+and a bounded backward bridge; they never extend beyond the measured endpoint
+or re-anchor a full route. Loss of motion clears both raw and generated routes.
+
+Target speed is .4 m/s with a latched measured-speed stop above .7 m/s. Pan stays
+zero. The explicit `full_range_steering` test option maps provisional left
+1.0/m and right .92/m to the existing normalized endpoints. This assumes linear
+response and the owner's approximate 1 m left radius; it is not calibration or
+an increase in hardware limits. False retains the previous measured control
+slopes; `action_policy: mpc` restores the previous controller.
+
+All lidar returns are checked without cone-colour exemptions, using a .30 m
+front/.30 m rear/.25 m wide footprint and .075 m padding. Candidate checks cover
+driving and reaction-then-centred-steering braking, including intermediate stop
+times. Spatial interpolation uses separate longitudinal/lateral bounds, explicit
+integration error and a pointwise stop-delay bound. The .2 m preferred cone
+clearance and weight 3 are soft costs that cannot override hard rejection.
+Command deadline is .2 s, with .25 s reaction allowance including supervision.
+The node preserves explicit resume, independent zero publication, IMU field
+freshness and pan hold. A blocked calculation still blocks its own supervisor.
+Node state-2/watchdog zeros coast; the modelled active brake is a policy stop,
+not evidence of physical watchdog stopping.
+
+Final frozen mapped-steering evaluation passes **30/30**, with zero contacts
+and no full-footprint excursion. Worst polygon clearance is **.11235 m** in
+this model. Twenty regression cases use placement seeds 17/127 and detector
+seeds 201..205/801..805; ten untouched holdouts use placement 131 and detector
+seeds 901..905. Each runs with/without inner-edge occlusion at 6.0..6.4 s.
+Completion retains the existing criterion: within .75 m of the end, zero
+contacts and no footprint excursion. The scorer was not relaxed.
+
+These are three straight cone segments with independent .025 m placement
+jitter, assumed 3 m legs/cross, owner-reported 1 m width/left radius, .2 s camera
+latency and .03 m detection noise. The camera model has a body-origin planar
+pivot. Lidar provides ideal three-point cone surfaces within 4 m, with no scan
+noise or physical occlusion. The mapped mode inverts the configured steering
+map; it is not independent actuator calibration. Drive effort is checked, but
+the plant follows requested speed rather than simulating ESC/encoder feedback.
+Active braking is an explicit assumption: .2 s dead time followed by .8 s
+linear deceleration, giving distance/speed .6 s. The guard instead assumes a
+.15 s spatial first-order steering response; its interpolation bounds do not
+establish agreement with real time-varying braking/steering or frame accuracy.
+
+Reports/plots: `build/corridor-deploy-final-nominal/`,
+`build/corridor-deploy-final-regression127/`, and
+`build/corridor-deploy-final-holdout/`. Each contains `report.json` with matching
+executed-source hashes and `trajectories.png`. Aggregate evidence is
+`build/corridor-deploy-final-summary.json`. Reproduce using
+`OPENBLAS_NUM_THREADS=1 MPLCONFIGDIR=/tmp/ai4r-mpl .venv/bin/python -m
+tests.policy.corridor_runtime_simulation --count 5 --mapped-only --output DIR`;
+append `--seed-start 801 --placement-seed 127`, or
+`--seed-start 901 --placement-seed 131`, for the other sets.
+
+Software verification: **633 passed, 3 skipped, 1 existing xfailed** in the
+policy suite; **143 passed** from the actual locally filtered upload copy;
+**4 release-contract tests passed**; Python compilation, shell syntax and diff
+checks passed. The required `CONTRIBUTING.md` fast gate was attempted against
+the pinned path and cannot start: `.verification/dependencies/dream_interfaces`
+is absent (this host also lacks ROS Jazzy). Installed ROS watchdog tests were
+added but have not run here. Read-only Astra review found and helped repair
+path reversal, anchor reset, deadline and swept-footprint issues; no blocking
+issue remained in the final reviewed changes. Physical testing is **not run**.
+
+Rules followed: `0.00_root_rule.md`, `0.01_coding_standards.md`,
+`2.00_adding_sensors_and_observations.md`, `2.02_adding_parameters.md`,
+`2.05_car_memory.md`, `3.00_codebase_structure.md`, and
+`3.01_using_car_management_script.md`.
+
+## Camera path preview: 30/30 versus fixed-camera 26/30, 2026-10-20
+
+The owner suggested panning the camera to keep cones visible during the U.
+An opt-in simulated camera now previews the follower's cone-derived path 2 m
+ahead, using pursuit curvature times .6 m as its pan angle in radians. The
+assumed cap is +/-25 degrees, slew 60 degrees/s and first-order lag .15 s.
+Small preview curvatures up to .15/m recenter while moving. Missing paths fall
+back to requested steering curvature; stops retain the previous pan target.
+Neither true track vertices nor simulator pose enter the camera target.
+
+The existing camera delay queue carries each image's actual acquisition pan.
+Cone coordinates are corrected using that angle into acquisition `base_link`,
+before existing motion compensation. Default `camera=None` retains the original
+detector and scorer. A zero-pan regression checks identical trajectories and
+metrics. The detector's simplified planar pivot remains the body origin; real
+mount translation, optical/shaft kinematics, blur and physical occlusion are not
+modeled. Angle limits and servo response are assumptions, not measured facts.
+
+On **30 matched nominal cases**, path-preview pan passes **30/30**, with zero
+cone contacts and no footprint excursion; the fixed camera passes **26/30**.
+Worst path-pan polygon clearance is .1586 m. Frame-weighted visibility of both
+cone colours during turns increases from **46.5% to over 99.9%**. This measures
+raw colour presence when absolute requested steering curvature exceeds .3/m,
+not sufficient cone counts/span for a validated lane fit. Comparisons use the
+unchanged provisional 1 m width/left-radius profile, .4 m/s, .2 s image latency,
+.03 m detector noise and strict full-footprint/contact/completion scoring.
+
+Twenty regression cases use placements 17/89 and detector seeds 501..505, each
+with/without the 6.0..6.4 s inner-edge occlusion. These new cases exposed a shared
+seed505 failure with fixed or steering-reactive pan; earlier path preview fixes
+those cases without changing the steering controller. Frozen evaluation on
+placement 113 and detector seeds 601..605 adds ten fresh cases, again with and
+without occlusion; both fixed and path-pan pass those ten. The earlier fixed
+camera's 100/100 result below remains scoped to its recorded case set and is
+not a universal robustness claim.
+
+Steering-reactive pan alone passes 16/20 regression cases, despite improving
+visibility to 97.7%; looking ahead before steering is material here. Deliberately
+omitting acquisition-pan coordinate correction fails all 20 regression cases.
+This error control is not a model of correct physical-camera integration.
+No ROS selector, normalized pan command, live service or configuration changed.
+Physical use requires calibrated optical/shaft geometry, measured pan feedback
+and acquisition-time dynamic camera TF in the detector/DREAM producer. Existing
+runtime fixed/zero-pan behavior remains in place.
+
+Aggregate metrics/hashes: `build/camera-path-pan-summary.json`; per-case reports
+and plots in `build/camera-path-pan-regression/` and
+`build/camera-path-pan-fresh/` (`report.json`, `trajectories.png`, `visibility.png`).
+Reproduce with `OPENBLAS_NUM_THREADS=1 .venv/bin/python -m
+tests.policy.camera_pan_simulation --output build/camera-path-pan-regression`,
+then append `--output build/camera-path-pan-fresh --seed-start 601 --placements
+113 --modes fixed path_pan25` for the fresh set. Source hashes match across both
+evaluations. Software tests: `603 passed, 3 skipped, 1 existing xfailed`.
+Read-only Astra review found no concrete issue or route oracle. Required ROS
+fast gate attempted; pinned `dream_interfaces` checkout is still absent.
+
+## Three-line U-turn follow-up: 100/100 nominal runs, 2026-10-20
+
+The connected-corridor candidate now completes **100/100 nominal simulations**:
+80 regression cases and 20 fresh holdouts, all with zero cone contacts and no
+full-footprint corridor excursion. Existing scoring is unchanged: completion
+means within .75 m of the end, together with those two clearance conditions.
+The worst simulated polygon clearance is .1059 m. This is simulation evidence,
+not a physical clearance or stopping qualification.
+
+The failure fixes keep the existing cone/edge observer. Fresh single-boundary
+ordering now starts forward, groups close corner samples, fits straight stretches
+while preserving corners, and removes loops caused by inward offsets. Grouping
+changes the fitted boundary only; the collision inputs retain the original cone
+samples. The follower uses 1.2 m lookahead. Saved routes retain their original
+time/travel limits, require current supporting observations and cannot be renewed
+by a single edge. Work is bounded by the existing cone-count limit.
+
+The profile remains provisional: owner-reported 1 m lane width and 1 m left
+turning radius, inherited .92/m right curvature, assumed 3 m legs/cross,
+forward-only .4 m/s, .2 s camera latency, .03 m detector noise, valid gyro and
+measured-speed feedback. The scorer, footprint, steering response and geometry
+were not relaxed during this follow-up. The old car20 profile and runtime YAML
+remain unchanged. This offline follower is excluded from upload and has no ROS
+selector; physical testing remains not run.
+
+Regression placement seed 17 uses detector seeds 201..210; placement seeds
+23/41/67 use detector seeds 301..310. Each is run with/without inner-edge
+occlusion at 6.0..6.4 s. These 80 cases informed the fixes. After freezing the
+candidate, placement seed 89 with detector seeds 401..410 provides 20 fresh
+cases, again with/without occlusion. Source hashes match across all families.
+The separate +/-10% radius/width sensitivity grid passes 6/9; it is not included
+in the nominal 100. Approximate geometry is not established calibration.
+The same-profile arc baseline still fails. The learned network is not used.
+
+Aggregate metrics and hashes: `build/uturn-resolve/final-summary.json`.
+Individual reports/plots: `final-regression/report.json` and `validation.png`,
+`expanded/report.json` and `trajectories.png`, `fresh/report.json` and
+`trajectories.png`, all below `build/uturn-resolve/`.
+Reproduce the first 20 plus sensitivity/baseline with
+`.venv/bin/python -m tests.policy.car21_uturn_simulation --output
+build/uturn-resolve/final-regression`; the other exact drivers are
+`PYTHONPATH="$PWD" .venv/bin/python build/uturn-resolve/expanded.py` and
+`PYTHONPATH="$PWD" .venv/bin/python build/uturn-resolve/fresh.py`.
+
+Verification: `597 passed, 3 skipped, 1 existing xfailed` for the policy suite.
+New regressions cover forward boundary ordering, corner preservation, offset-loop
+removal and close corner samples. Read-only Astra review found no concrete
+remaining issue. The required pinned-interface fast gate was attempted again;
+it cannot start because `.verification/dependencies/dream_interfaces` is absent.
+
+## Provisional car21 width/radius: earlier 18/20 stage, 2026-10-20
+
+The owner reports a path about 1 m wide and a turning radius about 1 m, and has
+manually driven the real U. These are provisional user measurements, not the
+car20 calibration previously used by the simulator. The new evaluation uses
+lane width 1 m and left maximum curvature 1/m. Right curvature remains .92/m
+pending its own measurement. Three-segment shape, 3 m legs/cross, .025 m cone
+placement jitter and placement seed 17 are retained; the 3 m dimensions remain
+assumed. The old car20 profile, original .8 m track defaults and runtime YAML
+are unchanged. The previous infeasibility calculation remains scoped to the
+old profile and does not describe the owner's reported capability.
+
+The offline connected-corridor follower now has opt-in world-frame path memory
+and fresh single-boundary continuation. Saved routes require fresh support from
+both colours on opposite signed sides, minimum counts and .25 m spatial span.
+Colour roles come from this fresh geometry, not the augmented observer. Cached
+routes retain original acquisition time/distance and are transported/trimmed
+as the car moves; invalid motion or empty detections clears them and stops.
+The evaluation bounds route memory at 6.5 s/2.6 m. Single-edge observations never
+renew that anchor. When at least three fresh same-colour points form a connected
+boundary over the lookahead distance, its current measured polyline can be
+offset inward using the known 1 m width and learned colour role. This is fresh
+geometry, independent of old-route expiry. It uses bounded cone gaps and
+corner-direction changes; existing per-colour arc observation remains available.
+The feature defaults off, and the whole corridor follower remains excluded from
+car upload and absent from the ROS selector.
+
+Historical report from `.venv/bin/python -m tests.policy.car21_uturn_simulation
+--output build/car21-provisional-uturn-heldout`, using the source hashes saved
+in that report. The current driver uses the follow-up tuning above and does not
+reproduce this earlier result. Target speed .4 m/s, lookahead 1.1 m;
+forward-only kinematic model with .2 s camera latency, .03 m detector noise,
+valid gyro and measured-speed feedback. Development used seeds 0..4 and
+101..110; final held-out seeds 201..210 were frozen before evaluation, each
+with/without inner-cone occlusion at 6.0..6.4 s. **18/20 complete the U** according
+to the unchanged lane-kept scoring (within .75 m of end), **all 20 have zero cone
+contacts and no footprint excursion**. The seed209 pair stops early around
+6.235 m progress. Worst corridor clearance across the cases is about .0289 m;
+this is polygon clearance, not a physical stopping/clearance qualification.
+The same provisional profile's arc-based baseline fails its comparison case.
+
+Report and source hashes: `build/car21-provisional-uturn-heldout/report.json`;
+plot: `validation.png`. The radius/width sensitivity grid shows that +/-10%
+parameter changes do not consistently pass, so the approximate measurements
+must not be promoted as exact calibration. This result belongs to the connected
+geometry follower, not the earlier learned steering network (whose saved
+steering contract remains .48/.92). Runtime integration, lidar safety and
+physical testing are not performed; no vehicle services were contacted.
+
+Verification: `593 passed, 3 skipped, 1 existing xfailed` for the policy suite,
+including saved-route expiry, non-renewal, motion reset, one-edge evidence,
+serialization, signed-colour support and fresh corner-boundary offset tests.
+Required pinned-interface fast gate attempted; dependency checkout still absent.
+Read-only Astra review found no remaining concrete defects in the offline scope.
+
+## U-turn specialist and steering-range investigation, 2026-10-20
+
+The owner requested continued forward-only investigation, then authorized a
+local U-turn-only learned model and code-level steering-limit investigation.
+No hardware configuration, calibrated fact, physical steering mapping, track
+geometry or pass criteria was changed. The new student module is excluded from
+car upload and is not selectable by the ROS policy.
+
+`python -m tests.policy.train_uturn_specialist --output build/uturn-specialist`
+trains a NumPy/SciPy 7->32->32->12 tanh network from scratch on 3,470 MPC steering
+horizon demonstrations. Twelve teacher episodes (smooth U radii 2.5, 3.2, 4 m;
+left/right; +/-0.08 m start offset; seeds 0..11) all meet the existing lane-kept
+criterion. Only fitted lane state, previous requested curvature, sensor age,
+measured speed and requested lane offset enter the network. Training-only
+normalization and episode-disjoint radii/seeds prevent evaluation leakage.
+No external pretrained checkpoint was supplied or downloaded. L-BFGS uses a
+400-iteration budget; it reaches that limit with objective 2.696e-5, so numerical
+optimizer convergence is not claimed.
+
+The saved `build/uturn-specialist/uturn-steering.npz` contains 15,976 bytes of
+weights and the steering/horizon contract. Invalid/nonfinite/negative motion
+inputs, a normalization-range excursion beyond 8, or incompatible model settings
+reject inference; invalid inference uses the existing latched stop framework.
+Curvatures stay within unchanged asymmetric .48/.92 1/m limits. Finite bounded
+network outputs do not certify collision clearance, optimality or hardware
+safety. Existing speed, supported-lane and lane-loss logic remains in MpcPolicy.
+No MPC optimizer runs inside the student controller's inference call.
+
+Closed-loop holdouts use radii 2.8 and 3.6 m with seeds 101..104, including a
+0.4-second inner-edge occlusion. Student and teacher both pass 4/4 smooth cases
+with no contact or footprint excursion. On the unchanged original three-line
+U, seeds 105/106, the student fails to finish: its input-range check stops it at
+1.86/1.82 m progress, before the corner, with no contacts or excursion. The
+teacher fails both cases with contacts. This is not a learned solution to the
+original angular U or evidence of improvement over MPC on feasible layouts.
+Report, source hashes and plot: `build/uturn-specialist/report.json` and
+`evaluation.png`. Tests: `584 passed, 3 skipped, 1 existing xfailed`, including
+10 new inference-contract regressions. The required pinned-interface fast gate
+was attempted but cannot start without `.verification/dependencies/dream_interfaces`.
+Astra performed a read-only review; no concrete remaining defects were found.
+
+Forward feasibility audit: `build/uturn-forward-feasibility/audit.json` and
+`feasibility.png`. The .25 m footprint tightens the necessary vertical span to
+`2/.48 + .25 = 4.4167 m`, exceeding the available 3.8 m by .6167 m. This rules out
+forward paths reaching unwrapped heading +pi, including intermediate steering
+reversals. The necessary left curvature .5634 1/m is not sufficient to establish
+corner clearance. Opposite winding (-pi) is outside this simple proof. Two
+bounded forward-only, full-map lattice searches found no route at 5 cm/5 degree
+and 2.5 cm/2.5 degree resolution; the latter exhausts 16,690 retained states.
+Search failure is not a proof of all forward-only alternatives. Search collision
+checks were cross-checked against the simulation polygon/body scorer on 500
+random poses. None of these bounds establish the uncalibrated physical car21's
+capability; they describe the current car20-based simulation profile.
+
+Software steering-range test: control already permits normalized steering +/-1.
+The linear control map extrapolates a full-left action to .642722 1/m and
+full-right to .939597 1/m, whereas car20's measured left saturation is .48 1/m.
+Increasing the planner cap alone while retaining the measured physical model
+does not solve the U. An explicitly hypothetical physical response matching
+that extrapolation also fails the tested MPC and connected-corridor followers
+(lookaheads 1.2..2 m, speed .4 m/s). The candidate was not promoted to local
+runtime YAML or uploaded. Results and driver:
+`build/steering-range-experiment/summary.json` and `run.py`. Setting a software
+number larger cannot establish an increased mechanical steering range.
 
 ## Turn slowing and failed-fit fallback, 2026-10-19
 

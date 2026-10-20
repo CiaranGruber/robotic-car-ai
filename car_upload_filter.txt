@@ -8,9 +8,8 @@
 - .git
 - .verification/
 - .test-artifacts/
-# Explicitly offline centreline experiment; not a selectable robot policy.
-- policy/action_policy/corridor_experiment.py
-- policy/lane_detection/corridor.py
+# The runtime corridor engine and geometry are uploaded; learned specialist remains offline.
+- policy/action_policy/uturn_specialist.py
 - .env
 - .idea/
 - .venv/
@@ -29,6 +28,7 @@
 + tests/policy/conftest.py
 + tests/policy/test_mpc.py
 + tests/policy/test_control.py
++ tests/policy/test_corridor_runtime.py
 - tests/policy/*
 - tests/*
 - scenarios/
@@ -42,7 +42,6 @@
 - car_upload_filter.txt
 - docs/
 - LICENSE
-- package.xml
 - requirements.txt
 - pytest.ini
 - .gitignore

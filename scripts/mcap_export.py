@@ -45,6 +45,7 @@ from foxglove.messages import (Color, CubePrimitive, LinePrimitive, LinePrimitiv
 
 from policy import visualisation
 from policy.action_policy.avoidance import AvoidanceConfig
+from policy.action_policy.corridor import CorridorControlConfig
 from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig
 from policy.cone_filter.cone_filter import ConeFilterConfig
@@ -72,7 +73,7 @@ FRAME_ID = "base_link"
 CONFIG_TYPES = {
     "mpc": MpcConfig, "open_space": OpenSpaceConfig, "cone_filter": ConeFilterConfig, "control": ControlConfig,
     "lane_detection": LaneDetectionConfig, "obstacle_detection": ObstacleDetectionConfig,
-    "avoidance": AvoidanceConfig,
+    "avoidance": AvoidanceConfig, "corridor": CorridorControlConfig,
 }
 """The MovementPolicy settings, by their prefix in config/ai4r_policy.yaml, as policy_node reads them."""
 
@@ -146,7 +147,8 @@ def build_policy(settings: dict[str, Any]) -> MovementPolicy:
     return MovementPolicy(
         configs["mpc"], configs["cone_filter"], configs["control"], configs["open_space"],
         settings.get("action_policy", "mpc"), lane_detection_config=configs["lane_detection"],
-        obstacle_detection_config=configs["obstacle_detection"], avoidance_config=configs["avoidance"])
+        obstacle_detection_config=configs["obstacle_detection"], avoidance_config=configs["avoidance"],
+        corridor_config=configs["corridor"])
 
 
 def read_data_log(observations_path: Path) -> list[RecordedStep]:
@@ -323,6 +325,13 @@ def _state(policy: MovementPolicy, step: RecordedStep, replayed: CarActions) -> 
         "mpc": {"solve_count": mpc.solve_count, "solve_time_s": mpc.last_solve_time_s,
                 "stopped_for_obstacle": mpc.stopped_for_obstacle, "stopped_for_lane_loss": mpc.stopped_for_lane_loss,
                 "stopped_for_solver_failure": mpc.stopped_for_solver_failure},
+        "action_policy": policy.action_policy_name,
+        "corridor": None if policy.corridor_policy is None else {
+            "stop_reason": policy.corridor_policy.stop_reason,
+            "requested_speed_m_per_s": policy.corridor_policy.last_command.speed_m_per_s,
+            "requested_curvature_per_m": policy.corridor_policy.last_command.curvature_per_m,
+            "path_points": len(policy.corridor_policy.path),
+            "steering_limited": policy.corridor_policy.steering_limited},
     }
     return _finite(state)
 

@@ -84,6 +84,30 @@ separate: wait for the vehicle's Enabled state after its explicit Enable request
 then request policy state 3. Ongoing zero commands satisfy the policy side of
 the vehicle's fresh-zero pre-enable handshake. The policy never enables it.
 
+The current YAML selects the experimental `corridor` mode for the owner's
+three-line U-turn test. It requires fresh cones, wheel speed, body gyro and
+Cartesian lidar. It follows connected cone geometry, requests 0.4 m/s, stops
+above 0.7 m/s measured speed, and checks lidar against the curved footprint
+and reaction-then-centred-steering braking paths. Observed corners are rounded
+at the planning radius; motion-compensated generated paths retain bounded
+anchors and require fresh boundary support. Stops latch until a new explicit run.
+Camera pan stays zero. `corridor.full_range_steering: true` uses provisional
+linear endpoint scaling based on the owner's approximate 1 m left-turn radius;
+it does not establish physical steering calibration or increase hardware limits.
+Set it false to retain the measured car-20 steering slopes. Set `action_policy`
+back to `mpc` to restore the previous arc controller. See the comments in
+`config/ai4r_policy.yaml` and the current [acceptance evidence](docs/acceptance.md).
+The current candidate passes 30 synthetic runtime U-turns. Steering/braking
+response remains provisional; the installed ROS gate is blocked locally by the
+missing pinned interface checkout, and physical testing remains unperformed.
+
+For the confirmed target `10.43.254.33`, the current upload helper's `CAR_NUM=20`
+resolves to that address. On the development machine, inspect
+`bash scripts/car_management.sh dry_copy`, then run
+`bash scripts/car_management.sh upload_and_build`. The helper starts/restarts
+the IMU with the other required runtime units. Rebuild/restart returns the policy
+to zero actions; vehicle enable and the state-3 request remain explicit.
+
 ```bash
 # Start policy calculations after required sensors and the vehicle are ready:
 ros2 topic pub --once /car/policy_fsm_transition_request std_msgs/msg/UInt16 '{data: 3}'

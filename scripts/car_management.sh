@@ -7,7 +7,7 @@ set -euo pipefail
 # --------------------
 
 # Car number (1–20); used to form the host address.
-CAR_NUM=8
+CAR_NUM=20
 
 # SSH connection constants for the car.
 REMOTE_PORT=22
@@ -140,7 +140,7 @@ Commands:
                     or skip that step and continue.
   start_runtime [--debug-images <type>]
                     Restart the usual dream runtime services on the car,
-                    including the lidar (rplidar_c1).
+                    including lidar (rplidar_c1) and IMU (bno08x_imu_interface).
                     With --debug-images, oakd_gpu_cone_detector is restarted with
                     that flag (dream runtime restart oakd_gpu_cone_detector
                     --debug-images <type>).
@@ -203,6 +203,7 @@ start_runtime() {
     local services=(
         foxglove_bridge
         traxxas_vehicle_interface
+        bno08x_imu_interface
         rplidar_c1
         oakd_gpu_cone_detector
         aruco_detector
@@ -244,7 +245,7 @@ start_runtime() {
         if [[ "$service" == "oakd_gpu_cone_detector" && -n "$debug_images_type" ]]; then
             restart_cmd+=$(printf ' --debug-images %q' "$debug_images_type")
         fi
-        if [[ "$service" == "rplidar_c1" ]]; then
+        if [[ "$service" == "rplidar_c1" || "$service" == "bno08x_imu_interface" ]]; then
             # An interrupted unit (left over from an earlier boot) may need start rather than restart
             restart_cmd+=" || dream runtime start ${service}"
         fi

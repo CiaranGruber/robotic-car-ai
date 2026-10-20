@@ -896,6 +896,9 @@ def test_visualisation_can_be_off_and_its_failure_never_stops_the_policy(make_no
 @pytest.mark.parametrize("mode,required,extra", [
     ("automatic", [], {}), ("lidar", [], {}), ("cone_detection", [], {}),
     ("timer", [], {"action_policy": "follow_the_gap"}),
+    ("timer", ["cone_detections", "wheel_speed", "lidar_cartesian"], {"action_policy": "corridor"}),
+    ("timer", ["cone_detections", "wheel_speed", "imu_angular_velocity", "lidar_cartesian"],
+     {"action_policy": "corridor", "supervision_rate_hz": 1.0}),
     ("fiducial_detection", [], {}),
     ("timer", ["unknown"], {}), ("timer", ["lidar_scan", "lidar_scan"], {}),
     ("lidar", ["lidar"], {}),
@@ -908,6 +911,47 @@ def test_visualisation_can_be_off_and_its_failure_never_stops_the_policy(make_no
 def test_invalid_startup_settings_fail(make_node, mode, required, extra):
     with pytest.raises(ValueError):
         make_node(mode, required, **extra)
+
+
+def test_corridor_step_deadline_publishes_zeros_without_sensor_callbacks_and_requires_resume(make_node):
+    required = ["cone_detections", "wheel_speed", "imu_angular_velocity", "lidar_cartesian"]
+    node = make_node("timer", required, action_policy="corridor")
+    clock = node.test_clock
+    for name in (*required, "lidar_scan"):
+        node._store(name, {}, None, clock.monotonic, clock.ros_ns)
+    node.last_nonempty_cones = policy.Observation({}, clock.monotonic, None)
+    request(node, 3)
+    assert node.fsm_state == 3
+    node.last_corridor_command_at = clock.monotonic
+    clock.advance(.21)
+    node.supervision_callback()
+    assert node.fsm_state == 2 and "deadline" in node.state_reason
+    assert (node.action_publisher.messages[-1].drive, node.action_publisher.messages[-1].steer) == (0., 0.)
+    assert not node.pan_publisher.messages
+    node.supervision_callback()
+    assert node.fsm_state == 2
+    request(node, 3)
+    assert node.fsm_state == 3 and node.previous_policy_step_at is None and node.last_corridor_command_at is None
+
+
+def test_slow_corridor_calculation_cannot_refresh_the_previous_command_deadline(make_node):
+    required = ["cone_detections", "wheel_speed", "imu_angular_velocity", "lidar_cartesian"]
+    node = make_node("timer", required, action_policy="corridor")
+    clock = node.test_clock
+    for name in (*required, "lidar_scan"):
+        node._store(name, {}, None, clock.monotonic, clock.ros_ns)
+    node.last_nonempty_cones = policy.Observation({}, clock.monotonic, None)
+    request(node, 3)
+    node.last_corridor_command_at = clock.monotonic
+    node.previous_policy_step_at = clock.monotonic
+    def slow_policy(*args):
+        clock.advance(.15)
+        return .4, 0., None, None, None
+    node.calculate_policy_actions = slow_policy
+    clock.advance(.19)
+    node.run_policy_step()
+    assert node.fsm_state == 2 and "deadline" in node.state_reason
+    assert all(message.drive == 0. for message in node.action_publisher.messages)
 
 
 def test_installed_configs_and_namespaced_loading(tmp_path):
@@ -929,7 +973,10 @@ def test_installed_configs_and_namespaced_loading(tmp_path):
     try:
         assert node.get_fully_qualified_name() == "/namespaced/ai4r_policy"
         assert node.policy_update_mode == "cone_detection"
-        assert node.required_sensors == ["cone_detections"]
+        assert node.required_sensors == ["cone_detections", "wheel_speed", "imu_angular_velocity", "lidar_cartesian"]
+        assert node.movement_policy.action_policy_name == "corridor"
+        assert node.get_parameter("corridor.target_speed_m_per_s").value == .4
+        assert node.describe_parameter("corridor.lookahead_m").read_only
     finally:
         node.destroy_node()
         context.shutdown()

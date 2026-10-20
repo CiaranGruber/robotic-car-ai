@@ -1,8 +1,8 @@
-"""Offline experimental centreline from connected opposite-colour cone pairs.
+"""Connected centreline geometry from opposite-colour cone pairs.
 
 The existing cone filter/edge observer remains unchanged. Adjacent mixed-colour Delaunay triangles connect
 cross-lane midpoints into a polyline, preserving corners instead of forcing all cones onto one circle.
-This is not wired into MovementPolicy/ROS: it needs independent sensor, obstacle and timing qualification.
+Runtime use is wrapped by sensor, obstacle and timing guards in action_policy.corridor.
 """
 from dataclasses import dataclass
 import math
@@ -13,17 +13,26 @@ from scipy.spatial import Delaunay, QhullError
 
 @dataclass(frozen=True)
 class CorridorConfig:
-    """Bounds for an offline cone-corridor experiment, in metres and radians."""
+    """Bounds for connected cone-corridor geometry, in metres and radians."""
     min_width_m: float = 0.3
     max_width_m: float = 1.4
     max_cone_gap_m: float = 0.9
     max_cones: int = 96
     lookahead_m: float = 0.9
+    nominal_width_m: float = 0.8
+    route_memory_enabled: bool = False
+    route_max_age_s: float = 3.0
+    route_max_distance_m: float = 1.2
 
     def __post_init__(self):
         if not all(math.isfinite(v) and v > 0 for v in (
-                self.min_width_m, self.max_width_m, self.max_cone_gap_m, self.lookahead_m)):
+                self.min_width_m, self.max_width_m, self.max_cone_gap_m, self.lookahead_m,
+                self.route_max_age_s, self.route_max_distance_m, self.nominal_width_m)):
             raise ValueError("Corridor lengths must be positive and finite")
+        if not isinstance(self.route_memory_enabled,bool):
+            raise ValueError("route_memory_enabled must be boolean")
+        if self.route_max_age_s > 8 or self.route_max_distance_m > 3:
+            raise ValueError("Offline route hold exceeds bounded time/travel")
         if self.min_width_m >= self.max_width_m or not isinstance(self.max_cones, int) or not 4 <= self.max_cones <= 256:
             raise ValueError("Invalid corridor width/count bounds")
 

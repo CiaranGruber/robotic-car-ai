@@ -74,11 +74,26 @@ class LaneTrackingMemory(Serialisable):
 
 @dataclass(frozen=True)
 class CorridorExperimentMemory(Serialisable):
-    """Latched status and previous curvature of the explicitly selected offline corridor experiment."""
+    """Latched status, motion-compensated route and command history of the corridor follower."""
     started: bool = False
     stopped: bool = False
     curvature: float = 0.0
     filtered_tracks: tuple[ConeTrack, ...] = ()
+    route: tuple[tuple[float, float], ...] = ()
+    route_seen_s: float | None = None
+    route_seen_distance_m: float | None = None
+    left_colour: str | None = None
+    stop_reason: str = ""
+    previous_speed_m_per_s: float = 0.0
+    runtime_started: bool = False
+    runtime_route: tuple[tuple[float, float], ...] = ()
+    runtime_route_seen_s: float | None = None
+    runtime_route_seen_distance_m: float | None = None
+
+    @classmethod
+    def deserialise(cls, data: Any) -> Self:
+        """Older offline recordings have no retained route."""
+        return super().deserialise({**cls().serialise(), **data})
 
 
 @dataclass(frozen=True)
@@ -93,7 +108,7 @@ class Memory(Serialisable):
     lane_tracking: LaneTrackingMemory = LaneTrackingMemory()
     """Optional cone memory and lane continuity evidence; empty when disabled or motion is unavailable."""
     corridor_experiment: CorridorExperimentMemory = CorridorExperimentMemory()
-    """Unused by the shipped ROS policy; stores the offline experimental follower's temporal state."""
+    """State for the explicitly selected corridor follower; unused by MPC/open-space modes."""
 
     @classmethod
     def deserialise(cls, data: Any) -> Self:
@@ -131,7 +146,7 @@ class CarMemory:
         self.__internal = replace(self.__internal, lane_tracking=state)
 
     def update_corridor_experiment(self, state: CorridorExperimentMemory):
-        """Updates only the explicitly selected offline follower's state."""
+        """Updates the corridor follower's serialisable state."""
         self.__internal = replace(self.__internal, corridor_experiment=state)
 
     @classmethod
