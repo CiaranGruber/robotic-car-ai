@@ -145,7 +145,7 @@ class MovementPolicy:
             self.lane_path if self.lane_path is not None and self.lane_path.segments else None)
         self.obstacle_distance_m = self._obstacle_distance_m(lanes)
         # Determine the policy to take based upon the car location; an obstacle in the car's way stops it
-        instructions = self.action_policy.run_policy(observations, lanes, self.obstacle_distance_m)
+        instructions = self.action_policy.run_policy(observations, lanes, self.obstacle_distance_m, memory)
         # The car actions to determine
         car_actions = self.car_controller.step(observations, instructions)
         # Hold the camera at zero pan: the camera's fixed transform to base_link assumes it, and any pan rotates every

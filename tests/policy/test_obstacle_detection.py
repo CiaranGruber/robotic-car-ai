@@ -14,7 +14,7 @@ from policy.control.control import ControlConfig
 from policy.input_output import (CarObservations, LidarCartesian, LidarCartesianPoint, ObservedCarState, PolicyState,
                                  Position, SensorAge)
 from policy.lane_detection.lane_detection import LaneDetectionConfig, detect_lanes
-from policy.memory import CarMemory
+from policy.memory import CarMemory, MpcStop
 from policy.obstacle_detection.obstacle_detection import (ObstacleDetectionConfig, detect_lane_obstacles,
                                                           detect_obstacles, nearest_in_band)
 from policy.obstacle_detection.obstacles import LaneObstacle, ObstacleDetection
@@ -205,19 +205,24 @@ def test_obstacle_beyond_the_stopping_distance_does_not_change_the_drive(points)
     assert policy.obstacle_distance_m == (math.inf if not points else pytest.approx(1.0, abs=0.02))
 
 
-def drives(policy, points, first):
-    """Whether the movement policy drives the car in a straight 1 m lane with lidar returns at the points."""
+def drives(policy, points, first, memory=None):
+    """Whether the movement policy drives the car in a straight 1 m lane with lidar returns at the points.
+
+    Pass the same memory for every step of a run, as policy_node does: it keeps the MPC's stop.
+    """
     observations = dataclasses.replace(observe(lane_cones(), first=first), lidar_cartesian=lidar(points))
-    return policy.step(observations, CarMemory()).drive_action > 0.0
+    return policy.step(observations, CarMemory() if memory is None else memory).drive_action > 0.0
 
 
 def test_obstacle_in_the_lane_stops_the_car_until_a_new_run():
-    policy = movement_policy()
+    policy, memory = movement_policy(), CarMemory()
     near_box = box(CONFIG.car_front_m + 0.4, 0.0, width=0.2)
-    assert [drives(policy, near_box, first=step == 0) for step in range(3)] == [True, False, False]
+    assert [drives(policy, near_box, first=step == 0, memory=memory) for step in range(3)] == [True, False, False]
     assert policy.action_policy.stopped_for_obstacle
-    assert not drives(policy, [], first=False)
-    assert drives(policy, [], first=True)
+    assert memory.data.mpc_stop is MpcStop.OBSTACLE
+    assert not drives(policy, [], first=False, memory=memory)
+    assert drives(policy, [], first=True, memory=memory)
+    assert memory.data.mpc_stop is None
 
 
 @pytest.mark.parametrize("points", [
@@ -255,10 +260,10 @@ def test_a_short_obstacle_stopping_distance_needs_braking():
 
 
 def test_obstacle_in_the_lane_brakes_the_car_straight_from_driving():
-    policy = MovementPolicy(MpcConfig(), ConeFilterConfig(), ControlConfig(brake_action=0.3))
+    policy, memory = MovementPolicy(MpcConfig(), ConeFilterConfig(), ControlConfig(brake_action=0.3)), CarMemory()
     near_box = box(CONFIG.car_front_m + 0.4, 0.0, width=0.2)
     drive = [policy.step(dataclasses.replace(observe(lane_cones(), first=step == 0), lidar_cartesian=lidar(near_box)),
-                         CarMemory()).drive_action for step in range(2)]
+                         memory).drive_action for step in range(2)]
     assert drive[0] > 0.0
     assert drive[1] == -0.3
 
