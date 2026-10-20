@@ -76,7 +76,7 @@ the camera -3 to +3 degrees of leftover yaw that the MPC does not know about.
 | `heading_error_weight` | 1.0 | 1.0 (unchanged) | 3.0 and 5.0 lost curves and straights (section 4) |
 | `target_speed_m_per_s` | 1.0 | 0.5 | Chris's speed controller was checked at 0.5 m/s |
 | `lane_width_m` | 1.0 | 0.8 | The lab tracks are 0.73-0.85 m wide |
-| `lane_offset_m`, `edge_clearance_m`, `offset_fade_curvature_per_m` (new) | - | 0.0, 0.30, 0.3 | Drive to one side of the lane (section 5; superseded by [mpc-lane-side.md](mpc-lane-side.md)) |
+| `lane_offset_m`, `edge_clearance_m`, `offset_fade_curvature_per_m` (new) | - | 0.0, 0.30, 0.3 | Drive to one side of the lane (section 5) |
 | `camera_yaw_offset_deg` (new) | - | 0.0 | Section 2 |
 
 ## 4. Curved lanes: why the car drifts into the cones
@@ -156,10 +156,6 @@ the curves. The larger comparison here reversed it.
 | -0.05 | **0.92** | **72** | **12** | **48** |
 
 ## 5. Lane offset, towards the hook turn
-
-**Superseded by [mpc-lane-side.md](mpc-lane-side.md)**, which adds `mpc.lane_side`, raises `edge_clearance_m` to
-0.40 and removes the curve fade below: through `dev`'s lane detection, the fade shrank the offset to almost
-nothing. This section is kept as the record of the first version.
 
 A Melbourne hook turn is a right turn made from the left of the road, so the car must keep to one side and then
 turn sharply right. `mpc.lane_offset_m` (positive left) makes the MPC follow a line beside the centre; a manoeuvre

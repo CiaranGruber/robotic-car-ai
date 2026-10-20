@@ -24,9 +24,6 @@ from scipy.optimize import lsq_linear
 
 from policy.action_policy.lane_path import LanePath
 
-LANE_SIDES = ("CENTRE", "LEFT", "RIGHT")
-"""The values of MpcConfig.lane_side."""
-
 
 @dataclass(frozen=True)
 class MpcConfig:
@@ -90,41 +87,23 @@ class MpcConfig:
 
     The default is the lab tracks' measured width, 0.73-0.85 m.
     """
-    lane_side: str = "CENTRE"
-    """Which part of the lane to drive along: "CENTRE", "LEFT" or "RIGHT".
-
-    "CENTRE" follows the line lane_offset_m from the centre. "LEFT" and "RIGHT" keep to that side of the lane: the
-    MPC follows the line edge_clearance_m from that edge, so the car moves over as far as the lane's measured width
-    allows, and comes back towards the centre where the lane narrows. Keeping to one side is the first step of the
-    hook turn. MpcPolicy.lane_side can change it between policy steps; the car then moves over gradually
-    (offset_change_per_m).
-    """
     lane_offset_m: float = 0.0
-    """Where in the lane to drive while lane_side is "CENTRE", in metres from the centre line, positive to the left.
-    Must be finite.
+    """Where in the lane to drive, in metres from the centre line, positive to the left. Must be finite.
 
-    The MPC follows the line this far from the centre, kept at least edge_clearance_m from both edges, so a lane
-    narrower than the car plus that clearance is still driven along its centre. MpcPolicy.lane_offset_m can change it
-    between policy steps.
+    The hook turn needs the car to keep to one side of the lane before it turns. The MPC follows the line this far
+    from the centre, kept at least edge_clearance_m from both edges, so a lane narrower than the car plus that
+    clearance is still driven along its centre. On curves the offset shrinks (offset_fade_curvature_per_m).
+    MpcPolicy.lane_offset_m can change it between policy steps.
     """
-    edge_clearance_m: float = 0.40
-    """Smallest distance in metres from the followed line to either lane edge, when lane_side or lane_offset_m moves
-    the line off the centre. Must be positive.
-
-    The car's side is this less half the car's 0.25 m width from the cone centres. The default leaves 0.225 m for
-    tracking error and a 0.05 m cone radius: in simulation, keeping right round left curves with 3 degrees of
-    unmeasured camera yaw ran about 0.1 m wide of the line, and 0.30-0.35 touched the outer cones
-    (docs/mpc-lane-side.md). So an 0.8 m lane is driven along its centre, a 1.2 m lane gives 0.2 m of offset and a
-    1.6 m lane 0.4 m.
-    """
-    offset_change_per_m: float = 0.2
-    """Fastest sideways movement of the followed line, in metres per metre driven, when lane_side or lane_offset_m
-    changes or the lane widens. Must be positive. Where the lane narrows, the line moves in at once to keep
-    edge_clearance_m.
-
-    In simulation, switching from the left to the right side in one step ran into the cones, and so did 0.5 on a
-    curve; 0.3 kept every lane but swung up to 0.16 m past the new line. At the default 0.2 the car crosses a 1.2 m
-    lane (0.4 m of offset) in about 2.5 m and a 1.6 m lane (0.8 m) in about 4.5 m (docs/mpc-lane-side.md)."""
+    edge_clearance_m: float = 0.30
+    """Smallest distance in metres from the followed line to either lane edge when lane_offset_m moves it. Must be
+    positive. The default is half the car's 0.25 m width, a 0.05 m cone radius and 0.125 m for tracking error: with
+    0.25 the car touched cones on simulated curves (docs/mpc-lab-calibration.md). It leaves 0.1 m of offset in a
+    0.8 m lane."""
+    offset_fade_curvature_per_m: float = 0.3
+    """Path curvature in 1/m at which the lane offset has shrunk to nothing; it shrinks in proportion below that.
+    Must be positive. The default fades it out on curves tighter than about a 3.3 m radius, where the car's own
+    tracking error uses up the room beside it."""
     camera_yaw_offset_deg: float = 0.0
     """How far left of the car's forwards direction the camera points, in degrees, beyond what base_link assumes.
     Must be finite.
@@ -215,9 +194,7 @@ class MpcConfig:
         for name in ("camera_yaw_offset_deg", "lane_offset_m"):
             if not math.isfinite(getattr(self, name)):
                 raise ValueError(f"mpc.{name} must be finite, not {getattr(self, name)}")
-        if self.lane_side not in LANE_SIDES:
-            raise ValueError(f"mpc.lane_side must be \"CENTRE\", \"LEFT\" or \"RIGHT\", not {self.lane_side!r}")
-        for name in ("edge_clearance_m", "offset_change_per_m"):
+        for name in ("edge_clearance_m", "offset_fade_curvature_per_m"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value > 0.0):
                 raise ValueError(f"mpc.{name} must be positive and finite, not {value}")
@@ -260,22 +237,6 @@ def offset_state(state: PathTrackingState, offset_m: float) -> PathTrackingState
                          f"1/m path")
     return PathTrackingState(state.lateral_error_m - offset_m, state.heading_error_rad,
                              state.path_curvature_per_m / remaining)
-
-
-def inside_offset_limit_m(path_curvature_per_m: float) -> float:
-    """How far towards the inside of a curve the followed line may be: halfway to the curve's turning centre, so the
-    line's curvature (offset_state) is at most twice the lane's.
-
-    It only stops the line from reaching the turning centre on very tight or misjudged curves. A limit from the car's
-    steering instead flickered on and off with the noise in the detected curvature and moved the line by up to half
-    a metre between steps; a line the car cannot steer along is safe anyway, because the car runs wide of it,
-    towards the lane centre (docs/mpc-lane-side.md).
-
-    :param path_curvature_per_m: Curvature of the lane's centre line in 1/m, positive turning left.
-    :return: The largest offset towards the inside of the curve in metres; math.inf on a straight.
-    """
-    curvature = abs(path_curvature_per_m)
-    return math.inf if curvature == 0.0 else 0.5 / curvature
 
 
 @dataclass(frozen=True)

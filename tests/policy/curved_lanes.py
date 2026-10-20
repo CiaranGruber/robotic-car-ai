@@ -31,12 +31,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from policy.control.actions import DriveCommand  # noqa: E402
 from policy.input_output import (  # noqa: E402
-    CarActions, ConeBatch, ConeColour, ConeDetection, ObservedCarState, PolicyState, Position, SensorAge, WheelSpeed,
+    ConeBatch, ConeColour, ConeDetection, ObservedCarState, PolicyState, Position, SensorAge, WheelSpeed,
     CarObservations,
 )
 from real_car_measurements import LAB_CAR  # noqa: E402
 from stage1_scenarios import (  # noqa: E402
-    CONE_RADIUS_M, POLICY_PERIOD_S, CarProfile, body_corners, command_to_action, distance_to_body,
+    CONE_RADIUS_M, POLICY_PERIOD_S, CarProfile, body_corners, distance_to_body,
 )
 
 SIM_STEP_S = 0.01
@@ -145,9 +145,6 @@ class CurveResult:
     """Signed distance from the lane centre line, + left, at each sample."""
     commands: list[DriveCommand]
     metrics: dict[str, float] = field(default_factory=dict)
-    steps: list[tuple[CarObservations, CarActions]] = field(default_factory=list)
-    """Each policy step's observations and the [drive, steering] action of stage1_scenarios.command_to_action, for
-    saving the run as a scenario file."""
 
     @property
     def lane_kept(self) -> bool:
@@ -230,7 +227,7 @@ def run_curve(case: CurveCase, policy, lanes_from=None) -> CurveResult:
     steps_per_policy = round(POLICY_PERIOD_S / SIM_STEP_S)
     command = DriveCommand(0.0, 0.0)
     log = {"t": [], "x": [], "y": [], "heading": [], "lateral": []}
-    commands, steps = [], []
+    commands = []
     touched = set()
     max_outside = -math.inf
     max_s = -RUN_IN_M
@@ -259,8 +256,6 @@ def run_curve(case: CurveCase, policy, lanes_from=None) -> CurveResult:
             lanes = lanes_from(observations) if lanes_from is not None else None
             command = next(i for i in policy.run_policy(observations, lanes) if isinstance(i, DriveCommand))
             commands.append(command)
-            action = command_to_action(command, speed)
-            steps.append((observations, CarActions(float(action[0]), float(action[1]), None, None, None)))
         # The car: speed after a dead time and a lag, curvature clipped to the steering limits plus the trim
         requested_speeds.append(command.speed_m_per_s)
         speed += (requested_speeds.pop(0) - speed) * SIM_STEP_S / time_constant
@@ -285,7 +280,7 @@ def run_curve(case: CurveCase, policy, lanes_from=None) -> CurveResult:
         if s >= end_s or (step > 50 and speed < 0.02 and command.speed_m_per_s == 0.0):
             break
     result = CurveResult(case, *(np.array(log[k]) for k in ("t", "x", "y", "heading", "lateral")),
-                         commands=commands, steps=steps)
+                         commands=commands)
     curvatures = np.array([c.curvature_per_m for c in commands]) if commands else np.zeros(1)
     rates = np.diff(curvatures) / POLICY_PERIOD_S if len(curvatures) > 1 else np.zeros(1)
     lateral = np.array(log["lateral"])

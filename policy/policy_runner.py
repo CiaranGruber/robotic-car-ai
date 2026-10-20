@@ -116,10 +116,6 @@ class MovementPolicy:
         """
         if self.action_policy_name == "open_space":
             return self._open_space_step(observations)
-        # Forget the previous run before the avoidance and the obstacle check ask the MPC for its line, so a new run
-        # starts at mpc.lane_side rather than where the previous run left off
-        if observations.policy.is_first_policy_step:
-            self.action_policy.reset()
         # Remove the cone outliers, so every later stage uses the same plausible cones
         observations = dataclasses.replace(
             observations, cones=filter_cones(observations.cones, self.cone_filter_config))

@@ -329,7 +329,7 @@ def test_moves_must_be_within_the_cars_curvature_limits():
 BOX_LENGTH_M = 0.2
 
 
-def drive_past(lane_width_m, boxes, steps=140, dt=0.1, lane_side="CENTRE"):
+def drive_past(lane_width_m, boxes, steps=140, dt=0.1):
     """Drives the car from the lane centre at 0.5 m/s past boxes in the lane.
 
     The car follows the MPC's curvature exactly; its speed coasts down with a 2.1 s time constant, like
@@ -338,10 +338,9 @@ def drive_past(lane_width_m, boxes, steps=140, dt=0.1, lane_side="CENTRE"):
 
     :param boxes: For each box, the distance along the lane from the car's starting origin to its near side, and its
         right and left sides across the lane.
-    :param lane_side: mpc.lane_side.
     :return: The movement policy, and for each step the car's (x, y, heading) and the line's offset beside it.
     """
-    config = MpcConfig(stop_distance_per_speed_s=2.1, obstacle_stop_distance_per_speed_s=2.1, lane_side=lane_side)
+    config = MpcConfig(stop_distance_per_speed_s=2.1, obstacle_stop_distance_per_speed_s=2.1)
     policy = MovementPolicy(config, ConeFilterConfig(), ControlConfig())
     cones = [(x * 0.5, side * lane_width_m / 2.0, colour) for x in range(-2, 40)
              for side, colour in ((1.0, ConeColour.BLUE), (-1.0, ConeColour.YELLOW))]
@@ -477,43 +476,3 @@ def test_car_passes_boxes_on_both_edges(gap_m):
     assert not policy.action_policy.stopped_for_obstacle
     assert min(gap_to_box(trace, box) for box in boxes) > CAR.obstacle_clearance_m - 0.01
     assert trace[-1][0] > boxes[1][0] + BOX_LENGTH_M
-
-
-@pytest.mark.parametrize("right_m, left_m", [
-    (0.10, 0.50),  # On the left line (0.3 m): pass on its right
-    (-0.50, -0.10),  # In the other half of the lane: stay to its left
-], ids=["box-on-the-line", "box-on-the-other-side"])
-def test_car_keeping_left_drives_around_a_box_and_returns_to_its_side(right_m, left_m):
-    # 1.4 m lane: mpc.lane_side "LEFT" follows the line 0.3 m left of the centre, edge_clearance_m from the left edge
-    box = (6.0, right_m, left_m)
-    policy, trace = drive_past(1.4, [box], steps=220, lane_side="LEFT")
-    assert not policy.action_policy.stopped_for_obstacle
-    assert gap_to_box(trace, box) > CAR.obstacle_clearance_m - 0.01
-    assert widest_reach(trace) < 1.4 / 2.0 - CAR.cone_radius_m - CAR.cone_clearance_m + 0.01
-    # Back on the left line once past
-    assert trace[-1][0] > 6.0 + BOX_LENGTH_M and abs(trace[-1][1] - 0.3) < 0.05
-
-
-def straight_lane(lane_width_m, first=False):
-    """Observations of a car on the centre line of a straight lane at 0.5 m/s, 0.1 s after the previous step, without
-    lidar."""
-    cones = [ConeDetection(Position(x * 0.5, side * lane_width_m / 2.0, 0.1), colour, 0.9) for x in range(1, 7)
-             for side, colour in ((1.0, ConeColour.BLUE), (-1.0, ConeColour.YELLOW))]
-    return CarObservations(ConeBatch(cones, SensorAge(0.0, None), 0.0), None, None, None,
-                           ObservedCarState(None, None, None, WheelSpeed(0.5, SensorAge(0.0, None))),
-                           PolicyState(0.0 if first else 0.1, 0.0, first))
-
-
-def test_new_run_plans_from_the_configured_lane_side():
-    # The avoidance plans from the MPC's line before the MPC's own step, so on the first step of a run the line must
-    # already be back at mpc.lane_side, not where a manoeuvre left the previous run
-    policy = MovementPolicy(MpcConfig(lane_side="LEFT"), ConeFilterConfig(), ControlConfig())
-    car_memory = CarMemory()
-    policy.step(straight_lane(1.6, first=True), car_memory)
-    assert policy.lane_path.usual_offset_m == pytest.approx(0.4, abs=0.02)
-    policy.action_policy.lane_side = "RIGHT"
-    for _ in range(100):
-        policy.step(straight_lane(1.6), car_memory)
-    assert policy.lane_path.usual_offset_m == pytest.approx(-0.4, abs=0.02)
-    policy.step(straight_lane(1.6, first=True), car_memory)
-    assert policy.lane_path.usual_offset_m == pytest.approx(0.4, abs=0.02)
