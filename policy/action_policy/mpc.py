@@ -22,7 +22,6 @@ LANE_SIDES = ("CENTRE", "LEFT", "RIGHT")
 """The values of MpcConfig.lane_side."""
 
 
-
 @dataclass(frozen=True)
 class MpcConfig:
     """Settings for the MPC, loaded from the mpc parameters in config/ai4r_policy.yaml.
@@ -120,7 +119,6 @@ class MpcConfig:
     In simulation, switching from the left to the right side in one step ran into the cones, and so did 0.5 on a
     curve; 0.3 kept every lane but swung up to 0.16 m past the new line. At the default 0.2 the car crosses a 1.2 m
     lane (0.4 m of offset) in about 2.5 m and a 1.6 m lane (0.8 m) in about 4.5 m (docs/mpc-lane-side.md)."""
-    camera_yaw_offset_deg: float = 0.0
     camera_yaw_offset_deg: float = 0.0
     """How far left of the car's forwards direction the camera points, in degrees, beyond what base_link assumes.
     Must be finite.

@@ -100,13 +100,18 @@ def test_narrowing_lane_moves_the_line_in_at_once():
     assert policy.usual_offset_m(1.6) == pytest.approx(0.2)
 
 
-def test_first_step_of_a_run_starts_the_line_at_the_target_again():
-    policy = MpcPolicy(MpcConfig(lane_side="LEFT"))
+def test_new_run_starts_at_the_configured_lane_side():
+    """A side a manoeuvre chose in the previous run is forgotten: after an explicit resume the car starts at
+    mpc.lane_side and mpc.lane_offset_m again."""
+    policy = MpcPolicy(MpcConfig(lane_side="LEFT", lane_offset_m=0.1))
     policy._move_side_offset(1.6, 0.0, 0.0)
-    policy.lane_side = "RIGHT"
-    policy.reset()
-    policy._move_side_offset(1.6, 0.0, 0.0)
+    policy.lane_side, policy.lane_offset_m = "RIGHT", -0.2
+    policy._move_side_offset(1.6, 0.0, 10.0)
     assert policy.usual_offset_m(1.6) == pytest.approx(-0.4)
+    policy.reset()
+    assert (policy.lane_side, policy.lane_offset_m) == ("LEFT", 0.1)
+    policy._move_side_offset(1.6, 0.0, 0.0)
+    assert policy.usual_offset_m(1.6) == pytest.approx(0.4)
 
 
 def test_offset_steers_a_centred_car_towards_that_side():

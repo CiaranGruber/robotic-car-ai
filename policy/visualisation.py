@@ -52,7 +52,7 @@ LAYERS = ("cones/detected", "cones/used", "lane", "obstacles", "plan/avoidance",
 - obstacles: objects inside the lane (orange outlines), or the corridor ahead without a lane (grey) and the nearest
   return in it.
 - plan/avoidance: the line across the lane planned past the obstacles (magenta). Away from obstacles it is the usual
-  line, which covers the centre line when lane_offset_m is 0.
+  line (mpc.lane_side), which covers the centre line when lane_side is "CENTRE" and lane_offset_m is 0.
 - plan/mpc: the path the MPC predicted for the car (cyan), from the curvatures it solved, as long as the distance it
   predicted at the measured speed: a point while the car stands. Empty when it has not solved since the last drawing.
 - fiducials: fiducial marker poses with their ids.

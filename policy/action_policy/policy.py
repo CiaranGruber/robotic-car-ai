@@ -29,13 +29,6 @@ class MpcPolicy:
         """
         self.config = config
         self.controller = MpcController(config)
-        self.lane_side = config.lane_side
-        """Which part of the lane to drive along: "CENTRE", "LEFT" or "RIGHT" (mpc.lane_side). Starts at
-        mpc.lane_side; a manoeuvre such as the hook turn may change it between steps."""
-        self.lane_offset_m = config.lane_offset_m
-        """Where in the lane to drive while lane_side is "CENTRE", in metres from the centre line, positive to the
-        left. Starts at mpc.lane_offset_m; a manoeuvre may change it between steps. It is kept mpc.edge_clearance_m
-        from both lane edges (usual_offset_m)."""
         self.avoidance_offset_m: float | None = None
         """The line to follow past obstacles in the lane, in metres left of the centre line, or None to follow
         lane_offset_m. Set before each step from the line LaneAvoidance plans, avoidance.lookahead_m ahead; that line
@@ -44,6 +37,13 @@ class MpcPolicy:
 
     def reset(self):
         """Forgets the previous run. This is done on the first step after entering the publishing-policy state."""
+        self.lane_side = self.config.lane_side
+        """Which part of the lane to drive along: "CENTRE", "LEFT" or "RIGHT" (mpc.lane_side). Each run starts at
+        mpc.lane_side; a manoeuvre such as the hook turn may change it between steps."""
+        self.lane_offset_m = self.config.lane_offset_m
+        """Where in the lane to drive while lane_side is "CENTRE", in metres from the centre line, positive to the
+        left. Each run starts at mpc.lane_offset_m; a manoeuvre may change it between steps. It is kept
+        mpc.edge_clearance_m from both lane edges (usual_offset_m)."""
         self.previous_curvature_per_m = 0.0
         """Curvature requested at the previous step in 1/m."""
         self.previous_speed_m_per_s = 0.0

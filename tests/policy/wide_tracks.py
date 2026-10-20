@@ -223,17 +223,16 @@ def wide_tracks(seeds: tuple[int, ...], ranges: WideTrackRanges = WIDE_RANGES) -
 
 
 class SideSchedule:
-    """Asks the policy for a track's lane side, switching after a distance driven (wheel speed times dt), as the hook
-    turn's manoeuvre will set MpcPolicy.lane_side between steps."""
+    """Switches the policy to a track's second lane side after a distance driven (wheel speed times dt), as the hook
+    turn's manoeuvre will set MpcPolicy.lane_side between steps. The run starts at the policy's mpc.lane_side."""
 
     def __init__(self, policy, track: WideTrack):
         """
-        :param policy: An MpcPolicy.
-        :param track: The track, for its sides and switch distance.
+        :param policy: An MpcPolicy whose mpc.lane_side is the track's first side.
+        :param track: The track, for its second side and switch distance.
         """
         self.policy, self.track = policy, track
         self.driven_m = 0.0
-        policy.lane_side = track.side
 
     def run_policy(self, observations, lanes):
         self.driven_m += float(observations.car.wheel_speed) * observations.policy.dt
@@ -263,7 +262,8 @@ def run_track(track: WideTrack, config=None) -> tuple[cl.CurveResult, dict[str, 
         scored on the lane after SETTLE_M, before the last 0.5 m, and not while crossing to the other side.
     """
     config = config or MpcConfig()
-    result = cl.run_curve(track.case, SideSchedule(MpcPolicy(config), track), lane_detection())
+    policy = MpcPolicy(dataclasses.replace(config, lane_side=track.side))
+    result = cl.run_curve(track.case, SideSchedule(policy, track), lane_detection())
     lane = track.case.lane
     line = lane.centre_line()
     centre = cl._CentreLine(line)
