@@ -789,13 +789,15 @@ def test_clipping_pan_hold_exception_and_overrun(make_node):
     assert node.action_publisher.messages[-1].drive == 0.0
 
 
-def test_shipped_student_calculation_is_zero_and_handles_missing_observations(make_node):
-    node = make_node()
+@pytest.mark.parametrize("steering_centre", [0.0, 0.02, -0.05])
+def test_mpc_without_observations_stops_drive_with_fixed_camera(make_node, steering_centre):
+    node = make_node(action_policy="mpc", **{"control.steering_centre_action": steering_centre})
     request(node, 3)
     node.run_policy_step()
+    assert node.fsm_state == 3
     assert node.action_publisher.messages[-1].drive == 0.0
-    assert node.action_publisher.messages[-1].steer == 0.0
-    assert not node.pan_publisher.messages
+    assert node.action_publisher.messages[-1].steer == steering_centre
+    assert [message.data for message in node.pan_publisher.messages] == [0.0]
 
 
 def test_invalid_sensor_content_and_runtime_parameter_changes(make_node):
