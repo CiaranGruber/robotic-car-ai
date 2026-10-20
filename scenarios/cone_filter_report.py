@@ -83,7 +83,7 @@ def format_cone_filter_report(cones: ConeBatch | None, reasons: list[str | None]
     :param config: The cone filter settings used.
     :return: A summary line, then one line per cone in received order.
     """
-    settings = (f"max_forward_m {config.max_forward_m}, max_lateral_m {config.max_lateral_m}, "
+    settings = (f"max_lateral_m {config.max_lateral_m}, "
                 f"check_straight_rows {str(config.check_straight_rows).lower()}")
     if cones is None or reasons is None:
         return f"cone filter: no cone batch in this frame ({settings})"
@@ -110,8 +110,6 @@ def _removal_reason(cone: ConeDetection, config: ConeFilterConfig, plausible: bo
     reasons = []
     if pos.x <= 0.0:
         reasons.append("behind the car (x <= 0)")
-    if pos.x > config.max_forward_m:
-        reasons.append(f"x above max_forward_m {config.max_forward_m}")
     if abs(pos.y) > config.max_lateral_m:
         reasons.append(f"|y| above max_lateral_m {config.max_lateral_m}")
     if not config.min_height_m <= pos.z <= config.max_height_m:

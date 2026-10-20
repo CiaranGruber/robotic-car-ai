@@ -38,11 +38,6 @@ class ConeFilterConfig:
     docs/movement-policy-tasks.md where one exists; replace them when Task A1 measures the camera. Invalid settings
     raise a ValueError, which stops policy_node from starting.
     """
-    max_forward_m: float = 4.0
-    """Largest kept forwards distance (x) in metres. Cones at or behind x = 0 are always removed. Must be positive.
-
-    The default is the shared camera range.
-    """
     max_lateral_m: float = 2.0
     """Largest kept sideways distance (|y|) in metres. Must be positive.
 
@@ -83,7 +78,7 @@ class ConeFilterConfig:
     """
 
     def __post_init__(self):
-        for name in ("max_forward_m", "max_lateral_m", "merge_distance_m", "row_residual_m"):
+        for name in ("max_lateral_m", "merge_distance_m", "row_residual_m"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value > 0.0):
                 raise ValueError(f"cone_filter.{name} must be positive and finite, not {value}")
@@ -143,7 +138,7 @@ def _is_plausible(cone: ConeDetection, config: ConeFilterConfig) -> bool:
     """
     :return: True when the cone is within the space the lane can occupy and is confident enough.
     """
-    return (0.0 < cone.pos.x <= config.max_forward_m
+    return (0.0 < cone.pos.x
             and abs(cone.pos.y) <= config.max_lateral_m
             and config.min_height_m <= cone.pos.z <= config.max_height_m
             and cone.confidence >= config.min_confidence)
