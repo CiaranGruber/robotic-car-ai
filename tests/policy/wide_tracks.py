@@ -242,11 +242,12 @@ class SideSchedule:
 
 
 def lane_detection():
-    """Lane detection with curves on, as config/ai4r_policy.yaml sets it, after the cone filter.
+    """Lane detection with curves on, as config/ai4r_policy.yaml sets it, after the cone filter. The left colour is
+    "AUTO", as the wide tracks put either colour on the left.
 
     :return: observations -> LaneDetection or None.
     """
-    filter_config = ConeFilterConfig(max_forward_m=2.5, check_straight_rows=False)
+    filter_config = ConeFilterConfig(check_straight_rows=False)
     detector = LaneDetector(LaneDetectionConfig(left_colour="AUTO", max_curvature_per_m=2.0))
     return lambda observations: detector.detect(
         dataclasses.replace(observations, cones=filter_cones(observations.cones, filter_config)))

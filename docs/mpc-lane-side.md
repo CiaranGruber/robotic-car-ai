@@ -121,8 +121,11 @@ touched a cone or left the lane.
 
 | Tracks | Clean, lane side | As drawn, lane side | As drawn, centred (as dev) |
 | --- | --- | --- | --- |
-| Training (60) | 59 kept, 1 hit | 23 kept, 32 stopped, 5 hit | 27 kept, 32 stopped, 1 hit |
-| Validation (30) | 30 kept | 14 kept, 12 stopped, 4 hit | 13 kept, 16 stopped, 1 hit |
+| Training (60) | 59 kept, 1 hit | 23 kept, 32 stopped, 5 hit | 24 kept, 35 stopped, 1 hit |
+| Validation (30) | 30 kept | 13 kept, 14 stopped, 3 hit | 12 kept, 17 stopped, 1 hit |
+
+Re-run after merging dev's obstacle avoidance change (#28), which also removed `cone_filter.max_forward_m`. Only the
+"as drawn" counts moved; the clean tracks and their side errors are unchanged.
 
 On the clean tracks the car drives a median 0.02 m from the line its side asks for (worst validation track 0.06 m).
 The training hit, W28, is a right-to-left switch on an S bend: with the car near the right edge of a 1.53 m lane,

@@ -317,7 +317,7 @@
       # stop was requested and where the car stopped, divide by the speed. With
       # control.brake_action 0.0 the node does not start unless this is at
       # least stop_distance_per_speed_s.
-      obstacle_stop_distance_per_speed_s: 0.6
+      obstacle_stop_distance_per_speed_s: 0.0
       # Consecutive policy steps that must see the obstacle within that
       # distance, INTEGER >= 1, so one step of stray returns does not stop the
       # run. Each extra step is about 0.05 m more at 0.5 m/s with 10 Hz cones.
@@ -380,13 +380,13 @@
     # policy/cone_filter/cone_filter.py, which checks them; invalid values stop
     # the node from starting). The detector only applies its own confidence and
     # depth limits; this filter then removes cones that cannot belong to the
-    # Stage 1 lane: outside the space below, duplicates, or off their colour's
+    # Stage 1 lane: outside the lateral/height space below, behind the car,
+    # duplicates, or off their colour's
     # straight row (both rows share one fitted direction). Every later policy
     # stage only sees the kept cones. Replace the starting values after Task A1.
     cone_filter:
-      # Keep cones with 0 < x <= this, metres ahead of base_link, positive
-      # double. Default 4.0, the shared camera range.
-      max_forward_m: 2.5
+      # Only cones ahead of base_link (x > 0) are kept. There is no maximum
+      # forward-distance limit here; the detector owns its depth limits.
       # Keep cones with |y| <= this, metres, positive double. Default 2.0: half
       # the 1.0 m lane, a 0.2 m start offset and a 15 degree heading error
       # seen 4 m ahead.
@@ -427,7 +427,7 @@
       # Colour of the LEFT edge's cones, string "AUTO", "BLUE" or "YELLOW".
       # "AUTO" works out each colour's side from where its edge lies relative
       # to the car, so either colour may be on the left.
-      left_colour: "AUTO"
+      left_colour: "BLUE"
       # Lane width, metres, positive double (shared default 1.0). Places the
       # centre line when only one edge is found, until both edges have been
       # seen; the width measured with both edges is used after that.
@@ -551,8 +551,8 @@
       # How far along the lane, ahead of the car's front, obstacles in the lane
       # are searched for, metres, positive double; about as far as the camera
       # sees the lane. It must also hold the stopping distance. Driving around
-      # an obstacle (avoidance below) needs it seen early: the ramp onto the
-      # line beside it is about 1.5 m long.
+      # an obstacle (avoidance below) needs it seen early: the move onto the
+      # line beside it is about 1.8 m long.
       lane_length_m: 2.5
       # Fewest lidar returns that make an obstacle (in the corridor, or in one
       # object in the lane), INTEGER >= 1, so stray returns do not count.
@@ -568,20 +568,24 @@
 
     # DRIVING AROUND OBSTACLES IN THE LANE (AvoidanceConfig in
     # policy/action_policy/avoidance.py, which checks them; invalid values stop
-    # the node from starting). An obstacle in the lane becomes part of the lane
-    # edge on one side, and the line the MPC follows is planned again at every
-    # step: beside the obstacle it runs through the middle of the free gap
-    # between the obstacle and the other side's cones, from pass_distance_m
-    # before the car's front reaches it until pass_distance_m after its rear
-    # has passed it (remembered and measured with the wheel speed once the
-    # lidar no longer sees it ahead). Smooth ramps join that line to the usual
-    # one. The gap must leave obstacle_clearance_m and cone_clearance_m beside
-    # the car. Without such a gap, or if the car is not moving clear before
-    # the obstacle is within the stopping distance, the MPC stops as before
-    # (mpc.obstacle_stop_*). In a 0.8 m lane with these values the gap between
-    # the obstacle and the inner side of the cones must be at least
-    # 0.25 + 0.10 + 0.10 = 0.45 m, so an obstacle must end at least 0.10 m
-    # short of the centre line on its side.
+    # the node from starting). A local planner in the lane's Frenet frame plans
+    # ONE line past all the known obstacles at every step (remembered and
+    # measured with the wheel speed once the lidar no longer sees them ahead).
+    # It generates candidate lines: beside each obstacle a held offset (the
+    # middle of a free gap, the point of it nearest the usual line, the
+    # previous step's line), joined by quintic polynomials that match offset,
+    # slope and curvature, so the line never jumps. Each candidate is checked
+    # along its whole length: the car's body, turned along the line, keeps
+    # obstacle_clearance_m from every obstacle and cone_clearance_m from the
+    # cones, and no move is sharper than max_ramp_curvature_per_m. The line
+    # passing the most obstacles (nearest first) wins, then the one in place
+    # before the stopping distance, then the cheapest by the *_weight costs.
+    # The MPC follows the chosen line over its whole horizon. Without a line
+    # that passes an obstacle, the MPC stops as before (mpc.obstacle_stop_*).
+    # In a 0.8 m lane with these values the gap between the obstacle and the
+    # inner side of the cones must be at least 0.25 + 0.10 + 0.10 = 0.45 m, so
+    # an obstacle must end at least 0.10 m short of the centre line on its
+    # side.
     avoidance:
       # true or false; false only stops for obstacles.
       enabled: true
@@ -599,20 +603,27 @@
       # obstacle_detection.corridor_half_width_m.
       cone_clearance_m: 0.10
       obstacle_clearance_m: 0.10
-      # How far before the car's front reaches the obstacle, and after its rear
-      # has passed it, the line stays beside the obstacle, metres, double >= 0.
-      pass_distance_m: 0.30
-      # Sharpest curvature a ramp onto or off the line beside an obstacle may
-      # add to the lane's own, 1/m, positive double, within the car's limits
-      # (mpc.max_curvature_per_m and max_right_curvature_per_m). A ramp moving
-      # the line d metres is pi * sqrt(d / (2 * this)) long: 1.7 m for 0.175 m.
+      # How far along the lane before and after an obstacle the car's body also
+      # keeps the clearances from it (its unseen depth, odometry error),
+      # metres, double >= 0. The line aims to keep them from the stopping
+      # distance before the obstacle instead, when that is longer and possible.
+      # Two obstacles on opposite sides need more than twice this between them
+      # to weave between: with 0.05, a 0.6 m gap is enough in a 0.8 m lane
+      # when each obstacle ends at least about 0.17 m short of the centre line.
+      pass_distance_m: 0.05
+      # Sharpest curvature a move across the lane may add to the lane's own,
+      # 1/m, positive double, within the car's limits (mpc.max_curvature_per_m
+      # and max_right_curvature_per_m). A move of d metres between lines
+      # parallel to the lane is sqrt(5.77 * d / this) long: 1.84 m for 0.175 m.
       max_ramp_curvature_per_m: 0.30
-      # How much more room the other side of an obstacle must leave before the
-      # car changes the side it passes on, metres, double >= 0. Once the car's
-      # front has reached the obstacle, the side no longer changes.
-      side_hysteresis_m: 0.05
-      # Distance ahead of base_link's origin at which the planned line is given
-      # to the MPC to follow, metres, double >= 0, so it starts each ramp in
-      # time. 0.60 matches the MPC's nominal prediction distance at 0.5 m/s
-      # (12 steps * 0.1 s * 0.5 m/s).
-      lookahead_m: 0.60
+      # Candidate line costs, doubles >= 0, each per metre along the lane:
+      # offset from the usual line (per m^2), curvature added to the lane's
+      # (per (1/m)^2), and change from the previous step's line (per m^2),
+      # less a reward per metre of room beyond the clearances beside an
+      # obstacle. Higher change_weight keeps the side the car passes on while
+      # it stays clear; clearance_weight 0 passes as close as the clearances
+      # allow, higher moves towards the middle of the free gap.
+      deviation_weight: 1.0
+      smoothness_weight: 1.0
+      clearance_weight: 5.0
+      change_weight: 1.0

@@ -8,6 +8,7 @@ control module
 import logging
 import math
 
+from policy.action_policy.lane_path import LanePath
 from policy.action_policy.mpc import MpcConfig, MpcController, PathTrackingState, inside_offset_limit_m
 from policy.action_policy.reference import reference_from_cones, rotate_cones
 from policy.control.actions import DriveCommand, Instruction
@@ -29,10 +30,10 @@ class MpcPolicy:
         """
         self.config = config
         self.controller = MpcController(config)
-        self.avoidance_offset_m: float | None = None
-        """The line to follow past obstacles in the lane, in metres left of the centre line, or None to follow
-        lane_offset_m. Set before each step from the line LaneAvoidance plans, avoidance.lookahead_m ahead; that line
-        is already kept clear of the cones, so it is followed as it is."""
+        self.avoidance_path: LanePath | None = None
+        """The line to follow past obstacles in the lane, or None to follow the usual line (usual_offset_m). Set before
+        each step to the line LaneAvoidance plans; the MPC follows it over its whole horizon. That line is already kept
+        clear of the cones, so it is followed as it is."""
         self.reset()
 
     def reset(self):
@@ -87,15 +88,15 @@ class MpcPolicy:
         first usable lane in this run, which starts it at the target."""
 
     def followed_offset_m(self, lane_width_m: float, path_curvature_per_m: float = 0.0) -> float:
-        """The offset from the lane centre actually followed: avoidance_offset_m while passing obstacles, otherwise
-        usual_offset_m.
+        """The offset from the lane centre actually followed beside the car: avoidance_path's while passing obstacles,
+        otherwise usual_offset_m.
 
         :param lane_width_m: Width of the lane in metres.
         :param path_curvature_per_m: Curvature of the lane's centre line in 1/m.
         :return: The offset in metres, positive to the left.
         """
-        if self.avoidance_offset_m is not None:
-            return self.avoidance_offset_m
+        if self.avoidance_path is not None:
+            return self.avoidance_path.offset_at(0.0)
         return self.usual_offset_m(lane_width_m, path_curvature_per_m)
 
     def offset_limits_m(self, lane_width_m: float, path_curvature_per_m: float = 0.0) -> tuple[float, float]:
@@ -226,7 +227,8 @@ class MpcPolicy:
         self._move_side_offset(lane_width_m, state.path_curvature_per_m, step_distance_m)
         offset = self.followed_offset_m(lane_width_m, state.path_curvature_per_m)
         solution = self.controller.solve(state, self.previous_curvature_per_m, cones.sensor_age,
-                                         speed_m_per_s=prediction_speed, lateral_offset_m=offset)
+                                         speed_m_per_s=prediction_speed, lateral_offset_m=offset,
+                                         line=self.avoidance_path)
         self.solve_count += 1
         self.last_solve_time_s = solution.solve_time_s
         if solution.converged:

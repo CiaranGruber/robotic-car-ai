@@ -36,7 +36,6 @@ OUTLIERS = [
     cone(1.25, 0.9 + SLOPE * 1.25, YELLOW),  # Off the yellow row
     cone(1.75, -0.5 + SLOPE * 1.75, YELLOW),  # Wrong colour in the blue row
     cone(1.0, 0.52 + SLOPE, YELLOW, confidence=0.6),  # Less confident duplicate of a yellow cone
-    cone(5.0, 0.0, BLUE),  # Beyond the range
     cone(-0.3, 0.5, YELLOW),  # Behind the car
     cone(2.0, 2.5, BLUE),  # Too far to the side
     cone(2.0, 0.0, BLUE, z=1.2),  # Too high to be a cone
@@ -87,12 +86,18 @@ def test_curved_lanes_keep_their_cones_without_the_straight_row_check():
     assert list(filter_cones(batch(curve + OUTLIERS[3:]), no_rows)) == curve
 
 
+def test_keeps_arbitrarily_far_forward_cones_when_other_checks_pass():
+    far = cone(100.0, 0.5, YELLOW)
+    config = dataclasses.replace(ConeFilterConfig(), check_straight_rows=False)
+    assert list(filter_cones(batch([far]), config)) == [far]
+
+
 def test_missing_cones_stay_missing():
     assert filter_cones(None, ConeFilterConfig()) is None
 
 
 @pytest.mark.parametrize("change", [
-    {"max_forward_m": 0.0}, {"max_lateral_m": math.inf}, {"merge_distance_m": -0.1}, {"row_residual_m": math.nan},
+    {"max_lateral_m": math.inf}, {"merge_distance_m": -0.1}, {"row_residual_m": math.nan},
     {"min_height_m": 0.5}, {"min_confidence": 1.5}, {"max_fit_cones_per_colour": 1},
     {"max_fit_cones_per_colour": 13}, {"max_fit_cones_per_colour": 8.0}, {"check_straight_rows": 1},
 ])

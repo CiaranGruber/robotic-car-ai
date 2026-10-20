@@ -64,7 +64,10 @@
     steering_max_normalized: 0.5
     # Initial centre correction, normalized, within the configured interval.
     # Runtime trim uses explicit steering-trim topics, not live parameter edits.
-    steering_trim_normalized: 0.0
+    # Car 20: -0.25 is estimated from the 19 Oct drive logs, where steering 0
+    # drove a right circle of about 2.8 m radius with the trim at 0.0. Confirm
+    # with docs/control/car-calibration.md section 3 and record the final value.
+    steering_trim_normalized: -0.25
 
     # RC receiver calibration in integer MICROSECONDS, minimum < centre < maximum,
     # each in [400, 2600]. These are measured input values, not steering-output

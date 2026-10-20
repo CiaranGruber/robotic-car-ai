@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import curved_lanes as cl  # noqa: E402
+from policy.action_policy.lane_path import LanePath, LineState, PathSegment  # noqa: E402
 from policy.action_policy.mpc import (  # noqa: E402
     MpcConfig, MpcController, PathTrackingState, inside_offset_limit_m, offset_state,
 )
@@ -122,9 +123,28 @@ def test_offset_steers_a_centred_car_towards_that_side():
     assert controller.solve(centred_state(), 0.0, 0.0).curvatures_per_m[0] == pytest.approx(0.0, abs=1e-9)
 
 
+@pytest.mark.parametrize("curvature", [0.0, 0.3])
+def test_a_planned_line_at_one_offset_is_followed_like_the_offset(curvature):
+    controller = MpcController(MpcConfig())
+    state = PathTrackingState(0.02, 0.05, curvature)
+    by_offset = controller.solve(state, 0.0, 0.05, lateral_offset_m=0.1).curvatures_per_m
+    by_line = controller.solve(state, 0.0, 0.05, line=LanePath(0.1, ())).curvatures_per_m
+    assert by_line == pytest.approx(by_offset)
+
+
+def test_a_planned_line_moving_across_is_steered_before_it_moves():
+    controller = MpcController(MpcConfig())
+    # The line moves 0.2 m left over 1.5 m, starting 0.3 m ahead: the car starts turning now, but less than it would
+    # for a line 0.2 m left already
+    line = LanePath(0.0, (PathSegment.move(0.3, 1.8, LineState(0.0), LineState(0.2)), PathSegment.hold(1.8, 5.0, 0.2)))
+    ahead = controller.solve(centred_state(), 0.0, 0.0, line=line).curvatures_per_m[0]
+    already = controller.solve(centred_state(), 0.0, 0.0, lateral_offset_m=0.2).curvatures_per_m[0]
+    assert 0.0 < ahead < already
+
+
 def lane_detection():
     """Lane detection with curves on, as config/ai4r_policy.yaml sets it, after the cone filter."""
-    filter_config = ConeFilterConfig(max_forward_m=2.5, check_straight_rows=False)
+    filter_config = ConeFilterConfig(check_straight_rows=False)
     detector = LaneDetector(LaneDetectionConfig(max_curvature_per_m=2.0))
     return lambda observations: detector.detect(
         dataclasses.replace(observations, cones=filter_cones(observations.cones, filter_config)))

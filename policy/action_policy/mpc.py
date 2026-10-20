@@ -10,6 +10,10 @@ Only the first curvature is driven; the problem is solved again at the next step
 The prediction model is in the path's frame, linearised for small heading errors, at a constant speed v:
     d(lateral_error)/dt = v * heading_error
     d(heading_error)/dt = v * (curvature - path_curvature)
+
+The line followed is the path itself, a line at a fixed offset from it, or a planned line that moves across it (such
+as the one LaneAvoidance plans past obstacles): then each predicted step's targets are the line's offset, heading and
+curvature at the distance the car will have driven by then.
 """
 import math
 import time
@@ -17,6 +21,8 @@ from dataclasses import dataclass
 
 import numpy as np
 from scipy.optimize import lsq_linear
+
+from policy.action_policy.lane_path import LanePath
 
 LANE_SIDES = ("CENTRE", "LEFT", "RIGHT")
 """The values of MpcConfig.lane_side."""
@@ -317,7 +323,8 @@ class MpcController:
         return -right, config.max_curvature_per_m
 
     def solve(self, state: PathTrackingState, previous_curvature_per_m: float, delay_s: float,
-              speed_m_per_s: float | None = None, *, lateral_offset_m: float = 0.0) -> MpcSolution:
+              speed_m_per_s: float | None = None, *, lateral_offset_m: float = 0.0,
+              line: LanePath | None = None) -> MpcSolution:
         """Chooses the curvatures that best follow the path from the car's state.
 
         :param state: Where the car was relative to the path when the observation was taken.
@@ -328,6 +335,9 @@ class MpcController:
             for callers without feedback. Zero is a real measurement, not missing data. Delay propagation assumes
             this speed and the previous curvature throughout the delay; it is not motion-history reconstruction.
         :param lateral_offset_m: Metres left of the path to follow, using its concentric line on curves.
+        :param line: A planned line across the path to follow instead of lateral_offset_m, in lane coordinates from
+            where the observation was taken. At each predicted step the car is steered towards the line's offset and
+            heading there, and along its curvature, so it starts each move across the path in time.
         :return: The planned curvatures and whether they can be driven.
         """
         start = time.perf_counter()
@@ -349,6 +359,17 @@ class MpcController:
         forced_response[0::2] = self._lateral_effect * distance ** 2
         forced_response[1::2] = self._heading_effect * distance
         cost_matrix = np.vstack([self._state_weights[:, None] * forced_response, self._curvature_cost])
+        # The line's offset and heading at each predicted step, relative to the line through where the car is now, and
+        # the curvature it adds to the path's
+        line_targets = np.zeros(2 * steps)
+        line_curvatures = np.zeros(steps)
+        if line is not None:
+            offsets, slopes, line_curvatures = line.sample(speed * (delay_s + self._step_numbers * config.step_s))
+            lateral_offset_m = line.offset_at(speed * delay_s)
+            line_targets[0::2] = offsets - lateral_offset_m
+            line_targets[1::2] = np.arctan(slopes)
+            if not (np.all(np.isfinite(line_targets)) and np.all(np.isfinite(line_curvatures))):
+                raise ValueError("MPC line must be finite")
         if not math.isfinite(lateral_offset_m):
             raise ValueError("MPC lateral offset must be finite")
         if lateral_offset_m:
@@ -365,8 +386,8 @@ class MpcController:
         previous = np.zeros(steps)
         previous[0] = previous_curvature_per_m
         targets = np.concatenate([
-            -self._state_weights * (free_response @ initial_state - forced_response @ path_curvatures),
-            math.sqrt(config.curvature_weight) * path_curvatures,
+            -self._state_weights * (free_response @ initial_state - forced_response @ path_curvatures - line_targets),
+            math.sqrt(config.curvature_weight) * (path_curvatures + line_curvatures),
             math.sqrt(config.curvature_change_weight) * previous,
         ])
         # max_iter limits iterations, not wall-clock time; the node still enforces its calculation budget.
