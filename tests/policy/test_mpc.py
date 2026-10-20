@@ -371,7 +371,7 @@ def test_measured_speed_controls_plan_progress():
     observations = dataclasses.replace(observations, car=dataclasses.replace(observations.car, wheel_speed=0.5))
     policy.run_policy(observations, None)
     assert policy.plan_step_distance_m == pytest.approx(0.05)
-    plan = policy.plan_curvatures_per_m.copy()
+    plan = policy.plan_curvatures_per_m
     lost = dataclasses.replace(observations, cones=None, policy=PolicyState(0.1, 0.1, False))
     result = policy.run_policy(lost, None)[0]
     assert policy.distance_since_plan_m == pytest.approx(0.05)

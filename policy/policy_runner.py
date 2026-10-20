@@ -121,6 +121,10 @@ class MovementPolicy:
         """
         if self.action_policy_name == "open_space":
             return self._open_space_step(observations)
+        # Forget the previous run before the avoidance and the obstacle check ask the MPC for its line, so a new run
+        # starts at mpc.lane_side rather than where the previous run left off
+        if observations.policy.is_first_policy_step:
+            self.action_policy.reset()
         # Remove the cone outliers, so every later stage uses the same plausible cones
         observations = dataclasses.replace(
             observations, cones=filter_cones(observations.cones, self.cone_filter_config))
@@ -146,7 +150,7 @@ class MovementPolicy:
             self.lane_path if self.lane_path is not None and self.lane_path.segments else None)
         self.obstacle_distance_m = self._obstacle_distance_m(lanes)
         # Determine the policy to take based upon the car location; an obstacle in the car's way stops it
-        instructions = self.action_policy.run_policy(observations, lanes, self.obstacle_distance_m)
+        instructions = self.action_policy.run_policy(observations, lanes, self.obstacle_distance_m, memory)
         # The car actions to determine
         car_actions = self.car_controller.step(observations, instructions)
         # Hold the camera at zero pan: the camera's fixed transform to base_link assumes it, and any pan rotates every

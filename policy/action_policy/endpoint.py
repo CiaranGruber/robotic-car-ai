@@ -11,6 +11,7 @@ from policy.action_policy.mpc import PathTrackingState
 from policy.action_policy.policy import MpcPolicy
 from policy.action_policy.reference import reference_from_cones
 from policy.input_output import ConeColour
+from policy.memory import MpcStop
 
 
 @dataclass(frozen=True)
@@ -154,7 +155,7 @@ class EndpointMpcPolicy(MpcPolicy):
 
     def _abort(self, reason):
         self.endpoint_abort_reason = reason
-        self.stopped_for_lane_loss = True
+        self.memory.stop_mpc(MpcStop.LANE_LOSS)
         return [self._command(0.0, 0.0)]
 
     def run_policy(self, observations, lanes):
@@ -216,6 +217,6 @@ class EndpointMpcPolicy(MpcPolicy):
         self.last_solve_time_s = solution.solve_time_s
         if not solution.converged:
             self.fallback_count += 1
-            self.stopped_for_solver_failure = True
+            self.memory.stop_mpc(MpcStop.SOLVER_FAILURE)
             return [self._command(0.0, 0.0)]
         return [self._command(target_speed, float(solution.curvatures_per_m[0]))]

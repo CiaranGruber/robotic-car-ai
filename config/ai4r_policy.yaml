@@ -231,17 +231,23 @@
       # Lane width, metres, positive double. Default 0.8, the lab tracks' measured
       # 0.73-0.85 m. Used to find the centre when only one cone row is visible.
       lane_width_m: 0.8
-      # Where in the lane to drive, metres from the centre line, + left, finite
-      # double. Default 0.0, the centre. Towards the hook turn: the car keeps to
-      # one side, at least edge_clearance_m from each edge.
+      # Which part of the lane to drive along: "CENTRE", "LEFT" or "RIGHT".
+      # "LEFT"/"RIGHT" keep to that side, edge_clearance_m from its edge, as
+      # far over as the measured lane width allows (towards the hook turn).
+      lane_side: "CENTRE"
+      # Where in the lane to drive while lane_side is "CENTRE", metres from the
+      # centre line, + left, finite double. Default 0.0, the centre.
       lane_offset_m: 0.0
       # Smallest distance from the followed line to either lane edge, metres,
-      # positive double. Default 0.30: half the car, a cone and room for
-      # tracking error, so 0.1 m of offset in a 0.8 m lane.
-      edge_clearance_m: 0.30
-      # Path curvature at which the offset has faded to nothing, 1/m, positive
-      # double; it shrinks in proportion below that. Default 0.3 (3.3 m radius).
-      offset_fade_curvature_per_m: 0.3
+      # positive double. Default 0.40: 0.30-0.35 touched the outer cones in
+      # simulation with 3 degrees of camera yaw. An 0.8 m lane is then driven
+      # along its centre; 1.2 m gives 0.2 m of offset, 1.6 m gives 0.4 m.
+      edge_clearance_m: 0.40
+      # Fastest sideways movement of the followed line, metres per metre
+      # driven, positive double, when the side changes or the lane widens.
+      # Default 0.2: crossing a 1.2 m lane takes about 2.5 m; 0.5 and an
+      # instant switch ran into the cones in simulation.
+      offset_change_per_m: 0.2
       # How far left of the car's forwards direction the camera points, degrees,
       # finite double. The cones are rotated back by this much before the lane is
       # fitted. Default 0.0. The recordings showed 6-10 degrees, but with the
