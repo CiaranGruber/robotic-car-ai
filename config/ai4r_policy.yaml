@@ -307,8 +307,8 @@
       # The stop is requested once the obstacle is within
       # (obstacle_stop_distance_per_speed_s + lidar age) * speed
       # + obstacle_stop_margin_m of the car's front, using the larger of
-      # target_speed_m_per_s and the measured speed: 0.6 * 0.5 + 0.2 = 0.5 m
-      # (plus ~0.05 m lidar age) at 0.5 m/s. The car then brakes to a stop about
+      # target_speed_m_per_s and the measured speed: 0.8 * 0.5 + 0.2 = 0.6 m
+      # (plus lidar age * speed) at 0.5 m/s. The car then brakes to a stop about
       # this margin short of it. Metres, finite double >= 0. The node does not
       # start if that distance at the target speed is longer than
       # obstacle_detection.corridor_length_m.
@@ -316,16 +316,23 @@
       # How far the car travels after an obstacle stop request while braking,
       # in metres per m/s of speed (seconds), finite double >= 0. Shorter than
       # stop_distance_per_speed_s, so the car drives nearer before braking.
-      # 0.6 is an UNMEASURED starting guess for car 20 with brake_action 0.3.
-      # MEASURE IT with a soft obstacle: drive at a known speed, note where the
-      # stop was requested and where the car stopped, divide by the speed. With
+      # 0.8 is UNMEASURED, chosen in tests/policy/obstacle_simulation.py: with
+      # the settings marked "obstacle simulation" below, the simulated car
+      # stopped short of a box blocking the lane for any simulated braking of
+      # 0.4-1.0 s per m/s, and still passed every box it had room to pass; 0.0
+      # hit the box unless braking took under 0.2 s per m/s. MEASURE IT with a
+      # soft obstacle: drive at a known speed, note where the stop was
+      # requested and where the car stopped, divide by the speed. With
       # control.brake_action 0.0 the node does not start unless this is at
       # least stop_distance_per_speed_s.
-      obstacle_stop_distance_per_speed_s: 0.0
+      obstacle_stop_distance_per_speed_s: 0.8
       # Consecutive policy steps that must see the obstacle within that
       # distance, INTEGER >= 1, so one step of stray returns does not stop the
       # run. Each extra step is about 0.05 m more at 0.5 m/s with 10 Hz cones.
-      obstacle_confirm_steps: 2
+      # 3 (obstacle simulation): the lane estimate moves a box across the lane
+      # by about 0.1 m from step to step, and with 2 that often stopped the car
+      # for a box it was already passing.
+      obstacle_confirm_steps: 3
 
     # OPEN-SPACE SETTINGS, used when action_policy is open_space (OpenSpaceConfig
     # in policy/action_policy/open_space.py, which checks them and explains the
@@ -550,11 +557,13 @@
       # double >= 0. 0.30 is the notebook car's; measure your car.
       car_front_m: 0.30
       # Half the width of the way the car drives through, metres, positive
-      # double: half the car's width plus a margin (0.20 suits a 0.25 m wide
-      # car). Used across the lane, and for the straight corridor ahead when no
-      # lane is detected; there keep it well below half the lane width (0.4 m
-      # in the lab's 0.8 m lanes), or the cones beside the lane count.
-      corridor_half_width_m: 0.20
+      # double: half the car's width plus a margin. Used across the lane, and
+      # for the straight corridor ahead when no lane is detected; there keep it
+      # well below half the lane width (0.4 m in the lab's 0.8 m lanes), or the
+      # cones beside the lane count. 0.175 (obstacle simulation) leaves 0.05 m
+      # beside a 0.25 m wide car: with 0.20 the lane estimate's step-to-step
+      # jumps often put a box the car had room to pass into the way.
+      corridor_half_width_m: 0.175
       # Length of the straight corridor ahead of the car's front (used without
       # a lane), metres, positive double. It must hold the MPC's obstacle
       # stopping distance (mpc.obstacle_stop_margin_m). Longer sees obstacles
@@ -572,8 +581,12 @@
       # Returns this close inside either lane edge, or outside the lane, are
       # not obstacles in the lane: they are the cones or the lane's
       # surroundings. Metres, finite double >= 0: a cone's radius at the
-      # lidar's height plus the edge fit's error.
-      lane_edge_margin_m: 0.10
+      # lidar's height plus the edge fit's error. 0.15 (obstacle simulation)
+      # allows for the edge fit moving by about 0.1 m: in a 0.8 m lane it
+      # leaves out anything more than 0.25 m from the centre line, so an
+      # object standing entirely in the outer 0.15 m beside the cones is not
+      # seen; a centred 0.25 m wide car still has 0.125 m to it.
+      lane_edge_margin_m: 0.15
       # Neighbouring returns (in scan order) closer than this belong to one
       # object in the lane, metres, positive double.
       cluster_gap_m: 0.15
@@ -595,8 +608,8 @@
     # The MPC follows the chosen line over its whole horizon. Without a line
     # that passes an obstacle, the MPC stops as before (mpc.obstacle_stop_*).
     # In a 0.8 m lane with these values the gap between the obstacle and the
-    # inner side of the cones must be at least 0.25 + 0.10 + 0.10 = 0.45 m, so
-    # an obstacle must end at least 0.10 m short of the centre line on its
+    # inner side of the cones must be at least 0.25 + 0.10 + 0.05 = 0.40 m, so
+    # an obstacle must end at least 0.05 m short of the centre line on its
     # side.
     avoidance:
       # true or false; false only stops for obstacles.
@@ -612,8 +625,10 @@
       # Smallest gaps while passing, metres, doubles >= 0: car side to cone,
       # and car side to obstacle. Half the car's width plus
       # obstacle_clearance_m must be at least
-      # obstacle_detection.corridor_half_width_m.
-      cone_clearance_m: 0.10
+      # obstacle_detection.corridor_half_width_m. cone_clearance_m 0.05
+      # (obstacle simulation) lets the car use 0.05 m narrower gaps beside an
+      # obstacle, passing as close as 0.05 m to the cones.
+      cone_clearance_m: 0.05
       obstacle_clearance_m: 0.10
       # How far along the lane before and after an obstacle the car's body also
       # keeps the clearances from it (its unseen depth, odometry error),
