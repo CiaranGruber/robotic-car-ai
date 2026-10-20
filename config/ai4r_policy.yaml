@@ -86,8 +86,12 @@
       # Rename any old lidar timeout to lidar_scan. Cartesian data must pass
       # BOTH deadlines and always match the latest accepted raw scan. A failed
       # conversion makes it unavailable immediately, without waiting for expiry.
-      lidar_scan: 0.5
-      lidar_cartesian: 0.5
+      # 0.8 for both: on 2026-10-20 scans reached the policy only every 0.2-0.3 s,
+      # about 0.1 s old, so 0.5 left no room for one late scan; two drives
+      # ended mid-run, most likely on stale lidar. The obstacle stop distance
+      # adds the lidar age.
+      lidar_scan: 0.8
+      lidar_cartesian: 0.8
       wheel_speed: 0.5
       imu_orientation: 0.5
       imu_angular_velocity: 0.5
@@ -379,12 +383,20 @@
     # straight row (both rows share one fitted direction). Every later policy
     # stage only sees the kept cones. Replace the starting values after Task A1.
     cone_filter:
-      # Only cones ahead of base_link (x > 0) are kept. There is no maximum
-      # forward-distance limit here; the detector owns its depth limits.
+      # Only cones ahead of base_link (x > 0) are kept.
       # Keep cones with |y| <= this, metres, positive double. Default 2.0: half
       # the 1.0 m lane, a 0.2 m start offset and a 15 degree heading error
       # seen 4 m ahead.
       max_lateral_m: 2.0
+      # Keep cones at most this straight-line distance from base_link, metres,
+      # double >= 0.0; 0.0 keeps every distance (the detector's depth limits
+      # still apply). 3.5: on the 2026-10-20 S-bend the cones 4-5 m ahead,
+      # curving back left, flipped the fitted curvature near the car to a left
+      # bend in 18 of 28 steps (0 of 28 at 3.5). 3.0 left about 10 cones beside
+      # an obstacle, and the jumping lane fit put the obstacle in the car's way:
+      # obstacle_track_expands stopped at it. Must be above
+      # mpc.lane_end_distance_m.
+      max_distance_m: 3.5
       # Accepted detected-point height above nominal ground, metres, finite
       # doubles with min below max. The fixed camera pose ignores vehicle
       # pitch, so keep this band loose. Default max 0.45. 0.25 removes the

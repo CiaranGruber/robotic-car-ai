@@ -37,7 +37,8 @@ class MovementPolicy:
         """
         :param mpc_config: The MPC settings, from the mpc parameters in config/ai4r_policy.yaml.
         :param cone_filter_config: The cone filter settings, from the cone_filter parameters in
-            config/ai4r_policy.yaml.
+            config/ai4r_policy.yaml. A ValueError is raised when max_distance_m limits the cones to no farther than
+            mpc.lane_end_distance_m, so every lost lane would look like the end of the rows.
         :param control_config: The control settings, from the control parameters in config/ai4r_policy.yaml.
         :param open_space_config: The open-space settings, from the open_space parameters in config/ai4r_policy.yaml.
         :param action_policy: Which policy chooses the instructions, from the action_policy parameter:
@@ -57,6 +58,10 @@ class MovementPolicy:
         """
         if action_policy not in ACTION_POLICIES:
             raise ValueError(f"action_policy must be one of {ACTION_POLICIES}, not {action_policy!r}")
+        if 0.0 < cone_filter_config.max_distance_m <= mpc_config.lane_end_distance_m:
+            raise ValueError(f"cone_filter.max_distance_m ({cone_filter_config.max_distance_m}) must be above "
+                             f"mpc.lane_end_distance_m ({mpc_config.lane_end_distance_m}), or every lost lane would "
+                             f"look like the end of the cone rows")
         stopping_m = (mpc_config.obstacle_stop_distance_per_speed_s * mpc_config.target_speed_m_per_s
                       + mpc_config.obstacle_stop_margin_m)
         searched_m = min(obstacle_detection_config.corridor_length_m, obstacle_detection_config.lane_length_m)
