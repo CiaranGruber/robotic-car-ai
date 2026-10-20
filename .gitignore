@@ -3,6 +3,7 @@ install/
 log/
 logs/
 .verification/
+.test-artifacts/
 scenarios/data/original_data
 
 # Byte-compiled / optimized / DLL files
