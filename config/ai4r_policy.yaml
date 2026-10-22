@@ -573,8 +573,13 @@
       # are searched for, metres, positive double; about as far as the camera
       # sees the lane. It must also hold the stopping distance. Driving around
       # an obstacle (avoidance below) needs it seen early: the move onto the
-      # line beside it is about 1.8 m long.
-      lane_length_m: 2.5
+      # line beside it is about 1.5 m long. 3.5 (drive 2026-10-22_15-42-42: a
+      # box near the centre, then one on the left 1.4 m on): with 2.5 the
+      # second box was first seen when the first was 1.0 m ahead, too late to
+      # weave between them; with 3.5 both are seen from the start, and the
+      # replay found no other object in the lane. Past the last cones the lane
+      # is extrapolated, so farther risks counting the cones of a bend.
+      lane_length_m: 3.5
       # Fewest lidar returns that make an obstacle (in the corridor, or in one
       # object in the lane), INTEGER >= 1, so stray returns do not count.
       min_points: 3
@@ -653,8 +658,15 @@
       # Sharpest curvature a move across the lane may add to the lane's own,
       # 1/m, positive double, within the car's limits (mpc.max_curvature_per_m
       # and max_right_curvature_per_m). A move of d metres between lines
-      # parallel to the lane is sqrt(5.77 * d / this) long: 1.84 m for 0.175 m.
-      max_ramp_curvature_per_m: 0.30
+      # parallel to the lane is sqrt(5.77 * d / this) long: 1.50 m for 0.175 m.
+      # 0.45, near the left limit 0.48, so the MPC follows it less closely:
+      # with 0.30 no line weaves past the left of a box near the centre and
+      # then the right of a box 1.4 m on (drive 2026-10-22_15-42-42), as the
+      # move across is about 2.4 m long. With 0.45 and lane_length_m 3.5 the
+      # replay plans that weave, and the obstacle simulation of that layout
+      # passed in 8 of 40 runs and stopped short in the rest (0 of 40 passed
+      # with 0.30 and 2.5).
+      max_ramp_curvature_per_m: 0.45
       # Sharpest curvature the move back to the usual line, once past the
       # obstacles, may add to the lane's own, 1/m, positive double, within the
       # car's limits like max_ramp_curvature_per_m. The car's body is still

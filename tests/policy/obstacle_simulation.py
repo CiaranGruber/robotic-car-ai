@@ -158,12 +158,17 @@ CASES = (
                  (Box(2.0, -0.35, -0.15), Box(3.2, 0.15, 0.35)), expect="either"),
     ObstacleCase("wide_centre", "1.3 m lane, box in the middle: 0.5 m either side",
                  cl.CurvedLane(pieces=(("straight", 5.0),), width_m=1.3), (Box(2.0, -0.10, 0.10),)),
+    ObstacleCase("recorded_weave", "Middle box, then a left one 1.2 m on, 1.15 m lane (drive 2026-10-22_15-42-42)",
+                 cl.CurvedLane(pieces=(("straight", 5.0),), width_m=1.15),
+                 (Box(1.58, -0.19, 0.01), Box(2.99, 0.10, 0.31)), expect="either", start_left_m=-0.05),
     ObstacleCase("uturn_clear", "Left U-turn of 2.5 m radius, no obstacle",
                  cl.CurvedLane(pieces=(("straight", 1.0), ("arc", 1 / 2.5, 180.0), ("straight", 1.5)),
                                width_m=LAB_WIDTH_M)),
 )
 """The cases. Obstacles only stand on straights; the U-turn checks that the obstacle detection lets the car follow a
-curve. The boxes are 0.2 m long, about the lab obstacles' 0.21-0.22 m faces in the recordings. In a 0.8 m lane the
+curve. recorded_weave places the boxes of a drive where the car passed the first box on the left and stopped at the
+second, measured from the left cone row; the right of the first box is 0.385 m wide, just too narrow, so the car has to
+weave. That track bends slightly (radius over 10 m) and widens to about 1.4 m past the second box. The boxes are 0.2 m long, about the lab obstacles' 0.21-0.22 m faces in the recordings. In a 0.8 m lane the
 planner needs a gap of car_width_m + obstacle_clearance_m + cone_clearance_m = 0.45 m between a box and the inner side
 of the cones (0.35 m from the centre)."""
 EXPECTED_OUTCOMES = {"pass": {"passed"}, "stop": {"stopped"}, "either": {"passed", "stopped"}}
@@ -526,7 +531,7 @@ def plot(results: dict[str, list[list[ObstacleResult]]], names: list[str], path:
     from matplotlib.patches import Patch, Polygon
 
     colours = ["tab:green", "tab:orange", "tab:purple", "tab:red", "tab:brown"]
-    columns, panel_width, title_height = 3, 5.8, 1.0
+    columns, panel_width, title_height = min(3, len(results)), 5.8, 1.0
     # Each panel shows its lane at one scale, so a row is as tall as its tallest lane needs
     bounds = []
     for variant_runs in results.values():
@@ -537,7 +542,8 @@ def plot(results: dict[str, list[list[ObstacleResult]]], names: list[str], path:
     ratios = [max((high[1] - low[1]) / (high[0] - low[0]) for low, high in bounds[row * columns:(row + 1) * columns])
               for row in range(rows)]
     heights = [ratio * panel_width + title_height for ratio in ratios]
-    fig = plt.figure(figsize=(panel_width * columns, sum(heights) + 0.8), layout="constrained")
+    # At least as wide as the title and legend
+    fig = plt.figure(figsize=(max(panel_width * columns, 13.0), sum(heights) + 0.8), layout="constrained")
     grid = fig.add_gridspec(rows, columns, height_ratios=heights)
     axes = [fig.add_subplot(grid[index // columns, index % columns]) for index in range(len(results))]
     for ax, (low, high), (case_name, variant_runs) in zip(axes, bounds, results.items()):
