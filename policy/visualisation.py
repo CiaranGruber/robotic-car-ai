@@ -30,9 +30,10 @@ COLOURS: dict[str, Colour] = {
     "mpc": (0.2, 0.85, 0.95, 1.0),
     "fiducial": (0.7, 0.4, 1.0, 0.8),
     "car": (0.85, 0.85, 0.85, 0.35),
-    "text": (1.0, 1.0, 1.0, 1.0),
+    "text": (1.0, 1.0, 1.0, 0.6),
 }
-"""Drawing colours. The lane colours match scripts/lane_overlay_node.py."""
+"""Drawing colours. The lane colours match scripts/lane_overlay_node.py. Foxglove draws text on a black box with the
+text's opacity, so the text is see-through to keep what is under it visible."""
 
 CONE_COLOURS = {ConeColour.BLUE: COLOURS["left"], ConeColour.YELLOW: COLOURS["right"]}
 """Colour of a used cone."""
@@ -42,6 +43,13 @@ LINE_WIDTH_M = 0.03
 
 LINE_STEP_M = 0.1
 """Distance in metres along a drawn line between its points."""
+
+TEXT_HEIGHT_M = 0.1
+"""Height of one line of drawn text in metres, so text grows and shrinks with the view like the other shapes."""
+
+SUMMARY_BEHIND_M = 1.0
+"""Distance in metres from the car's rear to the middle of the step's summary. The summary's lines are under 30
+characters, so it stays behind the car and off the lane ahead whichever way the view is turned."""
 
 LAYERS = ("cones/detected", "cones/used", "lane", "obstacles", "plan/avoidance", "plan/mpc", "fiducials", "car")
 """The layers of a drawing, in drawing order:
@@ -143,16 +151,17 @@ def summary(policy: MovementPolicy, observations: CarObservations, actions: CarA
     :return: A short text of the step's lane, obstacle, speed and actions.
     """
     lanes = policy.lanes
-    lane = "open space" if lanes is None else lanes.status.name
+    lines = [f"t {observations.policy.policy_elapsed_s:.2f} s  "
+             + ("open space" if lanes is None else lanes.status.name)]
     if lanes is not None and lanes.has_lane:
-        lane += f"  lateral {lanes.lateral_error_m:+.2f} m  heading {math.degrees(lanes.heading_error_rad):+.1f} deg"
+        lines += [f"lateral {lanes.lateral_error_m:+.2f} m",
+                  f"heading {math.degrees(lanes.heading_error_rad):+.1f} deg"]
     obstacle = policy.obstacle_distance_m
     speed = observations.car.wheel_speed
-    return "\n".join((
-        f"t {observations.policy.policy_elapsed_s:.2f} s  {lane}",
+    return "\n".join(lines + [
         "obstacle " + ("unknown" if obstacle is None else "clear" if math.isinf(obstacle) else f"{obstacle:.2f} m"),
-        "speed " + ("unknown" if speed is None else f"{float(speed):.2f} m/s")
-        + f"  drive {actions.drive_action:+.2f}  steer {actions.steering_action:+.2f}"))
+        "speed " + ("unknown" if speed is None else f"{float(speed):.2f} m/s"),
+        f"drive {actions.drive_action:+.2f}  steer {actions.steering_action:+.2f}"])
 
 
 def _along(start_m: float, end_m: float) -> list[float]:
@@ -273,4 +282,4 @@ def _car_layer(policy: MovementPolicy, observations: CarObservations, actions: C
     return Layer(
         boxes=[Box(((front_m - rear_m) / 2.0, 0.0, 0.05), (front_m + rear_m, policy.avoidance.config.car_width_m, 0.1),
                    COLOURS["car"])],
-        texts=[Text((-rear_m - 0.4, 0.0, 0.3), summary(policy, observations, actions))])
+        texts=[Text((-rear_m - SUMMARY_BEHIND_M, 0.0, 0.3), summary(policy, observations, actions))])

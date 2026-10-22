@@ -83,7 +83,7 @@ from policy.lane_detection.lane_detection import LaneDetectionConfig
 from policy.memory import CarMemory
 from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
 from policy.policy_runner import MovementPolicy
-from policy.visualisation import COLOURS, LINE_WIDTH_M, StepDrawer
+from policy.visualisation import COLOURS, LINE_WIDTH_M, TEXT_HEIGHT_M, StepDrawer
 
 # These values and the request/status topics match the previous AI4R policy.
 FSM_STATE_NOT_PUBLISHING_ACTIONS = 1
@@ -216,7 +216,7 @@ def visualisation_markers(layers, frame_id, stamp, lifetime_s):
         for text in layer.texts:
             marker = add(name, Marker.TEXT_VIEW_FACING, COLOURS["text"])
             marker.pose.position.x, marker.pose.position.y, marker.pose.position.z = map(float, text.position)
-            marker.scale.z = 0.08
+            marker.scale.z = TEXT_HEIGHT_M
             marker.text = text.text
     return MarkerArray(markers=markers)
 

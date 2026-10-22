@@ -293,8 +293,8 @@ def _entity(name: str, layer: visualisation.Layer, stamp: Timestamp) -> SceneEnt
         cubes=[CubePrimitive(pose=_pose(box.position, box.orientation), color=_colour(box.colour),
                              size=Vector3(x=box.size[0], y=box.size[1], z=box.size[2]))
                for box in layer.boxes],
-        texts=[TextPrimitive(pose=_pose(text.position), billboard=True, font_size=14.0, scale_invariant=True,
-                             color=_colour(visualisation.COLOURS["text"]), text=text.text)
+        texts=[TextPrimitive(pose=_pose(text.position), billboard=True, font_size=visualisation.TEXT_HEIGHT_M,
+                             scale_invariant=False, color=_colour(visualisation.COLOURS["text"]), text=text.text)
                for text in layer.texts])
 
 
