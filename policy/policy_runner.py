@@ -54,7 +54,7 @@ class MovementPolicy:
         :param avoidance_config: The settings for driving around obstacles in the lane, from the avoidance
             parameters in config/ai4r_policy.yaml. A ValueError is raised when the line that passes an obstacle would
             still count as blocked: half the car's width plus obstacle_clearance_m below corridor_half_width_m, or when
-            max_ramp_curvature_per_m is sharper than the MPC's curvature limits.
+            max_ramp_curvature_per_m or max_return_curvature_per_m is sharper than the MPC's curvature limits.
         """
         if action_policy not in ACTION_POLICIES:
             raise ValueError(f"action_policy must be one of {ACTION_POLICIES}, not {action_policy!r}")
@@ -83,9 +83,10 @@ class MovementPolicy:
                              f"of passing an obstacle")
         max_left = mpc_config.max_curvature_per_m
         max_right = mpc_config.max_right_curvature_per_m or mpc_config.max_curvature_per_m
-        if avoidance_config.enabled and avoidance_config.max_ramp_curvature_per_m > min(max_left, max_right):
-            raise ValueError(f"avoidance.max_ramp_curvature_per_m ({avoidance_config.max_ramp_curvature_per_m}) is "
-                             f"sharper than the car can turn (mpc.max_curvature_per_m {max_left}, right {max_right})")
+        for name in ("max_ramp_curvature_per_m", "max_return_curvature_per_m"):
+            if avoidance_config.enabled and getattr(avoidance_config, name) > min(max_left, max_right):
+                raise ValueError(f"avoidance.{name} ({getattr(avoidance_config, name)}) is sharper than the car can "
+                                 f"turn (mpc.max_curvature_per_m {max_left}, right {max_right})")
         self.cone_filter_config = cone_filter_config
         self.action_policy_name = action_policy
         self.lane_detector = LaneDetector(lane_detection_config)

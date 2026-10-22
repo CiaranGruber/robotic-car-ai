@@ -446,7 +446,7 @@
       # Colour of the LEFT edge's cones, string "AUTO", "BLUE" or "YELLOW".
       # "AUTO" works out each colour's side from where its edge lies relative
       # to the car, so either colour may be on the left.
-      left_colour: "BLUE"
+      left_colour: "AUTO"
       # Lane width, metres, positive double (shared default 1.0). Places the
       # centre line when only one edge is found, until both edges have been
       # seen; the width measured with both edges is used after that.
@@ -602,7 +602,8 @@
     # slope and curvature, so the line never jumps. Each candidate is checked
     # along its whole length: the car's body, turned along the line, keeps
     # obstacle_clearance_m from every obstacle and cone_clearance_m from the
-    # cones, and no move is sharper than max_ramp_curvature_per_m. The line
+    # cones, and no move is sharper than max_ramp_curvature_per_m (the move
+    # back to the usual line than max_return_curvature_per_m). The line
     # passing the most obstacles (nearest first) wins, then the one in place
     # before the stopping distance, then the cheapest by the *_weight costs.
     # The MPC follows the chosen line over its whole horizon. Without a line
@@ -638,11 +639,32 @@
       # to weave between: with 0.05, a 0.6 m gap is enough in a 0.8 m lane
       # when each obstacle ends at least about 0.17 m short of the centre line.
       pass_distance_m: 0.05
+      # How far the car's front must be past an obstacle (past its farthest
+      # lidar return plus pass_distance_m) before the line may move back to
+      # the usual line, metres, double >= 0. The move back starts at the
+      # earliest of a few points from there to where the car's rear has passed
+      # it at which the car's body, turned along the line, keeps the
+      # clearances; else once the rear has passed. The car's length (0.60) or
+      # more always waits for the rear, as before. 0.0 suits the lab's thin
+      # sheet obstacles: the planned straight stretch after a sheet drops from
+      # 0.65 m to 0.05 m when the car has room to spare beside it, because the
+      # rear swings away from the sheet as the car turns back.
+      return_after_m: 0.0
       # Sharpest curvature a move across the lane may add to the lane's own,
       # 1/m, positive double, within the car's limits (mpc.max_curvature_per_m
       # and max_right_curvature_per_m). A move of d metres between lines
       # parallel to the lane is sqrt(5.77 * d / this) long: 1.84 m for 0.175 m.
       max_ramp_curvature_per_m: 0.30
+      # Sharpest curvature the move back to the usual line, once past the
+      # obstacles, may add to the lane's own, 1/m, positive double, within the
+      # car's limits like max_ramp_curvature_per_m. The car's body is still
+      # checked to keep the clearances while it turns back. 0.40 (obstacle
+      # simulation, 2 cm sheets): the car is back within 0.02 m of its line
+      # 0.2-0.6 m sooner than with 0.30 and overshoots it by under 0.03 m on
+      # average, but its closest pass between two sheets 1 m apart on one
+      # side fell from 0.11 to 0.09 m in 30 runs; 0.45 and 0.48 came back no
+      # sooner and stopped between those sheets in 2 and 4 of 10 runs.
+      max_return_curvature_per_m: 0.40
       # Candidate line costs, doubles >= 0, each per metre along the lane:
       # offset from the usual line (per m^2), curvature added to the lane's
       # (per (1/m)^2), and change from the previous step's line (per m^2),
