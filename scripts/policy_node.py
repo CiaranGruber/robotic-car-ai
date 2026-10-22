@@ -76,8 +76,9 @@ from policy.data_logging.data_logging import (
     DEFAULT_LOG_LEVEL_NAME,
     setup_logging,
     start_data_log,
-    validate_parameters, log_memory,
+    validate_parameters, log_memory, log_timing,
 )
+from policy.data_logging.run_timing import RunTiming
 from policy.input_output import ConeColour, convert_observations, convert_actions
 from policy.lane_detection.lane_detection import LaneDetectionConfig
 from policy.memory import CarMemory
@@ -331,6 +332,10 @@ class PolicyNode(Node):
         self.heading_reference = None
         self.policy_started_at = None
         self.previous_policy_step_at = None
+        # Each run's step timings, summarised in the log when the run ends (policy/data_logging/run_timing.py)
+        self.run_timing = RunTiming()
+        self.trigger_sensor = {"cone_detection": "cone_detections", "fiducial_detection": "fiducial_detections",
+                               "lidar": "lidar_scan"}.get(self.policy_update_mode)
         self._monotonic = time.monotonic
         self._last_ros_time_ns = None
         self._last_status_at = -math.inf
@@ -782,7 +787,7 @@ class PolicyNode(Node):
         self.previous_policy_step_at = now
 
         try:
-            result = self.calculate_policy_actions(values, ages, stamps, dt, elapsed, first)
+            result = self._timed_calculation(values, ages, stamps, dt, elapsed, first)
             drive, steer, pan, debug1, debug2 = result
             # Validate ALL outputs before publishing ANY of them.
             outputs = [drive, steer] + [v for v in (pan, debug1, debug2) if v is not None]
@@ -815,6 +820,28 @@ class PolicyNode(Node):
         if debug2 is not None:
             self.debug2_publisher.publish(Float32(data=float(debug2)))
         self._publish_visualisation(now)
+
+    def _timed_calculation(self, values, ages, stamps, dt, elapsed, first):
+        # Times calculate_policy_actions for the run summary and, with data logging on, <stem>_timing.json. The
+        # step is recorded even when the calculation raises, so a slow failing step still shows.
+        started_at = self._monotonic()
+        try:
+            return self.calculate_policy_actions(values, ages, stamps, dt, elapsed, first)
+        finally:
+            step = self.run_timing.record(
+                elapsed, self._monotonic() - started_at, None if first else dt,
+                None if self.trigger_sensor is None else ages[self.trigger_sensor])
+            log_timing(step, self.logging_params)
+
+    def _log_run_summary(self, end_reason):
+        # One line per run for `dream runtime logs ai4r_policy`. Only reported: a failure never changes the state.
+        try:
+            run_s = self._monotonic() - self.policy_started_at
+            steps = self.run_timing.steps
+            stop_reason = self.movement_policy.latched_stop_reason(steps[-1].policy_elapsed_s if steps else 0.0)
+            self.get_logger().info(self.run_timing.summary(run_s, end_reason, stop_reason))
+        except Exception:
+            self._warn("run_summary", "Run summary failed:\n" + traceback.format_exc())
 
     def _publish_visualisation(self, now):
         # After the actions, so drawing never delays them, and at most visualisation.publish_rate_hz.
@@ -1242,15 +1269,21 @@ class PolicyNode(Node):
         return "unknown"
 
     def _change_state(self, state, reason):
+        run_ended = (self.fsm_state == FSM_STATE_PUBLISHING_POLICY_ACTION
+                     and state != FSM_STATE_PUBLISHING_POLICY_ACTION)
         self.fsm_state = state
         self.state_reason = reason
         _LOGGER.info("Changing state to %s", self._state_name(state))
         if state == FSM_STATE_PUBLISHING_POLICY_ACTION:
             self.logging_params = start_data_log(self.logging_params, self.parameter_values)
+            self.run_timing.start()
         if state == FSM_STATE_PUBLISHING_ZERO_ACTIONS:
             self.publish_zero_actions()
         self.get_logger().info(f"{STATE_NAMES[state]}: {reason}")
         self.publish_state()
+        # After the zero actions and the state, so the summary never delays them
+        if run_ended:
+            self._log_run_summary(reason)
 
     def supervision_callback(self):
         now, ros_now = self._times()
@@ -1284,6 +1317,8 @@ class PolicyNode(Node):
         # publication; process loss is handled by the independent vehicle node.
         if self.fsm_state != FSM_STATE_NOT_PUBLISHING_ACTIONS and self.context.ok():
             self.publish_zero_actions()
+            if self.fsm_state == FSM_STATE_PUBLISHING_POLICY_ACTION:
+                self._log_run_summary("Node shutdown")
 
 
 def main(args=None):

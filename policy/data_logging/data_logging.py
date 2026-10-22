@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from policy.memory import CarMemory
 
 if TYPE_CHECKING:
+    from policy.data_logging.run_timing import StepTiming
     from policy.input_output import CarActions, CarObservations
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,6 +36,9 @@ MEMORY_LOG_SUFFIX = "_memory.json"
 
 CONFIG_LOG_SUFFIX = "_config.json"
 """Filename suffix of the policy settings saved with a data-log pair, after the stem."""
+
+TIMING_LOG_SUFFIX = "_timing.json"
+"""Filename suffix of the policy step timing data log (StepTiming in run_timing.py), after the stem."""
 
 GENERAL_LOG_FILENAME_FORMAT = "%Y-%m-%d_%H-%M-%S_logging.log"
 """strftime pattern for the general Python log filename."""
@@ -65,12 +69,12 @@ _LOG_LEVELS = {
 class LoggingParameters:
     """Startup settings for policy data logging and standard Python logging.
 
-    Data logging (CarObservations, CarMemory and CarActions) is separate from standard Python
-    logging.
+    Data logging (CarObservations, CarMemory, CarActions and StepTiming) is separate from standard
+    Python logging.
     logging_folder is required when is_data_logging or log_to_file is true.
     """
     is_data_logging: bool
-    """When true, record CarObservations, CarMemory and CarActions each policy step."""
+    """When true, record CarObservations, CarMemory, CarActions and StepTiming each policy step."""
     log_folder: Path
     """Directory for data-log and/or general Python log files when either is enabled."""
     log_level: LogLevel
@@ -111,6 +115,13 @@ class LoggingParameters:
         if not self.started:
             raise ValueError("Attempted to get the settings log path but logging has not started")
         return self.log_folder / f"{self.stem}{CONFIG_LOG_SUFFIX}"
+
+    @property
+    def timing_log_path(self) -> Path:
+        """Step timing JSON filename for the current active run, otherwise None."""
+        if not self.started:
+            raise ValueError("Attempted to get the timing log path but logging has not started")
+        return self.log_folder / f"{self.stem}{TIMING_LOG_SUFFIX}"
 
 
 def _is_usable_log_folder(logging_folder: str) -> bool:
@@ -296,9 +307,9 @@ def setup_logging(logging_params: LoggingParameters):
 
 def start_data_log(logging_params: LoggingParameters,
                    settings: dict[str, Any] | None = None) -> LoggingParameters:
-    """Open a new observations, memory and actions log named for the current local time.
+    """Open a new observations, memory, actions and step timing log named for the current local time.
 
-    The three files share one stem, the time to the second, and an existing set is never replaced
+    The four files share one stem, the time to the second, and an existing set is never replaced
     (see _new_data_log_stem). When data logging is disabled, the parameters are returned
     unchanged and nothing is written.
 
@@ -319,6 +330,7 @@ def start_data_log(logging_params: LoggingParameters,
     _init_json_array_file(params.observations_log_path)
     _init_json_array_file(params.memory_log_path)
     _init_json_array_file(params.actions_log_path)
+    _init_json_array_file(params.timing_log_path)
     return params
 
 
@@ -353,3 +365,14 @@ def log_output(actions: CarActions, logging_params: LoggingParameters):
     if not logging_params.started:
         return
     _write_log_record(logging_params.actions_log_path, actions.serialise(), "actions")
+
+
+def log_timing(step: StepTiming, logging_params: LoggingParameters):
+    """Record how long one policy step's calculation took.
+
+    :param step: The step's timing, from RunTiming.record.
+    :param logging_params: The parameters for logging.
+    """
+    if not logging_params.started:
+        return
+    _write_log_record(logging_params.timing_log_path, step.serialise(), "timing")

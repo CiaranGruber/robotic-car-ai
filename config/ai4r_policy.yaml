@@ -161,7 +161,10 @@
       # 2026-10-12_14-03-27_observations.json. A pair started in the same
       # second gets _2, _3, ..., so no earlier run is replaced. Beside each pair,
       # <same stem>_config.json saves every parameter value the node was
-      # running with, so a recording keeps its settings after the YAML changes.
+      # running with, so a recording keeps its settings after the YAML changes,
+      # and <same stem>_timing.json how long each step's calculation took.
+      # Whatever this setting, the end of each run logs one "Run summary" line
+      # with its calculation times and the time between steps.
       # Lane-following test run: true, to record each run for analysis.
       is_data_logging: true
       # Directory for drive and general log files. Empty or unusable paths fall
