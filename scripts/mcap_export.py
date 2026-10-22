@@ -225,7 +225,7 @@ class McapExporter:
                                                         type=PackedElementFieldNumericType.Float32)
                                      for index, axis in enumerate("xyz")],
             data=b"".join(struct.pack("<fff", point.x, point.y, point.z) for point in points)), log_time=time_ns)
-        self._state.log(_state(policy, step, replayed), log_time=time_ns)
+        self._state.log(step_state(policy, step, replayed), log_time=time_ns)
 
 
 def export(steps: list[RecordedStep], policy: MovementPolicy, output: Path) -> int:
@@ -298,9 +298,13 @@ def _entity(name: str, layer: visualisation.Layer, stamp: Timestamp) -> SceneEnt
                for text in layer.texts])
 
 
-def _state(policy: MovementPolicy, step: RecordedStep, replayed: CarActions) -> dict[str, Any]:
-    """
-    :return: The step's numbers for the Plot panel. Values that are unknown or infinite are None.
+def step_state(policy: MovementPolicy, step: RecordedStep, replayed: CarActions) -> dict[str, Any]:
+    """The step's numbers, for the Plot panel and for scripts/run_report.py.
+
+    :param policy: The movement policy just after it ran the step.
+    :param step: The recorded step.
+    :param replayed: The actions the policy chose in the replay.
+    :return: The numbers, as the /policy/state message holds them. Values that are unknown or infinite are None.
     """
     lanes, mpc, observations = policy.lanes, policy.action_policy, step.observations
     speed = observations.car.wheel_speed
