@@ -1,9 +1,280 @@
 # AI4R policy acceptance
 
-Current local candidate: experimental fixed-camera corridor mode for the owner's
-test on `10.43.254.33`. Its installed ROS gate is blocked locally; physical
-vehicle acceptance remains unperformed. Earlier software-gate and release
-records below describe their historical source snapshots.
+Current local work uses the owner's corrected **connected blue outer boundary**
+and prefers online geometric feedback with no trained weights. The earlier
+open-apron result is superseded. The selected ROS mode remains the earlier
+corridor candidate; the connected-turn experiment is not selected or uploaded.
+The installed ROS gate is blocked locally; physical vehicle acceptance remains
+unperformed. Earlier records below describe their historical snapshots.
+
+## Connected blue boundary: preferred online feedback, 2026-10-21
+
+The owner prefers a controller based on current observations because real cone
+placement will differ. `ConnectedTurnPolicy(config)` already defaults to
+`network=None`; the preferred evaluation now directly uses that branch and
+does not load checkpoints or train a model. Cone rows and the connected cap are
+estimated from live detections transported by wheel/gyro odometry. Analytic
+lookahead steering is recomputed from the current estimated pose each tick.
+Tests forbid `numpy.load` during five end-to-end navigation/occlusion cases.
+
+This is **online feedback, not online learning**. The circular-cap geometry
+family, planned radius and inward margin remain assumptions. The fitted frame
+and turn freeze after commitment, and bounded memory carries that turn through
+brief occlusion. Only sufficiently supported fresh return geometry may replace
+the return path. It does not continuously reshape the committed turn from
+partial observations. Camera pan remains zero.
+
+`tests/policy/evaluate_connected_realtime.py` uses a single fixed controller
+configuration across **12 new varied layouts**: .9–1.1 m row gaps, 2.6–3.8 m
+divider lengths, .9/1.2 m straight extensions, .4/.55 m cone spacing, .025/.04 m
+placement jitter, changed start poses, temporary camera loss and physical
+missing cones. Placement seeds are 14000..14011 and detector seeds
+14200..14211; course geometry is not supplied to the policy. **10/12 complete**;
+two .9 m-gap cases stop at the lidar/braking-footprint guard. All have **zero
+cone contacts and zero full-body floor excursions**. Guarded stops are failures
+to complete, not navigation passes.
+
+Four out-of-model probes change the physical blue cap and its continuous
+scoring boundary together, scaling cap depth to .8/.9/1.1/1.2 while preserving
+row spacing. **3/4 complete**; the .8-depth cap stops without a supported path.
+These results show limited tolerance to shape variation, not arbitrary-layout
+generalisation. All four negative cases (prolonged empty camera stream, stale
+gyro, stale wheel speed, unsupported terminal geometry) latch stops without
+contact or excursion. Both cone-memory-disabled comparisons stop without
+completing. The return goal gate still measures navigation while moving, not
+final stopping.
+
+All completion results above use **hypothetical +2.2/-0.92 /m steering** and a
+.5 m planned radius, .30 m/s approach and .15 m/s through turns. The earlier
++1/-0.92 /m assumption remains infeasible and stops before driving. The fixed
+10 Hz simulation uses the same no-slip, odometry, sensor and braking assumptions
+as the historical comparison below. Tick timing is a local diagnostic and does
+not establish a hardware deadline. Physical steering capability and stopping
+remain unverified; no car configuration or upload was changed.
+
+Reproduce the preferred checkpoint-free experiment:
+
+```bash
+OPENBLAS_NUM_THREADS=1 MPLCONFIGDIR=/tmp/ai4r-mpl .venv/bin/python -m \
+  tests.policy.evaluate_connected_realtime --hypothetical-tight-steering \
+  --output build/connected-realtime
+```
+
+`build/connected-realtime/` contains the source-hashed `report.json`, varied-case
+trajectory CSVs and `evaluation.png`. It contains no weight checkpoint. These
+ignored artifacts and the experiment are excluded from car upload. A read-only
+Astra review found no blocking issue in the runner, checkpoint-free claim or
+ellipse scoring; its figure-label correction is applied. Rules followed:
+`0.00_root_rule.md`, `0.01_coding_standards.md`, `2.05_car_memory.md` and
+`3.00_codebase_structure.md`.
+
+Software verification for this checkpoint-free evaluation: **700 passed,
+3 skipped, 1 existing xfailed** in `tests/policy`; diff checks pass and executed
+source hashes match the report. The required pinned-interface fast command was
+attempted and stops because `.verification/dependencies/dream_interfaces` is
+absent. The installed ROS gate remains unverified on this Mac.
+
+## Connected blue boundary: historical trained comparison, 2026-10-21
+
+The owner confirmed the curved connection and clarified that the two straight
+blue rows continue **1 m beyond the last yellow cone before the curve begins**.
+The nominal course has 1 m between adjacent rows, a 2 m total outer width and
+a semicircular blue cap of radius 1 m. Its furthest blue point is therefore
+2 m beyond the yellow tip. The car must remain inside this boundary. There is
+no open apron. The scorer checks the whole body against a continuous closed
+outer floor and middle divider, plus contact with every physical jittered cone.
+Missing camera detections do not remove physical obstacles. Physical removal
+profiles remove those cones from both lidar and contact scoring.
+
+**The earlier +1.0/-0.92 /m steering assumption is infeasible here.** A necessary
+strip-width bound for a forward-only rectangular car is
+`hypot(R + width/2, rear) + hypot(R + width/2, front)`, where `R=1/max_curvature`.
+The derivation allows countersteering and nonmonotone heading. The .30/.30/.25 m
+guard body needs at least **2.329 m** at 1/m even without extra clearance or a
+divider. The default closed-course policy therefore latches a stop before
+driving. Code cannot establish greater physical steering capability. A nominal
+offline sensitivity sweep passes at hypothetical left limits 1.8, 2.0 and
+2.2 /m, with respective planned radii .556, .5 and .5 m; tested lower limits
+stop. These are single-layout sensitivity results, not calibration or a general
+minimum-steering guarantee.
+
+The separate conditional model trains at **hypothetical +2.2/-0.92 /m**, with
+a **.5 m planned left radius**, .30 m/s approach and **.15 m/s through turns**.
+`policy/action_policy/connected_uturn.py` reuses the existing straight-row
+observer, sensor admission and motion-compensated cone memory. A longer observed
+divider can refine a noisy startup angle by at most .005 rad per step before
+the turn is committed. Cached endpoint/start positions remain in odometry
+coordinates and are reprojected without refreshing their observation times.
+Unsupported legacy coordinates disable refinement. Curved blue detections are
+excluded from the straight-row fit. At least three distinct, recent, spatially
+separated cap observations are required; no simulator pose, row IDs or course
+endpoints enter the policy or network. The turn uses the straight extension,
+placing its centre .35 m inward from the sensed cap centre, with observed
+clearance past the divider tip. Both fitted frame and row offsets freeze when
+the turn route is committed.
+
+Route time and distance use the same original acquisition pose and expire at
+36 s/12 m. A **fresh-empty filtered cone stream lasting 3 s** stops independently
+of that route limit. Any surviving filtered detection resets the empty-stream
+timer; this is not a test that both full boundaries remain usable. Surviving
+detections cannot refresh the retained turn anchor. Fresh two-boundary return
+paths cannot discard an unsupported terminal tail and give it a new anchor.
+Motion/sensor failures and path loss after driving latch stops until explicit
+new-run reset. Camera pan stays fixed at zero.
+
+The guard retains the .30/.30/.25 m footprint, .075 m padding, measured initial
+curvature, acquisition-time lidar transport, .15 s spatial steering settling and
+reaction-then-centred-steering braking sweeps. Its speed bound includes measured
+speed, the next commanded speed and maxima of queued commands covering .35 s,
+stored in bounded .05 s buckets. An older .30 m/s command cannot be forgotten
+while it is still inside the .2 s actuator delay. The plant still assumes no
+slip, ideal measured odometry, an 86° camera with .2 s latency/.03 m detection
+noise, ideal three-point cone lidar within 4 m and requested-speed lag. Active
+braking assumes .2 s dead time plus .8 s linear deceleration. These are offline
+assumptions, not physical frame, actuation or stopping evidence.
+
+The 17→32→32→1 tanh steering network is trained from scratch with behaviour
+cloning and one DAgger round. The final dataset contains **9,802 samples**;
+training RMSE is **.00160 /m**. Both optimisations reached their 650-iteration
+cap rather than declaring convergence; closed-loop tests determine acceptance.
+Planning, cap fitting, cone memory and stop checks remain deterministic. Teacher
+and learned steering both pass **12/12** training rollouts; learned validation
+passes **4/4**. Separate physical placement seeds **10000..10007** and detector
+seeds **10200..10207**, with layout combinations absent from training, pass
+**8/8** frozen teacher and student navigation tests. Contacts and full-body floor
+excursions are **zero**. Cases include 25% random misses, temporary divider/outer
+loss, .4 s complete loss, physical interior removals, a missing divider-tip cone
+and a missing cap cone. The longest final raw-camera empty interval is .7 s;
+the oldest usable evidence while generating previews is .9 s.
+
+All four negative tests—prolonged camera loss, stale gyro, stale wheel speed and
+unobserved terminal geometry—latch stops without contact or excursion. Both
+cone-memory-disabled comparisons stop without completing. Navigation completion
+is the existing return goal gate while moving; it does not establish final
+stopping. Teacher/student equality of outcomes does not establish an advantage
+of learned steering. Earlier failed closed-course reports remain in
+`build/connected-uturn-development/` (6/8) and
+`build/connected-uturn-slow-development/` (7/8); those test sets became
+development evidence. The 8000-series run in `build/connected-uturn-verified/`
+predates the final coordinate/delay hardening and is not final source evidence.
+
+Final artifacts live in `build/connected-uturn-final-reviewed/`: `report.json`,
+`hypothetical-steering.npz`, `demonstrations.npz`, `evaluation.png` and per-case
+trajectories. Reports freeze executed-source/configuration and checkpoint hashes;
+the closed-cap weights reject incompatible geometry, speed and memory contracts.
+The files are ignored by Git and excluded from car upload. Reproduce locally:
+
+```bash
+OPENBLAS_NUM_THREADS=1 MPLCONFIGDIR=/tmp/ai4r-mpl .venv/bin/python -m \
+  tests.policy.train_connected_uturn --train-hypothesis \
+  --output build/connected-uturn-final-reviewed
+```
+
+Read-only Astra review identified and helped repair acquisition-distance,
+coordinate-frame, queued-speed and terminal-tail issues. Physical steering
+measurement and vehicle testing are **not run**. No car configuration, SSH,
+upload, service, enable, commit, push, merge or release was performed.
+
+Software verification: **696 passed, 3 skipped, 1 existing xfailed** in the policy
+suite, including **63** open/connected learner checks; **143 passed** in the
+actual locally filtered upload copy and **4 release-contract tests passed**.
+Compilation and diff checks pass. The required pinned-interface fast gate was
+attempted for the final source and cannot start: the configured
+`.verification/dependencies/dream_interfaces` checkout is absent, and this Mac
+lacks ROS Jazzy. No physical interfaces were used to work around that limit.
+
+Rules followed: `0.00_root_rule.md`, `0.01_coding_standards.md`,
+`2.03_adding_and_using_test_data.md`, `2.05_car_memory.md`, and
+`3.00_codebase_structure.md`.
+
+## Superseded open-apron model: 8/8 frozen holdouts, 2026-10-21
+
+The earlier interpretation used three finite, straight, parallel cone rows and
+omitted the curved blue connection. The owner subsequently corrected that
+interpretation. This run's 8/8 result applies only to its open apron; it does
+not validate the connected course above. The simulated car enters the lower
+gap, rounds the divider's end and returns in the upper gap.
+
+`policy/action_policy/three_row_uturn.py` provides an offline NumPy steering
+student and deterministic observer/planner. Training from scratch uses a
+17→32→32→1 tanh network, behaviour cloning and one DAgger round: **11,320**
+sensor-derived feature/action samples, final training RMSE **0.00219 /m**. The
+teacher uses the same sensed/remembered preview path and analytic steering;
+learning approximates steering, while cone memory and turn formation remain
+explicit code. Teacher and student both pass the same final 8 cases; this
+experiment does not demonstrate an advantage over analytic steering.
+
+Motion compensation uses valid, fresh wheel speed and gyro yaw, acquisition-time
+poses, distinct cone tracks and bounded pose history. A sparse startup view with
+two divider cones needs a separate parallel outer boundary, plausible gap,
+consistent spatial support and a second of stationary advancing observations.
+An initially truncated plan can be replaced before turning only with newly
+revealed extent and newer endpoint observations from all three rows. A new
+return path needs fresh separated support from both return boundaries. Lost
+paths after any admitted drive command latch a brake/zero command until an
+explicit new-run reset. Predictions and single-row observations cannot renew
+the retained turn anchor. Prolonged empty frames expire it after 36 s or 12 m.
+These extended fresh-empty limits belong only to this offline experiment.
+
+Training placement seeds 30..41, validation 500..503 and final frozen holdout
+4000..4007 use separate episodes and layout combinations. Normalisation, fitting
+and DAgger use training episodes only. Validation passes **4/4**; frozen student
+and teacher navigation each pass **8/8**, with **zero physical cone contacts and
+zero full-body floor excursion**. Tests cover nominal detections, 25% random
+misses, temporary divider/outer-row loss, .4 s all-cone loss, physical interior
+cone removal and a missing divider-tip cone. Both no-memory ablations fail to
+complete and stop. Four negative cases—prolonged camera loss, stale gyro, stale
+wheel speed and unobserved terminal geometry—latch stops without contacts or
+excursions. Navigation ends at the return goal gate while moving; final stopping
+is not part of that completion score.
+
+Failures remain recorded: one training/DAgger episode stops before sufficient
+turn evidence exists (11/12 completions in each collection round). An earlier
+frozen set with placement 3000..3007 passed 7/8; its physically sparse startup
+stall exposed the admission/planning defects repaired above. That set became
+development evidence and remains in `build/three-row-uturn-frozen/report.json`.
+
+The 1 m gap between adjacent lane centres would need a .5 m radius for a simple
+semicircle. The assumed +1.0/-0.92 /m steering instead uses a forward R-L-R path
+with planning radius 1.18 m. It requires the explicitly declared **4 m deep
+clear apron beyond the outer-row ends**, with .9 m extra lateral space on each
+side. The largest final raw-camera empty interval is 19.4 s; the oldest usable
+cone evidence during preview generation reaches 20.3 s. This depends on ideal
+no-slip odometry through a long blind interval. Apron space and full normalized
+steering response are unverified on the vehicle; admitted physical steering
+calibration has not changed. Yellow divider/blue outers are assumed. The camera
+stays fixed at zero pan, 86° FOV, .2 s latency and .03 m detection noise. Lidar
+has ideal three-point cone surfaces within 4 m, without physical occlusion or
+noise. Speed follows a lagged requested-speed plant, not an ESC model. Active
+braking assumes .2 s dead time plus .8 s linear deceleration. The guard reuses
+the runtime swept footprint with measured initial curvature, .15 s spatial
+steering settling, scan-age motion compensation and reaction-to-centred-braking
+interpolation; those assumptions still require physical measurement.
+
+Final artifacts are `build/three-row-uturn-verified/steering.npz`, `report.json`,
+`demonstrations.npz`, `evaluation.png` and per-holdout trajectories. The report
+freezes model, configuration and executed-source hashes; separate evaluation
+rejects mismatches. Artifacts are ignored by Git. Reproduce from the repo root:
+
+```bash
+OPENBLAS_NUM_THREADS=1 MPLCONFIGDIR=/tmp/ai4r-mpl .venv/bin/python -m \
+  tests.policy.train_three_row_uturn --workers 2 --output build/three-row-uturn-verified
+```
+
+Verification: **672 passed, 3 skipped, 1 existing xfailed** in the policy suite,
+including **39** three-row checks; **143 passed** in an actual locally filtered
+upload copy; **4 release-contract tests passed**. The filtered copy excludes the
+new learner, trainer and weights. The required pinned-interface fast gate was
+attempted and cannot start because `.verification/dependencies/dream_interfaces`
+is absent; this Mac also lacks ROS Jazzy. Read-only Astra review found the
+stop/resume, provenance and sparse-view issues repaired above, with no remaining
+blocking finding. No ROS selector, car configuration, pan/steering calibration,
+SSH session, upload, service or vehicle enable changed. Physical testing is
+**not run**. No commit, push, merge or release was performed.
+
+Rules followed: `0.00_root_rule.md`, `0.01_coding_standards.md`,
+`2.03_adding_and_using_test_data.md`, `2.05_car_memory.md`, and
+`3.00_codebase_structure.md`.
 
 ## Deployable corridor candidate: 30/30 runtime simulations, 2026-10-20
 

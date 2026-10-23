@@ -10,6 +10,8 @@
 - .test-artifacts/
 # The runtime corridor engine and geometry are uploaded; learned specialist remains offline.
 - policy/action_policy/uturn_specialist.py
+- policy/action_policy/three_row_uturn.py
+- policy/action_policy/connected_uturn.py
 - .env
 - .idea/
 - .venv/

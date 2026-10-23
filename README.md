@@ -101,6 +101,25 @@ The current candidate passes 30 synthetic runtime U-turns. Steering/braking
 response remains provisional; the installed ROS gate is blocked locally by the
 missing pinned interface checkout, and physical testing remains unperformed.
 
+For the corrected connected-blue U-turn, the preferred **local experiment uses
+online geometric feedback without trained weights**. Current cone observations,
+wheel/gyro motion compensation and bounded cone memory form the route; steering
+is recomputed every step. The committed turn is retained through brief cone
+loss, so this is feedback control rather than continuous replanning or online
+learning. Run the varied-layout evaluation with:
+
+```bash
+OPENBLAS_NUM_THREADS=1 MPLCONFIGDIR=/tmp/ai4r-mpl .venv/bin/python -m \
+  tests.policy.evaluate_connected_realtime --hypothetical-tight-steering \
+  --output build/connected-realtime
+```
+
+The flag assumes +2.2/-0.92 /m steering in simulation; it does not calibrate the
+car. Omitting it evaluates the earlier +1/-0.92 /m assumption, which cannot fit
+the nominal closed course. The experiment is excluded from upload and does not
+change the selected ROS mode. Results and limits are in
+[acceptance](docs/acceptance.md#connected-blue-boundary-preferred-online-feedback-2026-10-21).
+
 For the confirmed target `10.43.254.33`, the current upload helper's `CAR_NUM=20`
 resolves to that address. On the development machine, inspect
 `bash scripts/car_management.sh dry_copy`, then run

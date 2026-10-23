@@ -97,6 +97,48 @@ class CorridorExperimentMemory(Serialisable):
 
 
 @dataclass(frozen=True)
+class ThreeRowTurnMemory(Serialisable):
+    """Observed row geometry and a bounded odometry-frame manoeuvre for the offline three-row learner."""
+    poses: tuple[MotionPose, ...] = ()
+    tracks: tuple[ConeTrack, ...] = ()
+    last_stamp_ns: int | None = None
+    last_acquisition_s: float | None = None
+    row_heading: float | None = None
+    row_offsets: tuple[float, ...] = ()
+    row_ends: tuple[float, ...] = ()
+    row_end_seen_s: tuple[float, ...] = ()
+    observed_start: float | None = None
+    observed_start_xy: tuple[float, float] | None = None
+    observed_start_seen_s: float | None = None
+    row_end_xy: tuple[tuple[float, float], ...] = ()
+    startup_heading: float | None = None
+    startup_since_s: float | None = None
+    startup_seen_s: float | None = None
+    startup_support: tuple[tuple[float, float], ...] = ()
+    startup_samples: int = 0
+    route: tuple[tuple[float, float], ...] = ()
+    planned_row_ends: tuple[float, ...] = ()
+    turn_start_u: float | None = None
+    cap_u: float | None = None
+    cap_v: float | None = None
+    cap_radius_m: float | None = None
+    cap_seen_s: float | None = None
+    route_index: int = 0
+    route_seen_s: float | None = None
+    route_seen_distance_m: float | None = None
+    previous_curvature: float = 0.0
+    last_nonempty_s: float | None = None
+    has_driven: bool = False
+    speed_commands: tuple[tuple[float, float], ...] = ()
+    stopped: bool = False
+    stop_reason: str = ""
+
+    @classmethod
+    def deserialise(cls, data: Any) -> Self:
+        return super().deserialise({**cls().serialise(), **data})
+
+
+@dataclass(frozen=True)
 class Memory(Serialisable):
     """Data kept from one policy step to a later one.
 
@@ -109,12 +151,15 @@ class Memory(Serialisable):
     """Optional cone memory and lane continuity evidence; empty when disabled or motion is unavailable."""
     corridor_experiment: CorridorExperimentMemory = CorridorExperimentMemory()
     """State for the explicitly selected corridor follower; unused by MPC/open-space modes."""
+    three_row_turn: ThreeRowTurnMemory = ThreeRowTurnMemory()
+    """Offline learned three-row experiment; never selected by the ROS runner."""
 
     @classmethod
     def deserialise(cls, data: Any) -> Self:
         """Also accepts recordings made before lane tracking was added."""
         return super().deserialise({"lane_tracking": LaneTrackingMemory().serialise(),
-                                    "corridor_experiment": CorridorExperimentMemory().serialise(), **data})
+                                    "corridor_experiment": CorridorExperimentMemory().serialise(),
+                                    "three_row_turn": ThreeRowTurnMemory().serialise(), **data})
 
 
 class CarMemory:
@@ -148,6 +193,10 @@ class CarMemory:
     def update_corridor_experiment(self, state: CorridorExperimentMemory):
         """Updates the corridor follower's serialisable state."""
         self.__internal = replace(self.__internal, corridor_experiment=state)
+
+    def update_three_row_turn(self, state: ThreeRowTurnMemory):
+        """Replace the bounded offline learner's observation and route state."""
+        self.__internal = replace(self.__internal, three_row_turn=state)
 
     @classmethod
     def deserialise(cls, data: Any) -> Self:
