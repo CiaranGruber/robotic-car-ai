@@ -19,8 +19,11 @@ Rather than plan around one obstacle and then the next, it plans one line past a
    steering changes smoothly.
 3. Each candidate is checked along its whole length, every SAMPLE_STEP_M. The car's body is a rectangle turned along
    the line, and only the part of it beside an obstacle must keep clear of it, so the rear may still be beside one
-   obstacle while the front turns past the next. Every move must be no sharper than max_ramp_curvature_per_m (less on
-   a curve, so the car's limits hold with the lane's own curvature).
+   obstacle while the front turns past the next. Every move must be no sharper than max_ramp_curvature_per_m, and the
+   move back to the usual line no sharper than max_return_curvature_per_m (less on a curve, so the car's limits hold
+   with the lane's own curvature). After the last obstacle passed, the line moves back to the usual line at the
+   earliest of a few points from return_after_m past it at which the body keeps the clearances, else once the car's
+   rear has passed it.
 4. The line that passes the most obstacles, nearest first, wins; then the one that is beside them before the stopping
    distance; then the cheapest. The cost adds up along the line its offset from the usual line, its curvature and its
    change from the previous step's line, and takes off the room it leaves beside the obstacles (the *_weight
@@ -30,13 +33,15 @@ the number of runs of obstacles rather than with the number of ways to combine t
 
 The line is planned again at every step. The lidar only sees the obstacles ahead of the car's front, so the obstacles
 reaching the car's front are remembered in lane coordinates and moved back by the distance driven (from the wheel
-speed) until the car has passed them. Obstacles are assumed not to move.
+speed) until the car has passed them. They are kept in CarMemory (Memory.lane_obstacles), so the memory log shows them.
+Obstacles are assumed not to move.
 
 An obstacle that no candidate can pass does not change the line beyond the obstacles before it. MpcPolicy still stops
 for an obstacle in the car's way (in_way), so stopping stays the fallback when the car cannot drive around it.
 
-It keeps state between policy steps, and its loops are bounded by MAX_PLANNED_RUNS, MAX_HELD, MAX_REMEMBERED and
-MAX_HORIZON_M, so it is safe to run inside the real-time policy step.
+It keeps state between policy steps (the line on the planner, the remembered obstacles in CarMemory), and its loops
+are bounded by MAX_PLANNED_RUNS, MAX_HELD, MAX_REMEMBERED and MAX_HORIZON_M, so it is safe to run inside the real-time
+policy step.
 """
 from __future__ import annotations
 
@@ -49,6 +54,7 @@ import numpy as np
 from policy.action_policy.lane_path import LanePath, LineState, PathSegment, move_length_m
 from policy.input_output import CarObservations
 from policy.lane_detection.lanes import LaneDetection
+from policy.memory import CarMemory
 from policy.obstacle_detection.obstacles import LaneObstacle
 
 _LOGGER = logging.getLogger(__name__)
@@ -71,6 +77,9 @@ MAX_PLANNED_RUNS = 3
 """Most runs of obstacles, nearest first, planned past at one step; farther ones are planned once nearer."""
 MAX_HELD = 6
 """Most partial lines kept after each run to plan the next, the cheapest first."""
+RETURN_TRIES = 4
+"""Points tried, evenly spread from return_after_m past a run to where the car's rear has passed it, for the move back
+to the usual line."""
 TARGET_SPREAD = 5
 """Number of evenly spread offsets tried across each free gap, from one side's clearance to the other's."""
 MOVE_STRETCHES = (1.0, 1.25, 1.5, 2.0, 3.0)
@@ -116,10 +125,23 @@ class AvoidanceConfig:
     the car has moved over before it would stop for the obstacle; only when that cannot be done does it move over
     later. Two obstacles on opposite sides need more than twice this between them for the car to weave between them.
     """
+    return_after_m: float = 0.60
+    """Distance in metres the car's front must be past an obstacle (its farthest return plus pass_distance_m) before
+    the line may move back to the usual line. Must be finite and at least 0.
+
+    The move back starts at the earliest of RETURN_TRIES points from here to where the car's rear has passed the
+    obstacle at which the car's body, turned along the line, keeps the clearances from it; else once the rear has
+    passed. The car's length or more (the default is the default car's) always waits for the rear.
+    """
     max_ramp_curvature_per_m: float = 0.30
     """Sharpest curvature in 1/m a move across the lane may add to the lane's own. Must be positive and within the
     MPC's curvature limits (MovementPolicy checks it); on a curve it is also kept within them with the lane's curvature
     added. A move of d metres between lines parallel to the lane is sqrt(10 / sqrt(3) * d / this) metres long."""
+    max_return_curvature_per_m: float = 0.30
+    """Sharpest curvature in 1/m the move back to the usual line, once past the obstacles, may add to the lane's own.
+    Must be positive and within the MPC's curvature limits (MovementPolicy checks it), and is kept within them on a
+    curve like max_ramp_curvature_per_m. Higher brings the car back sooner; its body is still checked to keep the
+    clearances while it turns back."""
     deviation_weight: float = 1.0
     """Cost per m^2 of offset from the usual line, per metre along the lane. Must be finite and at least 0. Higher
     keeps the car nearer the usual line, and passes an obstacle on the side that needs the smaller move."""
@@ -139,12 +161,12 @@ class AvoidanceConfig:
     def __post_init__(self):
         if not isinstance(self.enabled, bool):
             raise ValueError(f"avoidance.enabled must be true or false, not {self.enabled}")
-        for name in ("car_width_m", "max_ramp_curvature_per_m"):
+        for name in ("car_width_m", "max_ramp_curvature_per_m", "max_return_curvature_per_m"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value > 0.0):
                 raise ValueError(f"avoidance.{name} must be positive and finite, not {value}")
         for name in ("car_rear_m", "cone_radius_m", "cone_clearance_m", "obstacle_clearance_m", "pass_distance_m",
-                     "deviation_weight", "smoothness_weight", "clearance_weight", "change_weight"):
+                     "return_after_m", "deviation_weight", "smoothness_weight", "clearance_weight", "change_weight"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value >= 0.0):
                 raise ValueError(f"avoidance.{name} must be finite and at least 0, not {value}")
@@ -206,20 +228,27 @@ class LaneAvoidance:
         """The same corners, metres left of base_link."""
         self._reach_m = math.hypot(max(car_front_m, config.car_rear_m), half_width_m)
         """Farthest a corner can be along the lane from base_link, in metres."""
+        self.memory = CarMemory()
+        """The car memory holding the remembered obstacles (Memory.lane_obstacles): the one passed to the latest step,
+        or the planner's own for callers that pass none, such as the tests."""
         self.reset()
+
+    @property
+    def remembered(self) -> list[LaneObstacle]:
+        """Obstacles that came within REMEMBER_WITHIN_M of the car's front, with their distances from the car's front
+        reduced by the distance driven since (negative once beside or behind it). They are kept in the car memory."""
+        return list(self.memory.data.lane_obstacles)
 
     def reset(self):
         """Forgets the previous run. This is done on the first step after entering the publishing-policy state."""
-        self.remembered: list[LaneObstacle] = []
-        """Obstacles that came within REMEMBER_WITHIN_M of the car's front, with their distances from the car's front
-        reduced by the distance driven since (negative once beside or behind it)."""
+        self.memory.remember_lane_obstacles(())
         self.path: LanePath | None = None
         """The line planned at the latest step with a lane, or None before the first."""
         self.driven_since_path_m = 0.0
         """Distance in metres driven since path was planned."""
 
     def step(self, observations: CarObservations, lane: LaneDetection | None, obstacles: list[LaneObstacle] | None,
-             usual_offset_m: float | None) -> LanePath | None:
+             usual_offset_m: float | None, memory: CarMemory | None = None) -> LanePath | None:
         """Plans the line for this policy step.
 
         :param observations: The observations at this step, for the wheel speed and the time since the last step.
@@ -228,35 +257,41 @@ class LaneAvoidance:
             or fresh lidar. Without fresh lidar, the previous step's line is kept, moved back by the distance driven.
         :param usual_offset_m: The line the MPC follows away from obstacles (MpcPolicy.usual_offset_m), in metres left
             of the lane centre, or None without a lane.
+        :param memory: The car memory to keep the remembered obstacles in, the same one for every step (MovementPolicy
+            passes the node's). None keeps using the latest one given, or the planner's own.
         :return: The planned line, or None when avoidance is off or there is no lane to plan in.
         """
+        if memory is not None:
+            self.memory = memory
         if observations.policy.is_first_policy_step:
             self.reset()
         if not self.config.enabled:
             return None
         if not observations.policy.is_first_policy_step and observations.car.wheel_speed is not None:
             driven_m = observations.car.wheel_speed * observations.policy.dt
-            self.remembered = [_moved_back(obstacle, driven_m) for obstacle in self.remembered]
+            self.memory.remember_lane_obstacles(_moved_back(obstacle, driven_m) for obstacle in self.remembered)
             self.driven_since_path_m += driven_m
         if lane is None or not lane.has_lane or usual_offset_m is None:
             return None
         fresh = obstacles or []
         # Forget an obstacle once the car's rear is pass_distance_m past it
-        self.remembered = [obstacle for obstacle in self.remembered if not self._behind(obstacle)]
+        remembered = [obstacle for obstacle in self.remembered if not self._behind(obstacle)]
         for obstacle in fresh:
             if obstacle.distance_m <= REMEMBER_WITHIN_M:
-                self.remembered = _remember(self.remembered, obstacle)
+                remembered = _remember(remembered, obstacle)
+        self.memory.remember_lane_obstacles(remembered)
         # Fresh lidar covers the lane ahead of the car's front, and the remembered obstacles the rest, as well as an
         # obstacle close ahead that the lidar misses at a step. The pieces of one object (its faces, or one seen both
         # ways) are joined into one, which also keeps the number of checks down.
         known = []
-        for obstacle in fresh + self.remembered:
+        for obstacle in fresh + remembered:
             if not self._behind(obstacle):
                 known = _joined(known, obstacle, JOIN_ALONG_M, JOIN_ACROSS_M)
         # A move curves both ways about the lane's own curvature, so on a curve it has less room towards the turn
         lane_curvature = lane.path_curvature_per_m
         limit = self.max_left_curvature_per_m if lane_curvature >= 0.0 else self.max_right_curvature_per_m
         curvature_room = min(self.config.max_ramp_curvature_per_m, limit - abs(lane_curvature))
+        return_room = min(self.config.max_return_curvature_per_m, limit - abs(lane_curvature))
         surface_m = lane.lane_width_m / 2.0 - self.config.cone_radius_m
         previous = None if self.path is None else self.path.moved_back(self.driven_since_path_m, usual_offset_m)
         if obstacles is None and previous is not None:
@@ -264,7 +299,7 @@ class LaneAvoidance:
             path = previous
         else:
             path = self._plan(sorted(known, key=lambda obstacle: obstacle.distance_m), surface_m, usual_offset_m,
-                              curvature_room, previous)
+                              curvature_room, return_room, previous)
         if bool(path.segments) != bool(self.path is not None and self.path.segments):
             if path.segments:
                 _LOGGER.info("Obstacle in the lane: planned a line around it, %.2f m left of the lane centre at most",
@@ -302,17 +337,18 @@ class LaneAvoidance:
         return obstacle.far_distance_m + self.car_length_m + self.config.pass_distance_m < 0.0
 
     def _plan(self, obstacles: list[LaneObstacle], surface_m: float, usual_m: float, curvature_room: float,
-              previous: LanePath | None) -> LanePath:
+              return_room: float, previous: LanePath | None) -> LanePath:
         """Generates the candidate lines past the obstacles, and chooses the best (see the file's description).
 
         :param obstacles: The known obstacles, nearest first, with distances from the car's front.
         :param surface_m: Distance in metres from the lane centre to the inner side of the cones.
         :param usual_m: The usual line in metres left of the lane centre.
         :param curvature_room: Curvature in 1/m left for moves across this lane.
+        :param return_room: Curvature in 1/m left for moves back to the usual line once past the obstacles.
         :param previous: The previous step's line from beside where the car's origin is now, or None.
         :return: The chosen line.
         """
-        if curvature_room <= 0.0:
+        if min(curvature_room, return_room) <= 0.0:
             # The lane already turns as sharply as the car can: no room to move across it, so keep the line
             return previous if previous is not None else LanePath(usual_m, ())
         start = LineState(usual_m) if previous is None else previous.state_at(0.0)
@@ -320,16 +356,16 @@ class LaneAvoidance:
         # the usual line from anywhere across the lane
         horizon_m = min(MAX_HORIZON_M, max([self.car_front_m + obstacle.far_distance_m + self.config.pass_distance_m
                                             + self.config.car_rear_m for obstacle in obstacles], default=0.0)
-                        + move_length_m(2.0 * surface_m, curvature_room))
+                        + move_length_m(2.0 * surface_m, min(curvature_room, return_room)))
         s = np.arange(0.0, horizon_m + SAMPLE_STEP_M, SAMPLE_STEP_M)
         previous_offsets = previous.sample(s)[0] if previous is not None else np.full(s.shape, usual_m)
         # The previous step's line comes first, so it is kept when nothing is better
         candidates = [] if previous is None else [previous]
-        candidates.append(LanePath(usual_m, tuple(self._back_to_usual_from(start, usual_m, curvature_room))))
+        candidates.append(LanePath(usual_m, tuple(self._back_to_usual_from(start, usual_m, return_room))))
         # Plan to keep clear of each obstacle from the stopping distance and, if that cannot pass as many, from
         # pass_distance_m before it
         for lead_m in sorted({self.approach_m, self.config.pass_distance_m}, reverse=True):
-            candidates += self._search(self._runs(obstacles, lead_m), start, usual_m, curvature_room, s,
+            candidates += self._search(self._runs(obstacles, lead_m), start, usual_m, curvature_room, return_room, s,
                                        previous_offsets, surface_m)
         return max(candidates, key=lambda path: self._rank(path, obstacles, s, previous_offsets, usual_m, surface_m))
 
@@ -352,8 +388,8 @@ class LaneAvoidance:
                 runs.append(_Run((obstacle,), start_m, end_m))
         return runs[:MAX_PLANNED_RUNS]
 
-    def _search(self, runs: list[_Run], start: LineState, usual_m: float, curvature_room: float, s: np.ndarray,
-                previous_offsets: np.ndarray, surface_m: float) -> list[LanePath]:
+    def _search(self, runs: list[_Run], start: LineState, usual_m: float, curvature_room: float, return_room: float,
+                s: np.ndarray, previous_offsets: np.ndarray, surface_m: float) -> list[LanePath]:
         """Finds lines past the first run, past the first two, and so on.
 
         After each run only the MAX_HELD cheapest partial lines are carried on to the next, preferring those that
@@ -363,6 +399,7 @@ class LaneAvoidance:
         :param start: Where the previous step's line is now, at s = 0.
         :param usual_m: The usual line in metres left of the lane centre.
         :param curvature_room: Curvature in 1/m left for moves across this lane.
+        :param return_room: Curvature in 1/m left for the move back to the usual line after the last run passed.
         :param s: The distances along the lane at which lines are checked.
         :param previous_offsets: The previous step's line at s.
         :param surface_m: Distance in metres from the lane centre to the inner side of the cones.
@@ -397,11 +434,40 @@ class LaneAvoidance:
             kept = [partial for _, _, partial in sorted(grown.values(), key=lambda item: item[:2],
                                                         reverse=True)[:MAX_HELD]]
             for partial in kept:
-                lines.append(LanePath(usual_m, partial.segments
-                                      + tuple(_hold(partial.free_m, run.end_m, partial.held_m, usual_m))
-                                      + tuple(self._back_to_usual(max(partial.free_m, run.end_m), partial.held_m,
-                                                                  usual_m, curvature_room))))
+                lines.append(self._returning(partial, run, usual_m, return_room, s, surface_m))
         return lines
+
+    def _returning(self, partial: _Partial, run: _Run, usual_m: float, return_room: float, s: np.ndarray,
+                   surface_m: float) -> LanePath:
+        """
+        :param partial: A partial line, holding its offset beside the run.
+        :param run: The last run it passes.
+        :param usual_m: The usual line in metres left of the lane centre.
+        :param return_room: Curvature in 1/m left for the move back to the usual line.
+        :param s: The distances along the lane at which lines are checked.
+        :param surface_m: Distance in metres from the lane centre to the inner side of the cones.
+        :return: The partial line, moving back to the usual line after the run: at the earliest of RETURN_TRIES points
+            from return_after_m past it at which the car's body keeps the clearances from its obstacles, else once
+            the car's rear has passed them.
+        """
+        def returning_at(begin_m: float) -> LanePath:
+            return LanePath(usual_m, partial.segments + tuple(_hold(partial.free_m, begin_m, partial.held_m, usual_m))
+                            + tuple(self._back_to_usual(begin_m, partial.held_m, usual_m, return_room)))
+
+        latest_m = max(partial.free_m, run.end_m)
+        earliest_m = max(partial.free_m, run.end_m - self.car_length_m + self.config.return_after_m)
+        if earliest_m < latest_m - TOLERANCE_M:
+            for begin_m in np.linspace(earliest_m, latest_m, RETURN_TRIES)[:-1].tolist():
+                line = returning_at(begin_m)
+                # Before begin_m the line holds the offset already checked beside the run, and once the car's origin
+                # is at the run's end its body has left the run's stretch
+                checked = s[(s >= begin_m) & (s <= run.end_m)]
+                offsets, slopes, _ = line.sample(checked)
+                corner_s, corner_d = self._corners(checked, offsets, slopes)
+                if np.all(self._clearances(corner_s, corner_d, list(run.obstacles), self.config.pass_distance_m,
+                                           surface_m)[0]):
+                    return line
+        return returning_at(latest_m)
 
     def _check_partial(self, partial: _Partial, runs: list[_Run], index: int, usual_m: float, s: np.ndarray,
                        previous_offsets: np.ndarray, surface_m: float) -> tuple[bool, float] | None:
