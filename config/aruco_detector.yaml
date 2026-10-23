@@ -3,7 +3,7 @@
 /**/aruco_detector:
   ros__parameters:
     dictionary_name: DICT_4X4_50
-    default_marker_size_m: 0.25
+    default_marker_size_m: 0.081
 
     # Only these IDs may reach the policy. [] (or an omitted setting) allows
     # every ID in the selected dictionary. For an exercise with IDs 4 and 5,
