@@ -33,13 +33,15 @@ the number of runs of obstacles rather than with the number of ways to combine t
 
 The line is planned again at every step. The lidar only sees the obstacles ahead of the car's front, so the obstacles
 reaching the car's front are remembered in lane coordinates and moved back by the distance driven (from the wheel
-speed) until the car has passed them. Obstacles are assumed not to move.
+speed) until the car has passed them. They are kept in CarMemory (Memory.lane_obstacles), so the memory log shows them.
+Obstacles are assumed not to move.
 
 An obstacle that no candidate can pass does not change the line beyond the obstacles before it. MpcPolicy still stops
 for an obstacle in the car's way (in_way), so stopping stays the fallback when the car cannot drive around it.
 
-It keeps state between policy steps, and its loops are bounded by MAX_PLANNED_RUNS, MAX_HELD, MAX_REMEMBERED and
-MAX_HORIZON_M, so it is safe to run inside the real-time policy step.
+It keeps state between policy steps (the line on the planner, the remembered obstacles in CarMemory), and its loops
+are bounded by MAX_PLANNED_RUNS, MAX_HELD, MAX_REMEMBERED and MAX_HORIZON_M, so it is safe to run inside the real-time
+policy step.
 """
 from __future__ import annotations
 
@@ -52,6 +54,7 @@ import numpy as np
 from policy.action_policy.lane_path import LanePath, LineState, PathSegment, move_length_m
 from policy.input_output import CarObservations
 from policy.lane_detection.lanes import LaneDetection
+from policy.memory import CarMemory
 from policy.obstacle_detection.obstacles import LaneObstacle
 
 _LOGGER = logging.getLogger(__name__)
@@ -225,20 +228,27 @@ class LaneAvoidance:
         """The same corners, metres left of base_link."""
         self._reach_m = math.hypot(max(car_front_m, config.car_rear_m), half_width_m)
         """Farthest a corner can be along the lane from base_link, in metres."""
+        self.memory = CarMemory()
+        """The car memory holding the remembered obstacles (Memory.lane_obstacles): the one passed to the latest step,
+        or the planner's own for callers that pass none, such as the tests."""
         self.reset()
+
+    @property
+    def remembered(self) -> list[LaneObstacle]:
+        """Obstacles that came within REMEMBER_WITHIN_M of the car's front, with their distances from the car's front
+        reduced by the distance driven since (negative once beside or behind it). They are kept in the car memory."""
+        return list(self.memory.data.lane_obstacles)
 
     def reset(self):
         """Forgets the previous run. This is done on the first step after entering the publishing-policy state."""
-        self.remembered: list[LaneObstacle] = []
-        """Obstacles that came within REMEMBER_WITHIN_M of the car's front, with their distances from the car's front
-        reduced by the distance driven since (negative once beside or behind it)."""
+        self.memory.remember_lane_obstacles(())
         self.path: LanePath | None = None
         """The line planned at the latest step with a lane, or None before the first."""
         self.driven_since_path_m = 0.0
         """Distance in metres driven since path was planned."""
 
     def step(self, observations: CarObservations, lane: LaneDetection | None, obstacles: list[LaneObstacle] | None,
-             usual_offset_m: float | None) -> LanePath | None:
+             usual_offset_m: float | None, memory: CarMemory | None = None) -> LanePath | None:
         """Plans the line for this policy step.
 
         :param observations: The observations at this step, for the wheel speed and the time since the last step.
@@ -247,29 +257,34 @@ class LaneAvoidance:
             or fresh lidar. Without fresh lidar, the previous step's line is kept, moved back by the distance driven.
         :param usual_offset_m: The line the MPC follows away from obstacles (MpcPolicy.usual_offset_m), in metres left
             of the lane centre, or None without a lane.
+        :param memory: The car memory to keep the remembered obstacles in, the same one for every step (MovementPolicy
+            passes the node's). None keeps using the latest one given, or the planner's own.
         :return: The planned line, or None when avoidance is off or there is no lane to plan in.
         """
+        if memory is not None:
+            self.memory = memory
         if observations.policy.is_first_policy_step:
             self.reset()
         if not self.config.enabled:
             return None
         if not observations.policy.is_first_policy_step and observations.car.wheel_speed is not None:
             driven_m = observations.car.wheel_speed * observations.policy.dt
-            self.remembered = [_moved_back(obstacle, driven_m) for obstacle in self.remembered]
+            self.memory.remember_lane_obstacles(_moved_back(obstacle, driven_m) for obstacle in self.remembered)
             self.driven_since_path_m += driven_m
         if lane is None or not lane.has_lane or usual_offset_m is None:
             return None
         fresh = obstacles or []
         # Forget an obstacle once the car's rear is pass_distance_m past it
-        self.remembered = [obstacle for obstacle in self.remembered if not self._behind(obstacle)]
+        remembered = [obstacle for obstacle in self.remembered if not self._behind(obstacle)]
         for obstacle in fresh:
             if obstacle.distance_m <= REMEMBER_WITHIN_M:
-                self.remembered = _remember(self.remembered, obstacle)
+                remembered = _remember(remembered, obstacle)
+        self.memory.remember_lane_obstacles(remembered)
         # Fresh lidar covers the lane ahead of the car's front, and the remembered obstacles the rest, as well as an
         # obstacle close ahead that the lidar misses at a step. The pieces of one object (its faces, or one seen both
         # ways) are joined into one, which also keeps the number of checks down.
         known = []
-        for obstacle in fresh + self.remembered:
+        for obstacle in fresh + remembered:
             if not self._behind(obstacle):
                 known = _joined(known, obstacle, JOIN_ALONG_M, JOIN_ACROSS_M)
         # A move curves both ways about the lane's own curvature, so on a curve it has less room towards the turn

@@ -8,10 +8,10 @@ from enum import IntEnum, Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from policy.memory import CarMemory
-
 if TYPE_CHECKING:
     from policy.input_output import CarActions, CarObservations
+    # Only for the annotations: policy.memory imports policy.input_output, which imports this module
+    from policy.memory import CarMemory
 
 _LOGGER = logging.getLogger(__name__)
 

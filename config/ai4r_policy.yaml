@@ -688,3 +688,37 @@
       smoothness_weight: 1.0
       clearance_weight: 5.0
       change_weight: 1.0
+
+    # REMEMBERING THE CONES AROUND THE CAR (LocalMapConfig in
+    # policy/local_map/local_map.py, which checks them; invalid values stop the
+    # node from starting). Each step, dead reckoning moves the car's pose in a
+    # map of the run (the wheel speed, and the IMU's heading change, else its
+    # yaw rate, else the curvature requested), each cone of the batch is
+    # matched to the nearest remembered cone of its colour, and the pose is
+    # corrected so the batch lies on the matched remembered cones. Lane
+    # detection then also uses the confirmed remembered cones the batch does
+    # not show: beside the car (nearer than the camera sees) and hidden behind
+    # obstacles. They join only when the batch alone gives a lane, so the end
+    # of the cone rows and a lost lane are seen as before. The pose and cones
+    # are kept in the car memory, so the memory log and the replay
+    # (scripts/mcap_export.py, /memory/cones) show them.
+    local_map:
+      # true or false: whether lane detection uses the remembered cones. The
+      # map is kept and logged either way.
+      use_remembered_cones: true
+      # Farthest a cone of a batch may be from a remembered cone of its colour
+      # to be the same cone, metres, positive double: below half the spacing
+      # of the cones along an edge (about 0.25-0.3 m in the lab), above the
+      # detector's noise plus a step's dead-reckoning error.
+      cone_match_distance_m: 0.12
+      # Batches that must see a cone before lane detection uses it or it
+      # corrects the pose, INTEGER >= 1, so a cone detected once by mistake is
+      # not used.
+      cone_min_sightings: 3
+      # Remembered cones farther than this behind base_link are forgotten,
+      # metres, finite double >= 0. Cones beside the car fix where it is in the
+      # lane; farther back, a lane whose curve changes no longer fits them.
+      cone_keep_behind_m: 0.5
+      # Remembered cones not seen for this long are forgotten, seconds,
+      # positive double.
+      cone_keep_s: 4.0
