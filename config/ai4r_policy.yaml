@@ -627,3 +627,30 @@
       smoothness_weight: 1.0
       clearance_weight: 5.0
       change_weight: 1.0
+
+    # MARKER COMMAND SETTINGS (MarkerConfig in policy/markers/markers.py,
+    # which checks them; invalid values stop the node from starting). ArUco
+    # markers from the aruco_detector (config/aruco_detector.yaml: dictionary
+    # DICT_4X4_50, so IDs 0-49) give the car commands. A marker counts when
+    # its pose is ahead of the car within max_distance_m; only the nearest
+    # such marker is followed, once it has been the nearest in confirm_steps
+    # policy steps in a row. KEEP_LEFT, KEEP_RIGHT and KEEP_CENTRE move the
+    # car to that part of the lane and it stays there until another of them;
+    # every new run starts again at mpc.lane_side. TURN_LEFT, TURN_RIGHT and
+    # STRAIGHT are remembered for the next intersection (Memory.
+    # intersection_command); the car does not turn at intersections yet.
+    markers:
+      # ArUco ID of each command, integer, -1 for no marker. No two commands
+      # may share an ID. Match the printed markers.
+      keep_left_id: 0
+      keep_right_id: 9
+      keep_centre_id: 1
+      turn_left_id: 3
+      turn_right_id: 4
+      straight_id: 5
+      # Farthest a marker may be from base_link to count, metres, positive
+      # double. Markers without a pose never count.
+      max_distance_m: 1.5
+      # Policy steps in a row that must see the same marker in range, integer
+      # >= 1, on top of the aruco_detector's min_consecutive_frames.
+      confirm_steps: 2

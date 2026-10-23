@@ -3,6 +3,7 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Any, Self
 
+from policy.markers.commands import MarkerCommand, MarkerSighting
 from policy.serialisation import Serialisable
 
 
@@ -59,11 +60,18 @@ class Memory(Serialisable):
     """Why the MPC stopped the car for the rest of this run, or None while it may drive. Only a new run clears it."""
     mpc_plan: MpcPlan | None
     """The plan of the latest converged MPC solve in this run, or None before the first one and after a failed one."""
+    marker_sighting: MarkerSighting | None = None
+    """The command marker seen in range in the latest policy step and how many steps in a row saw it, or None when the
+    latest step saw none."""
+    intersection_command: MarkerCommand | None = None
+    """What to do at the next intersection, from the latest TURN_LEFT, TURN_RIGHT or STRAIGHT marker in this run, or
+    None before one."""
 
     @classmethod
     def deserialise(cls, data: Any) -> Self:
-        """Load memory, including recordings made before the MPC's stop and plan were kept in it."""
-        return super().deserialise({"mpc_stop": None, "mpc_plan": None, **data})
+        """Load memory, including recordings made before the MPC's stop and plan or the markers were kept in it."""
+        return super().deserialise({"mpc_stop": None, "mpc_plan": None, "marker_sighting": None,
+                                    "intersection_command": None, **data})
 
 
 class CarMemory:
@@ -95,6 +103,32 @@ class CarMemory:
     def start_mpc_run(self):
         """Forgets the MPC's stop and plan of the previous run. The MPC does this on the first step of a run."""
         self.__internal = replace(self.__internal, mpc_stop=None, mpc_plan=None)
+
+    def start_marker_run(self):
+        """Forgets the previous run's marker sighting and intersection command. Done on the first step of a run."""
+        self.__internal = replace(self.__internal, marker_sighting=None, intersection_command=None)
+
+    def see_marker(self, marker_id: int | None):
+        """Records which command marker this step saw in range: one more step in a row for the same marker, the first
+        step for a different one.
+
+        :param marker_id: The marker's ID, or None when this step saw none.
+        """
+        sighting = self.__internal.marker_sighting
+        if marker_id is None:
+            sighting = None
+        elif sighting is not None and sighting.marker_id == marker_id:
+            sighting = replace(sighting, steps=sighting.steps + 1)
+        else:
+            sighting = MarkerSighting(marker_id, 1)
+        self.__internal = replace(self.__internal, marker_sighting=sighting)
+
+    def command_intersection(self, command: MarkerCommand):
+        """Records what to do at the next intersection.
+
+        :param command: TURN_LEFT, TURN_RIGHT or STRAIGHT.
+        """
+        self.__internal = replace(self.__internal, intersection_command=command)
 
     def stop_mpc(self, reason: MpcStop):
         """Records that the MPC stopped the car for the rest of the run.

@@ -80,6 +80,7 @@ from policy.data_logging.data_logging import (
 )
 from policy.input_output import ConeColour, convert_observations, convert_actions
 from policy.lane_detection.lane_detection import LaneDetectionConfig
+from policy.markers.markers import MarkerConfig
 from policy.memory import CarMemory
 from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
 from policy.policy_runner import MovementPolicy
@@ -299,14 +300,16 @@ class PolicyNode(Node):
         # (policy/cone_filter/cone_filter.py), ControlConfig
         # (policy/control/control.py), LaneDetectionConfig
         # (policy/lane_detection/lane_detection.py), ObstacleDetectionConfig
-        # (policy/obstacle_detection/obstacle_detection.py) and AvoidanceConfig
-        # (policy/action_policy/avoidance.py) hold their defaults and check them.
+        # (policy/obstacle_detection/obstacle_detection.py), AvoidanceConfig
+        # (policy/action_policy/avoidance.py) and MarkerConfig
+        # (policy/markers/markers.py) hold their defaults and check them.
         self.declare_parameter("action_policy", "mpc", ParameterDescriptor(read_only=True))
         settings = {}
         for prefix, config_type in (
                 ("mpc", MpcConfig), ("open_space", OpenSpaceConfig), ("cone_filter", ConeFilterConfig),
                 ("control", ControlConfig), ("lane_detection", LaneDetectionConfig),
-                ("obstacle_detection", ObstacleDetectionConfig), ("avoidance", AvoidanceConfig)):
+                ("obstacle_detection", ObstacleDetectionConfig), ("avoidance", AvoidanceConfig),
+                ("markers", MarkerConfig)):
             defaults = asdict(config_type())
             for name, default in defaults.items():
                 self.declare_parameter(f"{prefix}.{name}", default, ParameterDescriptor(read_only=True))
@@ -315,7 +318,8 @@ class PolicyNode(Node):
         self.movement_policy = MovementPolicy(
             settings["mpc"], settings["cone_filter"], settings["control"], settings["open_space"],
             self.get_parameter("action_policy").value, lane_detection_config=settings["lane_detection"],
-            obstacle_detection_config=settings["obstacle_detection"], avoidance_config=settings["avoidance"])
+            obstacle_detection_config=settings["obstacle_detection"], avoidance_config=settings["avoidance"],
+            marker_config=settings["markers"])
         # Every parameter value this node runs with, saved beside each drive data log
         # (<stem>_config.json). Settings are startup-only, so reading them once is enough.
         self.parameter_values = {

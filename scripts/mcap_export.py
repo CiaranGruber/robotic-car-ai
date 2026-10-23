@@ -52,6 +52,7 @@ from policy.control.control import ControlConfig
 from policy.data_logging.data_logging import ACTIONS_LOG_SUFFIX, CONFIG_LOG_SUFFIX, OBSERVATIONS_LOG_SUFFIX
 from policy.input_output import CarActions, CarObservations
 from policy.lane_detection.lane_detection import LaneDetectionConfig
+from policy.markers.markers import MarkerConfig
 from policy.memory import CarMemory
 from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
 from policy.policy_runner import MovementPolicy
@@ -72,7 +73,7 @@ FRAME_ID = "base_link"
 CONFIG_TYPES = {
     "mpc": MpcConfig, "open_space": OpenSpaceConfig, "cone_filter": ConeFilterConfig, "control": ControlConfig,
     "lane_detection": LaneDetectionConfig, "obstacle_detection": ObstacleDetectionConfig,
-    "avoidance": AvoidanceConfig,
+    "avoidance": AvoidanceConfig, "markers": MarkerConfig,
 }
 """The MovementPolicy settings, by their prefix in config/ai4r_policy.yaml, as policy_node reads them."""
 
@@ -146,7 +147,8 @@ def build_policy(settings: dict[str, Any]) -> MovementPolicy:
     return MovementPolicy(
         configs["mpc"], configs["cone_filter"], configs["control"], configs["open_space"],
         settings.get("action_policy", "mpc"), lane_detection_config=configs["lane_detection"],
-        obstacle_detection_config=configs["obstacle_detection"], avoidance_config=configs["avoidance"])
+        obstacle_detection_config=configs["obstacle_detection"], avoidance_config=configs["avoidance"],
+        marker_config=configs["markers"])
 
 
 def read_data_log(observations_path: Path) -> list[RecordedStep]:

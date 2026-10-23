@@ -14,6 +14,8 @@ from policy.control.control import CarController, ControlConfig
 from policy.input_output import CarActions, CarObservations, ConeBatch
 from policy.lane_detection.lane_detection import LaneDetectionConfig, LaneDetector
 from policy.lane_detection.lanes import LaneDetection
+from policy.markers.commands import MarkerCommand
+from policy.markers.markers import MarkerConfig, MarkerReader
 from policy.memory import CarMemory
 from policy.obstacle_detection.obstacle_detection import (ObstacleDetectionConfig, detect_lane_obstacles,
                                                           detect_obstacles, nearest_in_band)
@@ -33,7 +35,7 @@ class MovementPolicy:
                  open_space_config: OpenSpaceConfig = OpenSpaceConfig(), action_policy: str = "mpc",
                  lane_detection_config: LaneDetectionConfig = LaneDetectionConfig(),
                  obstacle_detection_config: ObstacleDetectionConfig = ObstacleDetectionConfig(),
-                 avoidance_config: AvoidanceConfig = AvoidanceConfig()):
+                 avoidance_config: AvoidanceConfig = AvoidanceConfig(), marker_config: MarkerConfig = MarkerConfig()):
         """
         :param mpc_config: The MPC settings, from the mpc parameters in config/ai4r_policy.yaml.
         :param cone_filter_config: The cone filter settings, from the cone_filter parameters in
@@ -54,6 +56,8 @@ class MovementPolicy:
             parameters in config/ai4r_policy.yaml. A ValueError is raised when the line that passes an obstacle would
             still count as blocked: half the car's width plus obstacle_clearance_m below corridor_half_width_m, or when
             max_ramp_curvature_per_m is sharper than the MPC's curvature limits.
+        :param marker_config: Which ArUco markers give which commands, from the markers parameters in
+            config/ai4r_policy.yaml.
         """
         if action_policy not in ACTION_POLICIES:
             raise ValueError(f"action_policy must be one of {ACTION_POLICIES}, not {action_policy!r}")
@@ -90,6 +94,11 @@ class MovementPolicy:
                                        stopping_m if mpc_config.obstacle_stop_enabled else 0.0)
         self.open_space_policy = OpenSpacePolicy(open_space_config, control_config.positive_steering_turns_left)
         self.car_controller = CarController(control_config)
+        self.markers = MarkerReader(marker_config)
+        self.marker_command: MarkerCommand | None = None
+        """The command a marker gave in the latest step, or None."""
+        self.intersection_command: MarkerCommand | None = None
+        """What to do at the next intersection after the latest step (Memory.intersection_command), or None."""
         self.cones: ConeBatch | None = None
         """The cones the latest step used, after the cone filter and the camera yaw correction, or None without fresh
         cones."""
@@ -120,6 +129,13 @@ class MovementPolicy:
         # starts at mpc.lane_side rather than where the previous run left off
         if observations.policy.is_first_policy_step:
             self.action_policy.reset()
+            memory.start_marker_run()
+        # Follow the nearest command marker: keep to its side of the lane until another side marker, or remember the
+        # next intersection's turn
+        self.marker_command = self.markers.step(observations, memory)
+        if self.marker_command is not None and self.marker_command.lane_side is not None:
+            self.action_policy.lane_side = self.marker_command.lane_side
+        self.intersection_command = memory.data.intersection_command
         # Remove the cone outliers, so every later stage uses the same plausible cones
         observations = dataclasses.replace(
             observations, cones=filter_cones(observations.cones, self.cone_filter_config))

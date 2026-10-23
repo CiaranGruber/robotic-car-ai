@@ -140,7 +140,7 @@ class StepDrawer:
 
 def summary(policy: MovementPolicy, observations: CarObservations, actions: CarActions) -> str:
     """
-    :return: A short text of the step's lane, obstacle, speed and actions.
+    :return: A short text of the step's lane, obstacle, speed and actions, lane side and next intersection command.
     """
     lanes = policy.lanes
     lane = "open space" if lanes is None else lanes.status.name
@@ -148,11 +148,14 @@ def summary(policy: MovementPolicy, observations: CarObservations, actions: CarA
         lane += f"  lateral {lanes.lateral_error_m:+.2f} m  heading {math.degrees(lanes.heading_error_rad):+.1f} deg"
     obstacle = policy.obstacle_distance_m
     speed = observations.car.wheel_speed
+    intersection = policy.intersection_command
     return "\n".join((
         f"t {observations.policy.policy_elapsed_s:.2f} s  {lane}",
         "obstacle " + ("unknown" if obstacle is None else "clear" if math.isinf(obstacle) else f"{obstacle:.2f} m"),
         "speed " + ("unknown" if speed is None else f"{float(speed):.2f} m/s")
-        + f"  drive {actions.drive_action:+.2f}  steer {actions.steering_action:+.2f}"))
+        + f"  drive {actions.drive_action:+.2f}  steer {actions.steering_action:+.2f}",
+        f"side {policy.action_policy.lane_side}  next intersection "
+        + ("none" if intersection is None else intersection.name)))
 
 
 def _along(start_m: float, end_m: float) -> list[float]:
