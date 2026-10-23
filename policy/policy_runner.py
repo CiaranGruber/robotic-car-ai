@@ -176,6 +176,26 @@ class MovementPolicy:
         # Return final car actions
         return car_actions
 
+    def latched_stop_reason(self, policy_elapsed_s: float) -> str | None:
+        """Says why the MPC holds the car stopped for the rest of the run, for the run summary policy_node logs.
+
+        :param policy_elapsed_s: Seconds since entering the publishing-policy state at the latest step.
+        :return: The reason, such as "an obstacle", or None while the MPC may still drive. Always None in the
+            open-space policy, which has no stops that last the rest of the run.
+        """
+        if self.action_policy_name == "open_space":
+            return None
+        mpc = self.action_policy
+        if mpc.stopped_for_obstacle:
+            return "an obstacle"
+        if mpc.stopped_for_lane_loss:
+            return "the lane ending or being lost"
+        if mpc.stopped_for_solver_failure:
+            return "a solver failure"
+        if 0.0 < mpc.config.run_duration_s <= policy_elapsed_s:
+            return "reaching mpc.run_duration_s"
+        return None
+
     def _obstacle_distance_m(self, lanes: LaneDetection | None) -> float | None:
         """Finds how far ahead the nearest obstacle in the car's way is, from this step's obstacles.
 

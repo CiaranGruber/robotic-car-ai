@@ -798,6 +798,73 @@ def test_shipped_student_calculation_is_zero_and_handles_missing_observations(ma
     assert not node.pan_publisher.messages
 
 
+class LogRecorder:
+    def __init__(self):
+        self.info_lines, self.warning_lines = [], []
+
+    def info(self, message):
+        self.info_lines.append(message)
+
+    def warning(self, message):
+        self.warning_lines.append(message)
+
+    def error(self, message):
+        self.warning_lines.append(message)
+
+
+def test_each_run_times_its_steps_and_logs_a_summary_when_it_ends(make_node, monkeypatch):
+    node = make_node("cone_detection", ["cone_detections"])
+    log = LogRecorder()
+    monkeypatch.setattr(node, "get_logger", lambda: log)
+    node.cone_detection_callback(cones(node))
+    request(node, 3)
+
+    def calculating_for_20_ms(*args):
+        node.test_clock.advance(0.02)
+        return driving_policy()
+
+    node.calculate_policy_actions = calculating_for_20_ms
+    for _ in range(2):
+        node.test_clock.advance(0.04)
+        node.cone_detection_callback(cones(node))
+    steps = node.run_timing.steps
+    assert [step.policy_step for step in steps] == [0, 1]
+    assert [step.calculation_s for step in steps] == pytest.approx([0.02, 0.02])
+    assert steps[0].step_interval_s is None and steps[1].step_interval_s == pytest.approx(0.06)
+    assert steps[1].trigger_age_s == pytest.approx(0.0)
+    request(node, 2)
+    summary = [line for line in log.info_lines if line.startswith("Run summary:")]
+    assert len(summary) == 1
+    assert "2 policy steps, ended by: Operator request" in summary[0]
+    assert "calculation median 20.0 ms" in summary[0] and "step interval median 60.0 ms" in summary[0]
+    # The next run starts its own timing
+    node.cone_detection_callback(cones(node))
+    request(node, 3)
+    node.test_clock.advance(0.04)
+    node.cone_detection_callback(cones(node))
+    assert [step.policy_step for step in node.run_timing.steps] == [0]
+
+
+def test_a_failing_run_summary_never_stops_the_zero_actions(make_node, monkeypatch):
+    node = make_node(required=["wheel_speed"])
+    log = LogRecorder()
+    monkeypatch.setattr(node, "get_logger", lambda: log)
+    node.wheel_speed_callback(Float32(data=0.0))
+    request(node, 3)
+    node.calculate_policy_actions = driving_policy
+    node.run_policy_step()
+    assert node.action_publisher.messages[-1].drive > 0.0
+
+    def broken(*args):
+        raise RuntimeError("summary")
+
+    monkeypatch.setattr(node.movement_policy, "latched_stop_reason", broken)
+    request(node, 2)
+    assert node.fsm_state == 2
+    assert node.action_publisher.messages[-1].drive == 0.0
+    assert any(line.startswith("Run summary failed") for line in log.warning_lines)
+
+
 def test_invalid_sensor_content_and_runtime_parameter_changes(make_node):
     node = make_node()
     bad_cone = cones(node)
