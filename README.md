@@ -174,6 +174,126 @@ ID. Repeated-ID observations remain separate and poses are never replayed.
 An image with no accepted markers still supplies a fresh empty batch; the
 student continues to decide the driving response to marker absence.
 
+This branch maps IDs **3 / 4 / 5** to **left / right / straight at the next
+intersection**. The optional `intersection` navigator connects a confirmed
+command to a finite path through an **equal-width perpendicular cross or T-junction**.
+It estimates incoming rows from motion-compensated cone tracks and uses current
+lidar boundary evidence for the requested exit. Supported closing rows block a
+direction; missing returns leave it unknown. The existing
+MPC steers through the turn, then fresh outgoing boundaries and heading alignment
+admit handoff to normal lane following. Camera pan and steering limits are unchanged;
+no trained model is used. It is **disabled by default and locally simulated only**.
+
+The ArUco command selects the **formed lane centre path** once sensor evidence
+admits an exit. ID 3 connects the approach to the left exit, ID 4 to the right,
+and ID 5 to the straight exit. A sign ahead of an ordinary straight or curved
+road only queues the command; its measured lane fit and normal control remain
+the source, subject to command expiry and sensor-stop checks. At a sensed junction,
+fresh incoming cone geometry plus current paired lidar rows can support a slower,
+finite straight approach while exit evidence is still unknown. This path ends
+before the road mouth, keeps the command pending and uses the configured stopping
+envelope; its endpoint cannot advance with repeated predictions. During that
+approach or a committed junction, `policy.selected_lane` supplies both the centre
+path drawn in Foxglove's `lane` layer and the curvature reference used by MPC.
+Measured acquisition-time edges remain separate in the faded `lane/observed`
+layer. The selected path is cleared on stop/completion; fresh outgoing cone
+support admits normal lane following with observed colour sides (`AUTO`).
+
+Run the turning scenarios, including cone loss triggered during the actual turn:
+
+```bash
+OPENBLAS_NUM_THREADS=1 MPLCONFIGDIR=/tmp/ai4r-mpl .venv/bin/python -m \
+  tests.policy.intersection_turning --output build/intersection-turning-20261026
+```
+
+It runs 22 controller-driven cases: left/right on a 2.4 m cross at .2/.4 m cone
+spacing with nominal/noisy detections, a missing blue boundary, an .8 s complete
+camera gap and missing corner cones, plus nominal/noisy straight commands.
+It writes `turning.gif`, `turning.png`, `signal_selection.png`, detailed frames,
+trajectories and a source-hashed report. Only the local simulation enables the
+optional navigator; this command neither enables nor contacts a physical car.
+See the [turn-selection evidence](docs/acceptance.md#aruco-selected-lanes-and-turning-scenarios-2026-10-26).
+
+To increase the distance **along each cone row**, keeping the road 2.4 m wide:
+
+```bash
+OPENBLAS_NUM_THREADS=1 MPLCONFIGDIR=/tmp/ai4r-mpl .venv/bin/python -m \
+  tests.policy.intersection_turning --cone-spacings 0.5 0.6 --plot-spacing 0.6 \
+  --corner-anchored --output build/intersection-spaced-cones-20261026
+```
+
+Distances are between cone centres. Corner anchoring preserves the four corner
+positions and spaces cones symmetrically outwards, so a wider gap does not change
+the junction opening. The default command retains the earlier layout for
+reproduction. `cone_layout.png` compares the requested gaps; the other figures
+show the selected .6 m cases. This sparse matrix currently stops on approach
+lane loss in all 22 cases, before a route forms; it does not establish successful
+turning or recovery from turn-triggered camera loss. See the
+[sparse-cone evidence](docs/acceptance.md#sparser-cone-rows-2026-10-26).
+
+Run all three T orientations (no straight road, no left road or no right road):
+
+```bash
+OPENBLAS_NUM_THREADS=1 MPLCONFIGDIR=/tmp/ai4r-mpl .venv/bin/python -m \
+  tests.policy.t_intersection_simulation --output build/t-intersection-20261026
+```
+
+The same physical layout receives IDs 3/4/5 separately. Available exits must
+reach the requested arm and complete outgoing-lane handoff; a command toward
+the closing row must stop without selecting another exit. The 48-case matrix
+includes noisy detections, finite turn-triggered cone loss, and .5/.6 m sparse
+approach probes. It writes `t_intersection.png`, `t_intersection.gif`, detailed
+frames/trajectories and a source-hashed report. These are local decoded-sensor
+simulations; the GPU model and car are unchanged. See the
+[T-junction evidence](docs/acceptance.md#t-junction-exit-support-2026-10-26).
+
+Run the local navigation evaluation with:
+
+```bash
+OPENBLAS_NUM_THREADS=1 MPLCONFIGDIR=/tmp/ai4r-mpl .venv/bin/python -m \
+  tests.policy.intersection_simulation --navigate --output build/aruco-navigation-final
+```
+
+It writes `report.json`, trajectory CSVs and `intersection.png` using a 2.4 m-wide
+cross and .2 m cone spacing. Omit `--navigate` to reproduce the earlier marker-only
+1 m-cross baseline. These are decoded marker poses, not camera-pixel recognition.
+The navigator's parameters and required gyro/wheel/lidar/empty-camera settings are
+documented beside `intersection.enabled` in `config/ai4r_policy.yaml`. See the
+[navigation evidence](docs/acceptance.md#aruco-intersection-navigation-prototype-2026-10-23)
+for limits and checks. That simulation evaluation did not apply car settings;
+the subsequent authorised car deployment is recorded in
+[the deployment evidence](docs/acceptance.md#car-104325433-intersection-deployment-2026-10-23).
+
+To inspect the current cone filter and lane fitter independently of vehicle control:
+
+```bash
+OPENBLAS_NUM_THREADS=1 MPLCONFIGDIR=/tmp/ai4r-mpl .venv/bin/python -m \
+  tests.policy.intersection_identification --output build/intersection-association-20261026
+```
+
+This writes an animated top-down view, a six-frame storyboard, frame details and
+a source-hashed report. It uses synthetic decoded cones during a centred straight
+passage through a four-way cross, including noise and missing boundaries. It also
+compares the same straight rows with cross-road cones removed. This diagnoses
+lane association; it does not test GPU image recognition or successful driving.
+Add `--baseline build/intersection-identification-20261026` when the earlier local
+capture is available to generate `comparison.gif` with matching before/after
+poses. `stages.png` shows decoded cone positions, checked/grouped cones and the
+resulting lane separately.
+
+The GPU detector remains the source of cone measurements. The policy rejects
+non-finite positions/confidence and resolves equal-confidence duplicate detections
+consistently. `lane_detection.associate_branches` then separates supported incoming
+straight rows from transverse rows before lane formation. Coherent circular rows
+with a plausible forward tangent keep the existing arc fit and outlier rejection.
+A T's transverse segment may share a corner with paired incoming rows; a
+near-transverse tangent cannot win solely because fitted offsets straddle the car. All checked
+cones remain available for obstacle and intersection processing; selecting lane
+members does not delete a side road. Uncertain transverse-only observations can
+return no lane rather than a confident sideways lane. This is a geometric
+heuristic; noisy/sparse observations can still produce an incorrect fit.
+See the [updated association evidence](docs/acceptance.md#cone-grouping-and-lane-formation-update-2026-10-26).
+
 The optional [camera mount file](config/camera_mount.yaml) is also installed,
 but it is DREAM source configuration, not ROS parameters. The shipped `{}` uses
 the defaults: camera optical centre `0.30 m` above nominal ground, `0.10 m`
@@ -217,6 +337,23 @@ your car. Omitted settings inherit the baseline. This requires DREAM's expanded
 Traxxas delegation; older versions reject the newly exposed settings. Commented
 reference values remain system-owned. See the [runtime guide](https://gitlab.unimelb.edu.au/dream/dream_system/-/blob/feature/classroom-ros-environment/docs/ai4r-runtime.md)
 for the complete source-YAML workflow.
+
+For this physical-car setup, select **`oakd_gpu_cone_detector`**. Keep the CPU
+`oakd_cone_detector` unit stopped so it does not compete for the camera. Start
+the GPU unit with `dream runtime start oakd_gpu_cone_detector`; the management
+helper's `start_runtime` also selects GPU, stops an active CPU unit first, and
+aborts if that stop or GPU startup fails. It starts the IMU and lidar alongside
+the vehicle interface, because intersection navigation requires fresh gyro,
+wheel-speed and Cartesian lidar observations. The CPU component's YAML namespace
+and configuration contract above remain specific to that component; selecting
+GPU does not rename them or change camera/vehicle calibration.
+
+ArUco needs the GPU's clean `camera/rgb/image_rect` and matching
+`camera/rgb/camera_info` streams. On the deployed car, DREAM's optional source
+override `config/oakd_gpu_cone_detector.yaml` enables `publish_rgb_image: true`;
+its inherited settings remain 1280x720 at 10 Hz. This is independent of cone
+debug images, which may stay off. The car-only override is retained on the car;
+the repository's five ROS parameter files are unchanged by that addition.
 
 Direct-node equivalent for integrations that need one (Python ROS launch):
 

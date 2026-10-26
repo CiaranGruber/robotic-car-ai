@@ -4,6 +4,7 @@ from enum import Enum
 from typing import Any, Self
 
 from policy.markers.commands import MarkerCommand, MarkerSighting
+from policy.intersection_state import IntersectionMemory
 from policy.serialisation import Serialisable
 
 
@@ -15,6 +16,8 @@ class MpcStop(Serialisable, Enum):
     """The lane was lost for lane_loss_timeout_s, its cone rows ended, or the plan followed without it ran out."""
     SOLVER_FAILURE = 2
     """An MPC solve did not converge."""
+    INTERSECTION = 3
+    """Intersection admission, motion, route lifetime or swept-clearance validation failed."""
 
     def serialise(self) -> str:
         """
@@ -66,12 +69,15 @@ class Memory(Serialisable):
     intersection_command: MarkerCommand | None = None
     """What to do at the next intersection, from the latest TURN_LEFT, TURN_RIGHT or STRAIGHT marker in this run, or
     None before one."""
+    intersection_command_seen_s: float | None = None
+    intersection: IntersectionMemory | None = None
 
     @classmethod
     def deserialise(cls, data: Any) -> Self:
         """Load memory, including recordings made before the MPC's stop and plan or the markers were kept in it."""
         return super().deserialise({"mpc_stop": None, "mpc_plan": None, "marker_sighting": None,
-                                    "intersection_command": None, **data})
+                                    "intersection_command": None, "intersection_command_seen_s": None,
+                                    "intersection": None, **data})
 
 
 class CarMemory:
@@ -106,7 +112,8 @@ class CarMemory:
 
     def start_marker_run(self):
         """Forgets the previous run's marker sighting and intersection command. Done on the first step of a run."""
-        self.__internal = replace(self.__internal, marker_sighting=None, intersection_command=None)
+        self.__internal = replace(self.__internal, marker_sighting=None, intersection_command=None,
+                                  intersection_command_seen_s=None, intersection=None)
 
     def see_marker(self, marker_id: int | None):
         """Records which command marker this step saw in range: one more step in a row for the same marker, the first
@@ -123,12 +130,20 @@ class CarMemory:
             sighting = MarkerSighting(marker_id, 1)
         self.__internal = replace(self.__internal, marker_sighting=sighting)
 
-    def command_intersection(self, command: MarkerCommand):
+    def command_intersection(self, command: MarkerCommand, seen_s: float | None = None):
         """Records what to do at the next intersection.
 
         :param command: TURN_LEFT, TURN_RIGHT or STRAIGHT.
         """
-        self.__internal = replace(self.__internal, intersection_command=command)
+        self.__internal = replace(self.__internal, intersection_command=command, intersection_command_seen_s=seen_s)
+
+    def consume_intersection_command(self):
+        """Consume a queued command once; the committed choice lives in intersection memory."""
+        self.__internal = replace(self.__internal, intersection_command=None, intersection_command_seen_s=None)
+
+    def update_intersection(self, state: IntersectionMemory):
+        """Replace the navigator's bounded serialisable state."""
+        self.__internal = replace(self.__internal, intersection=state)
 
     def stop_mpc(self, reason: MpcStop):
         """Records that the MPC stopped the car for the rest of the run.

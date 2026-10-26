@@ -7,7 +7,7 @@ set -euo pipefail
 # --------------------
 
 # Car number (1–20); used to form the host address.
-CAR_NUM=21
+CAR_NUM=20
 
 # SSH connection constants for the car.
 REMOTE_PORT=22
@@ -140,7 +140,8 @@ Commands:
                     or skip that step and continue.
   start_runtime [--debug-images <type>]
                     Restart the usual dream runtime services on the car,
-                    including the lidar (rplidar_c1).
+                    including the IMU, lidar and GPU cone detector. Stop an active
+                    CPU cone detector first; do not fall back to CPU.
                     With --debug-images, oakd_gpu_cone_detector is restarted with
                     that flag (dream runtime restart oakd_gpu_cone_detector
                     --debug-images <type>).
@@ -198,19 +199,20 @@ start_runtime() {
     #
     # Args:
     #   optional --debug-images <type>: pass through to oakd_gpu_cone_detector only.
-    # rplidar_c1 is restarted too: ai4r_policy requires lidar_cartesian, and the lidar is not running after a
-    # reboot that interrupted it.
+    # Intersection navigation requires fresh IMU yaw rate and Cartesian lidar;
+    # include both services after a reboot that interrupted them.
     local services=(
         foxglove_bridge
         traxxas_vehicle_interface
         rplidar_c1
+        bno08x_imu_interface
         oakd_gpu_cone_detector
         aruco_detector
         ai4r_policy
     )
     local debug_images_type=""
     local service
-    local remote_cmd=""
+    local remote_cmd="set -e; set -o pipefail; "
     local restart_cmd
 
     while [[ $# -gt 0 ]]; do
@@ -235,6 +237,8 @@ start_runtime() {
     log "Restarting dream runtime services on ${REMOTE_USER}@${REMOTE_HOST}..."
     # UNIT names whose STATE is running (column 1 / 2 of `dream runtime status`).
     remote_cmd+='running_services=$(dream runtime status | awk '\''$2 == "running" { print $1 }'\''); '
+    # Both detectors use the same camera. This car requires the GPU component.
+    remote_cmd+='if printf "%s\n" "$running_services" | grep -qx oakd_cone_detector; then dream runtime stop oakd_cone_detector; fi; '
     for service in "${services[@]}"; do
         if [[ "$service" == "foxglove_bridge" ]]; then
             remote_cmd+='if ! printf "%s\n" "$running_services" | grep -qx foxglove_bridge; then dream runtime restart foxglove_bridge; fi; '

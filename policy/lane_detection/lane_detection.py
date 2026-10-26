@@ -9,6 +9,10 @@ arcs around one centre point (concentric arcs), which is what a lane of constant
 curvature looks like. With curvature 0 they are parallel straight lines. Fitting both edges together lets a long row
 steady a short one, and an edge with too few cones to give a direction alone still gives its offset.
 
+At a crossing, one colour may belong to several road arms. associate_branches first checks for a coherent arc,
+then separates supported incoming and transverse straight segments when that arc cannot explain the batch.
+It never chooses an intersection exit and never removes cones from the observations used by other stages.
+
 The fit's unknowns are the lane's direction and curvature beside the car, and each edge's sideways offset. It
 minimises the cones' distances from their edge at right angles, with a robust loss so a few misplaced cones count
 less, then drops cones farther than config.outlier_distance_m from their edge and fits again. A small penalty on
@@ -23,7 +27,7 @@ real-time policy step.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from scipy.optimize import least_squares
@@ -44,6 +48,9 @@ MAX_SOLVER_EVALUATIONS = 50
 
 MAX_REFITS = 2
 """Most times the fit is repeated after dropping outlier cones."""
+
+MAX_BRANCH_ANCHORS = 12
+"""Nearest cones per colour used to seed line hypotheses at a crossing; all cones still vote for membership."""
 
 WIDTH_SMOOTHING = 0.2
 """Fraction of the difference to each newly measured lane width that LaneDetector's remembered width moves by."""
@@ -94,8 +101,13 @@ class LaneDetectionConfig:
     outlier_distance_m: float = 0.15
     """Cones farther than this in metres from their fitted edge are left out, and the edges fitted again. Must be
     positive. Keep it above the detector's position noise but well below half the lane width."""
+    associate_branches: bool = True
+    """Separate intersecting straight row segments before fitting an arc. Coherent circular rows retain the
+    original fit. This selects the incoming road beside the car, not an intersection exit."""
 
     def __post_init__(self):
+        if not isinstance(self.associate_branches, bool):
+            raise ValueError("lane_detection.associate_branches must be boolean")
         if self.left_colour not in ("AUTO", "BLUE", "YELLOW"):
             raise ValueError(f"lane_detection.left_colour must be \"AUTO\", \"BLUE\" or \"YELLOW\", "
                              f"not {self.left_colour!r}")
@@ -164,7 +176,7 @@ def detect_lanes(observations: CarObservations, config: LaneDetectionConfig,
         return None
     no_lane = LaneDetection(LaneStatus.NO_LANE, None, None, None, None, None, None, None, None, cones.sensor_age)
     rows = {colour: [cone for cone in cones if cone.colour == colour] for colour in ConeColour}
-    fit = _fit_concentric_edges(rows, config)
+    fit = _fit_lane_edges(rows, config)
     if fit is None:
         return no_lane
     reference, offsets, rows = fit
@@ -220,6 +232,143 @@ def _sides(offsets: dict[ConeColour, float], left_colour: str) -> tuple[ConeColo
         return left, right
     ((colour, offset),) = offsets.items()
     return (colour, None) if offset > 0.0 else (None, colour)
+
+
+def _fit_lane_edges(rows, config):
+    """Shared production/diagnostic fit entry point, keeping branch selection local to lane fitting."""
+    fit = _fit_concentric_edges(rows, config)
+    if not config.associate_branches:
+        return fit
+    # A coherent arc already explains most observations, including ordinary outlier rejection.
+    # In particular, do not chop a real
+    # U-turn into straight pieces just because its distant tangent is transverse to the car.
+    if fit is not None:
+        reference, offsets, inliers = fit
+        left, right = _sides(offsets, config.left_colour)
+        width = offsets[left]-offsets[right] if left is not None and right is not None else config.lane_width_m
+        coherent = sum(map(len, inliers.values())) >= .85 * sum(map(len, rows.values()))
+        # A transverse fit wholly to one side is not the current road. A forward coherent
+        # curve may still be the road when the car is outside it and needs to recover.
+        beside_car = (len(offsets) == 1 or offsets[left] > 0 > offsets[right]
+                      or abs(reference.heading_rad) <= math.pi/4)
+        if (coherent and config.min_lane_width_m <= width <= config.max_lane_width_m
+                and beside_car
+                and abs(reference.heading_rad) <= math.pi/4):
+            return fit
+    selected = _incoming_rows(rows, config)
+    if selected is not None:
+        # These memberships were admitted as separate straight arms. Fitting unconstrained
+        # curvature to a short, noisy fragment can invent a bend behind the camera; use the
+        # existing fitter's straight model for this fragment, not a new curve initialisation.
+        return _fit_concentric_edges(selected, replace(config, max_curvature_per_m=0.))
+    # A transverse segment without a supported incoming row is uncertainty, not an excuse
+    # to recover the old fit to a side road. Empty membership deliberately gives NO_LANE.
+    if _transverse_segment(rows, {}, 0., config.outlier_distance_m/2):
+        return None
+    # A near-transverse tangent at the car can be a degenerate arc through a T's
+    # corner and opposite colour row. Straddling offsets alone do not make that
+    # the current road. Keep uncertainty if no supported forward membership wins.
+    if fit is not None and abs(fit[0].heading_rad) > math.pi/4:
+        return None
+    return fit
+
+
+def _incoming_rows(rows, config):
+    """Recognise competing straight arms and retain the locally supported incoming rows.
+
+    Hypotheses come from a bounded set of nearby pairs, not a map or known road pose. A
+    transverse row must be supported before the original arc fit is replaced. With two
+    compatible incoming boundaries, that transverse segment may share a corner cone.
+    Membership uses the whole observation batch; nearby support and heading break density
+    ties. The full batch remains available to obstacle detection and intersection navigation.
+    """
+    candidates = {}
+    tolerance = config.outlier_distance_m / 2
+    for colour, row in rows.items():
+        row = sorted(row, key=lambda p: (p.pos.x, p.pos.y))
+        points = np.array([(p.pos.x, p.pos.y) for p in row]).reshape(-1, 2)
+        anchors = sorted(range(len(row)), key=lambda i: (float(points[i] @ points[i]), *points[i]))[:MAX_BRANCH_ANCHORS]
+        options = {}
+        for ai, a in enumerate(anchors):
+            for b in anchors[ai+1:]:
+                delta = points[b]-points[a]
+                if np.linalg.norm(delta) < MIN_DIRECTION_SPAN_M:
+                    continue
+                heading = math.atan2(delta[1], delta[0])
+                heading = (heading+math.pi/2) % math.pi-math.pi/2
+                if abs(heading) > math.pi/4:
+                    continue
+                normal = np.array((-math.sin(heading), math.cos(heading)))
+                offset = float(points[a] @ normal)
+                residual = np.abs(points @ normal-offset)
+                keep = residual <= tolerance
+                if np.count_nonzero(keep) < max(2, config.min_cones_per_edge):
+                    continue
+                indices = tuple(np.flatnonzero(keep))
+                support = sum(np.exp(-np.linalg.norm(points[keep], axis=1)/2
+                                     -.5*(residual[keep]/(tolerance/2))**2)) * math.cos(heading)**8
+                if indices not in options or support > options[indices][0]:
+                    options[indices] = (support, heading, offset, [row[i] for i in indices])
+        candidates[colour] = sorted(options.values(), key=lambda p: (-p[0], abs(p[1]), p[2]))[:8]
+    proposals = []
+    colours = list(rows)
+    if len(colours) == 2:
+        a, b = colours
+        for first in candidates[a]:
+            for second in candidates[b]:
+                if abs(first[1]-second[1]) > math.radians(15):
+                    continue
+                offsets = {a: first[2], b: second[2]}
+                left, right = _sides(offsets, config.left_colour)
+                width = offsets[left]-offsets[right]
+                if (config.min_lane_width_m <= width <= config.max_lane_width_m
+                        and offsets[left] > 0 > offsets[right]):
+                    proposals.append((first[0]+second[0], (first[1]+second[1])/2,
+                                      {a: first[3], b: second[3]}))
+    # One visible boundary can still supply the incoming direction. If both colours have
+    # supported rows, require a compatible pair rather than silently dropping one colour.
+    present = [c for c in colours if candidates[c]]
+    if len(present) == 1:
+        c = present[0]
+        proposals.extend((p[0], p[1], {c: p[3]}) for p in candidates[c] if len(p[3]) >= 3)
+    if not proposals:
+        return None
+    proposals.sort(key=lambda p: (-p[0], abs(p[1])))
+    score, heading, selected = proposals[0]
+    # Distinct, similarly supported incoming directions do not establish a unique road.
+    if any(p[0] >= .95*score and abs(p[1]-heading) > math.radians(15) for p in proposals[1:]):
+        return {}
+    # A T's first transverse cone may share its corner with an established incoming row.
+    # Admit that shared support only with a compatible pair of incoming boundaries; the
+    # coherent-curve guard above still preserves ordinary bends. This changes membership,
+    # not junction admission, which separately requires current lidar exit evidence.
+    return selected if _transverse_segment(rows, selected, heading, tolerance, shared_corner=len(selected) == 2) else None
+
+
+def _transverse_segment(rows, selected, heading, tolerance, *, shared_corner=False):
+    """Whether unused cones, optionally sharing a paired-row corner, support a transverse arm."""
+    for colour, row in rows.items():
+        ids = {id(p) for p in selected.get(colour, ())}
+        other = np.array(sorted(((p.pos.x, p.pos.y) for p in row if id(p) not in ids),
+                                key=lambda p: (p[0]**2+p[1]**2, *p))).reshape(-1, 2)
+        unused_count = len(other)
+        if shared_corner and unused_count:
+            corners = sorted(((p.pos.x, p.pos.y) for p in row if id(p) in ids),
+                             key=lambda p: (p[0]**2+p[1]**2, *p))[:MAX_BRANCH_ANCHORS]
+            other = np.vstack((other[:MAX_BRANCH_ANCHORS], np.asarray(corners).reshape(-1, 2)))
+        for i in range(min(unused_count, MAX_BRANCH_ANCHORS)):
+            for j in range(i+1, len(other) if shared_corner else min(len(other), MAX_BRANCH_ANCHORS)):
+                delta = other[j]-other[i]
+                length = np.linalg.norm(delta)
+                if length < MIN_DIRECTION_SPAN_M:
+                    continue
+                direction = math.atan2(delta[1], delta[0])
+                if abs(math.cos(direction-heading)) > .5:
+                    continue
+                normal = np.array((-delta[1], delta[0]))/length
+                if np.count_nonzero(np.abs((other-other[i]) @ normal) <= tolerance) >= 2:
+                    return True
+    return False
 
 
 def _fit_concentric_edges(

@@ -115,8 +115,11 @@ class MarkerReader:
         if sighting is None or sighting.steps != self.config.confirm_steps:
             return None
         command = self.commands[sighting.marker_id]
+        intersection = memory.data.intersection
+        if intersection is not None and intersection.phase in ("turn", "exit", "stopped"):
+            return None  # A new sighting cannot change or rearm a committed manoeuvre.
         if command.lane_side is None:
-            memory.command_intersection(command)
+            memory.command_intersection(command, observations.policy.policy_elapsed_s-float(observations.fiducials.sensor_age))
             _LOGGER.info("Marker %d: %s at the next intersection", sighting.marker_id, command.name)
         else:
             _LOGGER.info("Marker %d: %s, lane side %s", sighting.marker_id, command.name, command.lane_side)

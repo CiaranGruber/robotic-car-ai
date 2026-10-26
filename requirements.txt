@@ -3,6 +3,7 @@
 # dreamgym~=0.2.2
 
 numpy
+opencv-contrib-python-headless>=4.7  # Local ArUco marker generation.
 scipy
 pytest
 matplotlib  # Offline evaluation plots and scenario rendering.

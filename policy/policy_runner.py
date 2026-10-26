@@ -6,14 +6,16 @@ import math
 from policy.action_policy.avoidance import AvoidanceConfig, LaneAvoidance
 from policy.action_policy.lane_path import LanePath
 from policy.action_policy.mpc import MpcConfig
+from policy.action_policy.intersection import IntersectionConfig, IntersectionNavigator
 from policy.action_policy.open_space import OpenSpaceConfig, OpenSpacePolicy
 from policy.action_policy.policy import MpcPolicy
 from policy.action_policy.reference import rotate_cones
 from policy.cone_filter.cone_filter import ConeFilterConfig, filter_cones, remove_implausible_cones
 from policy.control.control import CarController, ControlConfig
 from policy.input_output import CarActions, CarObservations, ConeBatch
-from policy.lane_detection.lane_detection import LaneDetectionConfig, LaneDetector
+from policy.lane_detection.lane_detection import LaneDetectionConfig, LaneDetector, detect_lanes
 from policy.lane_detection.lanes import LaneDetection
+from policy.lane_detection.selection import SelectedIntersectionLane
 from policy.markers.commands import MarkerCommand
 from policy.markers.markers import MarkerConfig, MarkerReader
 from policy.memory import CarMemory
@@ -35,7 +37,8 @@ class MovementPolicy:
                  open_space_config: OpenSpaceConfig = OpenSpaceConfig(), action_policy: str = "mpc",
                  lane_detection_config: LaneDetectionConfig = LaneDetectionConfig(),
                  obstacle_detection_config: ObstacleDetectionConfig = ObstacleDetectionConfig(),
-                 avoidance_config: AvoidanceConfig = AvoidanceConfig(), marker_config: MarkerConfig = MarkerConfig()):
+                 avoidance_config: AvoidanceConfig = AvoidanceConfig(), marker_config: MarkerConfig = MarkerConfig(),
+                 intersection_config: IntersectionConfig = IntersectionConfig()):
         """
         :param mpc_config: The MPC settings, from the mpc parameters in config/ai4r_policy.yaml.
         :param cone_filter_config: The cone filter settings, from the cone_filter parameters in
@@ -88,6 +91,7 @@ class MovementPolicy:
         self.cone_filter_config = cone_filter_config
         self.action_policy_name = action_policy
         self.lane_detector = LaneDetector(lane_detection_config)
+        self.initial_lane_detection_config = lane_detection_config
         self.obstacle_detection_config = obstacle_detection_config
         self.action_policy = MpcPolicy(mpc_config)
         self.avoidance = LaneAvoidance(avoidance_config, obstacle_detection_config.car_front_m, max_left, max_right,
@@ -95,6 +99,7 @@ class MovementPolicy:
         self.open_space_policy = OpenSpacePolicy(open_space_config, control_config.positive_steering_turns_left)
         self.car_controller = CarController(control_config)
         self.markers = MarkerReader(marker_config)
+        self.intersections = IntersectionNavigator(intersection_config, mpc_config, obstacle_detection_config, avoidance_config)
         self.marker_command: MarkerCommand | None = None
         """The command a marker gave in the latest step, or None."""
         self.intersection_command: MarkerCommand | None = None
@@ -104,6 +109,8 @@ class MovementPolicy:
         cones."""
         self.lanes: LaneDetection | None = None
         """The lane detected in the latest step, or None in the open-space policy."""
+        self.selected_lane: SelectedIntersectionLane | None = None
+        """Active ArUco-selected junction centre path used by control, separate from measured cone edges."""
         self.obstacles: ObstacleDetection | None = None
         """The lidar obstacle observation of the latest step, with a straight corridor ahead of the car, or None
         without fresh Cartesian lidar points."""
@@ -130,6 +137,7 @@ class MovementPolicy:
         if observations.policy.is_first_policy_step:
             self.action_policy.reset()
             memory.start_marker_run()
+            self.lane_detector.config = self.initial_lane_detection_config
         # Follow the nearest command marker: keep to its side of the lane until another side marker, or remember the
         # next intersection's turn
         self.marker_command = self.markers.step(observations, memory)
@@ -146,9 +154,34 @@ class MovementPolicy:
             observations = dataclasses.replace(observations, cones=ConeBatch(
                 rotate_cones(cones, yaw_offset_rad), cones.sensor_age, cones.acquisition_to_publish_latency_s))
         self.cones = observations.cones
+        self.selected_lane = None
+        previous_intersection = memory.data.intersection
+        if previous_intersection is not None and previous_intersection.phase == "complete":
+            self.lane_detector.config = dataclasses.replace(self.lane_detector.config, left_colour="AUTO")
         # Detect the lane edges, centre line and where the car is in the lane
         lanes = self.lane_detector.detect(observations)
         self.lanes = lanes
+        instructions = self.intersections.step(observations, lanes, memory, self.action_policy)
+        self.selected_lane = self.intersections.selected_lane
+        intersection = memory.data.intersection
+        if instructions is not None:
+            self.intersection_command = intersection.command
+            self.obstacles = detect_obstacles(observations, self.obstacle_detection_config)
+            self.lane_obstacles, self.lane_path, self.obstacle_distance_m = None, None, None
+            actions = self.car_controller.step(observations, instructions)
+            tracking = self.action_policy.lane_state
+            if self.selected_lane is not None and tracking is not None:
+                actions = dataclasses.replace(actions, debug1=tracking.lateral_error_m, debug2=tracking.heading_error_rad)
+            return dataclasses.replace(actions, camera_pan_action=0.0)
+        if (intersection is not None and intersection.phase == "complete"
+                and self.lane_detector.config.left_colour != "AUTO"):
+            # The right exit reverses the old colour-side convention. Keep the same lane fitting
+            # algorithm but establish the observed sides in the new lane.
+            self.lane_detector.config = dataclasses.replace(self.lane_detector.config, left_colour="AUTO")
+            # A transition may need a new side assignment, but must not update remembered
+            # width twice from the same camera batch.
+            lanes = detect_lanes(observations, self.lane_detector.config, self.lane_detector.lane_width_m)
+            self.lanes = lanes
         # Find the obstacles: inside the lane when there is one, otherwise in a straight corridor ahead of the car
         self.obstacles = detect_obstacles(observations, self.obstacle_detection_config)
         self.lane_obstacles = detect_lane_obstacles(observations, lanes, self.obstacle_detection_config)

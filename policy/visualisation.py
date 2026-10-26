@@ -5,7 +5,8 @@ This file draws what the movement policy saw and decided at one policy step, as 
 body frame (base_link): +x forwards, +y left, metres. It has no ROS or Foxglove types, so policy_node can publish the
 shapes live as ROS markers and scripts/mcap_export.py can write them to an MCAP file, and both show the same thing.
 
-The shapes describe the moment each sensor sample was taken; the car has moved since by its sensor age.
+Observed cones/edges describe sensor acquisition time. The active selected junction reference and
+controller prediction use the estimated current body pose, and are labelled separately from those measurements.
 """
 from __future__ import annotations
 
@@ -43,12 +44,13 @@ LINE_WIDTH_M = 0.03
 LINE_STEP_M = 0.1
 """Distance in metres along a drawn line between its points."""
 
-LAYERS = ("cones/detected", "cones/used", "lane", "obstacles", "plan/avoidance", "plan/mpc", "fiducials", "car")
+LAYERS = ("cones/detected", "cones/used", "lane/observed", "lane", "obstacles", "plan/avoidance", "plan/mpc", "fiducials", "car")
 """The layers of a drawing, in drawing order:
 
 - cones/detected: every detected cone, small and red, under cones/used.
 - cones/used: the cones the lane detection used, after the cone filter and camera yaw correction, in their colour.
-- lane: the left (blue) and right (yellow) edges, and the centre line (green) up to where the lane is visible.
+- lane/observed: the acquisition-time measured edges/arc while a selected intersection path is active, faded.
+- lane: the active current-body selected intersection centre path, otherwise the measured lane edges/centre.
 - obstacles: objects inside the lane (orange outlines), or the corridor ahead without a lane (grey) and the nearest
   return in it.
 - plan/avoidance: the line across the lane planned past the obstacles (magenta). Away from obstacles it is the usual
@@ -129,10 +131,13 @@ class StepDrawer:
                                              for cone in observations.cones or []]),
             "cones/used": Layer(spheres=[Sphere(cone.pos.x, cone.pos.y, 0.08, CONE_COLOURS[cone.colour])
                                          for cone in policy.cones or []]),
-            "lane": Layer(lines=_lane_lines(policy.lanes)),
+            "lane/observed": Layer(lines=[Line(line.points, (*line.colour[:3], .25), line.closed)
+                                           for line in _lane_lines(policy.lanes)] if policy.selected_lane is not None else []),
+            "lane": Layer(lines=[Line(list(policy.selected_lane.points), COLOURS["centre"])]
+                          if policy.selected_lane is not None else _lane_lines(policy.lanes)),
             "obstacles": _obstacle_layer(policy),
             "plan/avoidance": Layer(lines=_avoidance_lines(policy)),
-            "plan/mpc": Layer(lines=_mpc_lines(policy) if solved else []),
+            "plan/mpc": Layer(lines=_mpc_lines(policy) if solved or policy.selected_lane is not None else []),
             "fiducials": _fiducial_layer(observations),
             "car": _car_layer(policy, observations, actions),
         }
@@ -146,6 +151,10 @@ def summary(policy: MovementPolicy, observations: CarObservations, actions: CarA
     lane = "open space" if lanes is None else lanes.status.name
     if lanes is not None and lanes.has_lane:
         lane += f"  lateral {lanes.lateral_error_m:+.2f} m  heading {math.degrees(lanes.heading_error_rad):+.1f} deg"
+    if policy.selected_lane is not None:
+        selected = policy.selected_lane
+        lane += (f"  selected {selected.command.name} {selected.phase}"
+                 f"  route evidence {selected.evidence_age_s:.1f} s")
     obstacle = policy.obstacle_distance_m
     speed = observations.car.wheel_speed
     intersection = policy.intersection_command
@@ -236,12 +245,14 @@ def _mpc_lines(policy: MovementPolicy) -> list[Line]:
     :return: The car's path over the MPC horizon, from base_link, following the solved curvature of each step.
     """
     mpc = policy.action_policy
-    if mpc.plan_curvatures_per_m is None:
+    selected = policy.selected_lane
+    curvatures = selected.mpc_curvatures_per_m if selected is not None else mpc.plan_curvatures_per_m
+    if curvatures is None:
         return []
-    step_m = mpc.plan_step_distance_m
+    step_m = selected.prediction_step_m if selected is not None else mpc.plan_step_distance_m
     arc = LaneArc(0.0, 0.0, 0.0, 0.0)
     points = [(0.0, 0.0)]
-    for curvature in mpc.plan_curvatures_per_m:
+    for curvature in curvatures:
         arc = LaneArc(arc.x, arc.y, arc.heading_rad, float(curvature))
         points += [arc.point_at(s_m) for s_m in _along(0.0, step_m)[1:]]
         x, y = arc.point_at(step_m)

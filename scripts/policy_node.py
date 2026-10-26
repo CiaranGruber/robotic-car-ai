@@ -81,6 +81,7 @@ from policy.data_logging.data_logging import (
 from policy.input_output import ConeColour, convert_observations, convert_actions
 from policy.lane_detection.lane_detection import LaneDetectionConfig
 from policy.markers.markers import MarkerConfig
+from policy.action_policy.intersection import IntersectionConfig
 from policy.memory import CarMemory
 from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
 from policy.policy_runner import MovementPolicy
@@ -309,7 +310,7 @@ class PolicyNode(Node):
                 ("mpc", MpcConfig), ("open_space", OpenSpaceConfig), ("cone_filter", ConeFilterConfig),
                 ("control", ControlConfig), ("lane_detection", LaneDetectionConfig),
                 ("obstacle_detection", ObstacleDetectionConfig), ("avoidance", AvoidanceConfig),
-                ("markers", MarkerConfig)):
+                ("markers", MarkerConfig), ("intersection", IntersectionConfig)):
             defaults = asdict(config_type())
             for name, default in defaults.items():
                 self.declare_parameter(f"{prefix}.{name}", default, ParameterDescriptor(read_only=True))
@@ -319,7 +320,11 @@ class PolicyNode(Node):
             settings["mpc"], settings["cone_filter"], settings["control"], settings["open_space"],
             self.get_parameter("action_policy").value, lane_detection_config=settings["lane_detection"],
             obstacle_detection_config=settings["obstacle_detection"], avoidance_config=settings["avoidance"],
-            marker_config=settings["markers"])
+            marker_config=settings["markers"], intersection_config=settings["intersection"])
+        if settings["intersection"].enabled and not {"cone_detections", "wheel_speed", "imu_angular_velocity", "lidar_cartesian"}.issubset(self.required_sensors):
+            raise ValueError("Enabled intersections require cones, wheel speed, gyro and Cartesian lidar in required_sensors")
+        if settings["intersection"].enabled and self.cone_empty_timeout_s < settings["intersection"].camera_empty_hold_s:
+            raise ValueError("cone_empty_timeout_s must cover intersection.camera_empty_hold_s when intersections are enabled")
         # Every parameter value this node runs with, saved beside each drive data log
         # (<stem>_config.json). Settings are startup-only, so reading them once is enough.
         self.parameter_values = {
