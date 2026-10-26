@@ -20,6 +20,10 @@ from policy.control.actions import DriveCommand, Instruction
 from policy.input_output import CarActions, CarObservations, default_actions
 
 
+STANDSTILL_M_PER_S = 0.05
+"""Wheel speed below which the car counts as standing still, in m/s, for the speed integral."""
+
+
 @dataclass(frozen=True)
 class ControlConfig:
     """Settings for the control module, loaded from the control parameters in config/ai4r_policy.yaml.
@@ -186,10 +190,12 @@ class SpeedController:
             # Anti-windup: do not integrate further into a limit
             pushing_high = unclipped >= config.max_drive_action and error > 0.0
             pushing_low = unclipped <= 0.0 and error < 0.0
-            # The band only holds the integral back while the car is below the target (accelerating). Above it,
-            # the integral always pulls the drive down, or a feedforward offset set too high leaves the car overspeed
-            # by more than the band with only the P term to correct it.
-            in_band = error < 0.0 or error < config.speed_i_band
+            # The band only holds the integral back while the car is moving up to the target (accelerating). Above
+            # it, the integral always pulls the drive down, or a feedforward offset set too high leaves the car
+            # overspeed by more than the band with only the P term to correct it. While the wheels stand still it
+            # always pushes the drive up, or a feedforward offset set too low never starts the car.
+            standing = wheel_speed_m_per_s < STANDSTILL_M_PER_S
+            in_band = error < config.speed_i_band or standing
             if dt > 0.0 and in_band and not (pushing_high or pushing_low):
                 self.integral = max(-config.speed_i_max,
                                     min(config.speed_i_max, self.integral + config.speed_ki * error * dt))

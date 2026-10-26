@@ -484,9 +484,10 @@
       # Speed map: speed = speed_ff_gain * (drive - speed_ff_offset).
       # Breakaway drive, double in [0, 1). Rises as the motor battery drains.
       # Car 20: 0.48 (fit 0.475). Car 22 fits gave 0.17-0.32 (car 22: 0.25).
-      # Car 20 on 26 Oct: 0.25 still reached 0.87 m/s for a 0.5 target, so 0.15
-      # is an estimate until the breakaway is measured again.
-      speed_ff_offset: 0.15
+      # 26 Oct: 0.15 gave drive 0.28 at a 0.5 target, which cannot start car 20
+      # (it needs about 0.5-0.6); back to the 5 Oct fit. The integral now pulls
+      # an overspeed down.
+      speed_ff_offset: 0.48
       # Speed map slope, m/s per unit drive, positive double. Car 20: 9.18.
       # Car 22 fits gave 7.65-24.7 (car 22: 12.0).
       speed_ff_gain: 9.18

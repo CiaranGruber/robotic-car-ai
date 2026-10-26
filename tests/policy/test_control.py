@@ -67,7 +67,21 @@ def test_integral_removes_steady_error_and_stays_bounded():
 
 def test_integral_only_near_target():
     controller = SpeedController(CONFIG)
-    controller.step(1.0, 0.0, 0.02)  # Error 1.0 m/s is outside speed_i_band
+    controller.step(1.0, 0.3, 0.02)  # Error 0.7 m/s while moving is outside speed_i_band
+    assert controller.integral == 0.0
+
+
+def test_integral_starts_a_car_whose_feedforward_is_too_low():
+    # 26 Oct: with speed_ff_offset 0.15 the wheels never turned for a 0.5 target. The error from standstill is outside
+    # speed_i_band, but the integral must still raise the drive until the car moves.
+    controller = SpeedController(CONFIG)
+    first = controller.step(0.5, 0.0, 0.1)
+    for _ in range(20):
+        controller.step(0.5, 0.0, 0.1)
+    assert controller.integral > 0.0
+    assert controller.step(0.5, 0.0, 0.1) > first
+    controller.reset()
+    controller.step(0.5, 0.2, 0.1)  # Moving and still outside the band while accelerating: no windup
     assert controller.integral == 0.0
 
 
