@@ -378,6 +378,19 @@ def test_measured_speed_controls_plan_progress():
     assert result.curvature_per_m == pytest.approx(plan[1])
 
 
+def test_standing_car_keeps_its_plan_through_a_short_lane_dropout():
+    # 26 Oct, car 20: the car stood still at the start, so the plan had zero length, and the first frame without a
+    # lane stopped it for the whole run instead of after lane_loss_timeout_s
+    policy = MpcPolicy(MpcConfig())
+    observations = observe(lane_cones(0.2, 0.0), first_step=True)
+    observations = dataclasses.replace(observations, car=dataclasses.replace(observations.car, wheel_speed=0.0))
+    policy.run_policy(observations, None)
+    assert policy.plan_step_distance_m > 0.0
+    lost = dataclasses.replace(observations, cones=None, policy=PolicyState(0.1, 0.1, False))
+    assert policy.run_policy(lost, None)[0].speed_m_per_s > 0.0
+    assert not policy.stopped_for_lane_loss
+
+
 def test_linalg_failure_returns_a_failed_plan(monkeypatch):
     def fail(*args, **kwargs):
         raise np.linalg.LinAlgError("synthetic failure")

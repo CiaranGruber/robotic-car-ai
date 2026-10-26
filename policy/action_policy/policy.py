@@ -267,7 +267,10 @@ class MpcPolicy:
         self.last_solve_time_s = solution.solve_time_s
         if solution.converged:
             curvature = float(solution.curvatures_per_m[0])
-            self.memory.plan_mpc(solution.curvatures_per_m, prediction_speed * self.config.step_s)
+            # Space the plan at no less than the target speed. Spaced at the measured speed, a car standing at the
+            # start gets a plan of zero length, and one frame without a lane then stops it for the whole run.
+            plan_speed = max(prediction_speed, self.config.target_speed_m_per_s)
+            self.memory.plan_mpc(solution.curvatures_per_m, plan_speed * self.config.step_s)
         else:
             # Never continue at target speed on an unvalidated optimisation result.
             self.fallback_count += 1
