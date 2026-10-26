@@ -37,12 +37,14 @@ class ControlConfig:
     """Slope of the speed map in m/s per unit of drive action. Must be positive."""
     speed_kp: float = 0.15
     """Proportional gain in drive action per m/s of speed error. Must be at least 0."""
-    speed_ki: float = 0.04
+    speed_ki: float = 0.2
     """Integral gain in drive action per metre of accumulated speed error. Must be at least 0; 0.0 gives FF + P."""
-    speed_i_max: float = 0.2
+    speed_i_max: float = 0.3
     """Largest magnitude of the integral term in drive action. Must be at least 0."""
     speed_i_band: float = 0.2
-    """The integral only accumulates while |speed error| is below this, in m/s. Must be positive.
+    """While the car is below the target, the integral only accumulates while the speed error is below this, in m/s.
+    Must be positive. Above the target it always accumulates, so an overspeed from a feedforward set too high is
+    corrected.
 
     This stops the large error while accelerating from winding up an overshoot.
     """
@@ -184,7 +186,11 @@ class SpeedController:
             # Anti-windup: do not integrate further into a limit
             pushing_high = unclipped >= config.max_drive_action and error > 0.0
             pushing_low = unclipped <= 0.0 and error < 0.0
-            if dt > 0.0 and abs(error) < config.speed_i_band and not (pushing_high or pushing_low):
+            # The band only holds the integral back while the car is below the target (accelerating). Above it,
+            # the integral always pulls the drive down, or a feedforward offset set too high leaves the car overspeed
+            # by more than the band with only the P term to correct it.
+            in_band = error < 0.0 or error < config.speed_i_band
+            if dt > 0.0 and in_band and not (pushing_high or pushing_low):
                 self.integral = max(-config.speed_i_max,
                                     min(config.speed_i_max, self.integral + config.speed_ki * error * dt))
             drive += config.speed_kp * error + self.integral

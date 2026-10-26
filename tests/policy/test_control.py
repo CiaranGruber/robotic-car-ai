@@ -53,13 +53,14 @@ def test_feedback_pushes_towards_target_and_is_limited():
 
 
 def test_integral_removes_steady_error_and_stays_bounded():
-    controller = SpeedController(CONFIG)
+    # A lower speed_ff_offset keeps the drive below max_drive_action, so anti-windup does not stop the integral
+    controller = SpeedController(ControlConfig(speed_ff_offset=0.3))
     for _ in range(10000):
         controller.step(0.45, 0.35, 0.02)  # Stays below max_drive_action, so anti-windup does not stop it
     assert controller.integral == pytest.approx(CONFIG.speed_i_max)
     for _ in range(10000):
-        controller.step(0.6, 0.5, 0.02)  # Reaches max_drive_action, so anti-windup holds the integral
-    assert controller.step(0.6, 0.5, 0.02) == CONFIG.max_drive_action
+        controller.step(1.5, 1.4, 0.02)  # Reaches max_drive_action, so anti-windup holds the integral
+    assert controller.step(1.5, 1.4, 0.02) == CONFIG.max_drive_action
     controller.step(0.0, 0.5, 0.02)
     assert controller.integral == 0.0
 
@@ -68,6 +69,17 @@ def test_integral_only_near_target():
     controller = SpeedController(CONFIG)
     controller.step(1.0, 0.0, 0.02)  # Error 1.0 m/s is outside speed_i_band
     assert controller.integral == 0.0
+
+
+def test_integral_pulls_a_large_overspeed_down():
+    # 26 Oct: with speed_ff_offset too high the car held 0.87 m/s for a 0.5 target. That overspeed is outside
+    # speed_i_band, but the integral must still accumulate, or only the P term corrects it.
+    controller = SpeedController(CONFIG)
+    first = controller.step(0.5, 0.87, 0.1)
+    assert controller.integral < 0.0
+    for _ in range(100):
+        controller.step(0.5, 0.87, 0.1)
+    assert controller.step(0.5, 0.87, 0.1) < first
 
 
 def test_missing_wheel_speed_stops_when_feedback_is_needed():

@@ -494,10 +494,14 @@
       # Doubles >= 0; speed_ki: 0.0 gives feedforward + P only. Car 20 at
       # 0.5 m/s: 15% overshoot, about 0.01 m/s steady error. Car 22: 0.2 and
       # 0.15. Watch for speed oscillation: the real wheel speed lags at low speed.
+      # 26 Oct: ki 0.04 took over 15 s to remove a feedforward error (a 0.5
+      # target ran at 0.87 m/s). 0.2 with speed_i_max 0.3 settles within about
+      # 5-7 s in simulation (car 20 model) for a speed_ff_offset up to 0.28 too
+      # high; 0.3 undershoots. Check on the car.
       speed_kp: 0.15
-      speed_ki: 0.04
+      speed_ki: 0.2
       # Largest integral contribution, drive units, double >= 0.
-      speed_i_max: 0.2
+      speed_i_max: 0.3
       # Integrate only while |target - speed| < this, m/s, positive double.
       # Car 20: 0.2 (car 22: 0.5).
       speed_i_band: 0.2
