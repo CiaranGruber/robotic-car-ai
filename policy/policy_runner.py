@@ -14,6 +14,7 @@ from policy.control.control import CarController, ControlConfig
 from policy.input_output import CarActions, CarObservations, ConeBatch
 from policy.lane_detection.lane_detection import LaneDetectionConfig, LaneDetector
 from policy.lane_detection.lanes import LaneDetection
+from policy.local_map.local_map import LocalMap, LocalMapConfig
 from policy.markers.commands import MarkerCommand
 from policy.markers.markers import MarkerConfig, MarkerReader
 from policy.memory import CarMemory
@@ -35,11 +36,13 @@ class MovementPolicy:
                  open_space_config: OpenSpaceConfig = OpenSpaceConfig(), action_policy: str = "mpc",
                  lane_detection_config: LaneDetectionConfig = LaneDetectionConfig(),
                  obstacle_detection_config: ObstacleDetectionConfig = ObstacleDetectionConfig(),
-                 avoidance_config: AvoidanceConfig = AvoidanceConfig(), marker_config: MarkerConfig = MarkerConfig()):
+                 avoidance_config: AvoidanceConfig = AvoidanceConfig(),
+                 local_map_config: LocalMapConfig = LocalMapConfig(), marker_config: MarkerConfig = MarkerConfig()):
         """
         :param mpc_config: The MPC settings, from the mpc parameters in config/ai4r_policy.yaml.
         :param cone_filter_config: The cone filter settings, from the cone_filter parameters in
-            config/ai4r_policy.yaml.
+            config/ai4r_policy.yaml. A ValueError is raised when max_distance_m limits the cones to no farther than
+            mpc.lane_end_distance_m, so every lost lane would look like the end of the rows.
         :param control_config: The control settings, from the control parameters in config/ai4r_policy.yaml.
         :param open_space_config: The open-space settings, from the open_space parameters in config/ai4r_policy.yaml.
         :param action_policy: Which policy chooses the instructions, from the action_policy parameter:
@@ -55,12 +58,18 @@ class MovementPolicy:
         :param avoidance_config: The settings for driving around obstacles in the lane, from the avoidance
             parameters in config/ai4r_policy.yaml. A ValueError is raised when the line that passes an obstacle would
             still count as blocked: half the car's width plus obstacle_clearance_m below corridor_half_width_m, or when
-            max_ramp_curvature_per_m is sharper than the MPC's curvature limits.
+            max_ramp_curvature_per_m or max_return_curvature_per_m is sharper than the MPC's curvature limits.
+        :param local_map_config: The settings for remembering the cones around the car, from the local_map parameters
+            in config/ai4r_policy.yaml.
         :param marker_config: Which ArUco markers give which commands, from the markers parameters in
             config/ai4r_policy.yaml.
         """
         if action_policy not in ACTION_POLICIES:
             raise ValueError(f"action_policy must be one of {ACTION_POLICIES}, not {action_policy!r}")
+        if 0.0 < cone_filter_config.max_distance_m <= mpc_config.lane_end_distance_m:
+            raise ValueError(f"cone_filter.max_distance_m ({cone_filter_config.max_distance_m}) must be above "
+                             f"mpc.lane_end_distance_m ({mpc_config.lane_end_distance_m}), or every lost lane would "
+                             f"look like the end of the cone rows")
         stopping_m = (mpc_config.obstacle_stop_distance_per_speed_s * mpc_config.target_speed_m_per_s
                       + mpc_config.obstacle_stop_margin_m)
         searched_m = min(obstacle_detection_config.corridor_length_m, obstacle_detection_config.lane_length_m)
@@ -82,11 +91,13 @@ class MovementPolicy:
                              f"of passing an obstacle")
         max_left = mpc_config.max_curvature_per_m
         max_right = mpc_config.max_right_curvature_per_m or mpc_config.max_curvature_per_m
-        if avoidance_config.enabled and avoidance_config.max_ramp_curvature_per_m > min(max_left, max_right):
-            raise ValueError(f"avoidance.max_ramp_curvature_per_m ({avoidance_config.max_ramp_curvature_per_m}) is "
-                             f"sharper than the car can turn (mpc.max_curvature_per_m {max_left}, right {max_right})")
+        for name in ("max_ramp_curvature_per_m", "max_return_curvature_per_m"):
+            if avoidance_config.enabled and getattr(avoidance_config, name) > min(max_left, max_right):
+                raise ValueError(f"avoidance.{name} ({getattr(avoidance_config, name)}) is sharper than the car can "
+                                 f"turn (mpc.max_curvature_per_m {max_left}, right {max_right})")
         self.cone_filter_config = cone_filter_config
         self.action_policy_name = action_policy
+        self.local_map = LocalMap(local_map_config)
         self.lane_detector = LaneDetector(lane_detection_config)
         self.obstacle_detection_config = obstacle_detection_config
         self.action_policy = MpcPolicy(mpc_config)
@@ -101,7 +112,7 @@ class MovementPolicy:
         """What to do at the next intersection after the latest step (Memory.intersection_command), or None."""
         self.cones: ConeBatch | None = None
         """The cones the latest step used, after the cone filter and the camera yaw correction, or None without fresh
-        cones."""
+        cones. The remembered cones lane detection also used are self.local_map.recalled."""
         self.lanes: LaneDetection | None = None
         """The lane detected in the latest step, or None in the open-space policy."""
         self.obstacles: ObstacleDetection | None = None
@@ -146,8 +157,12 @@ class MovementPolicy:
             observations = dataclasses.replace(observations, cones=ConeBatch(
                 rotate_cones(cones, yaw_offset_rad), cones.sensor_age, cones.acquisition_to_publish_latency_s))
         self.cones = observations.cones
+        # Move the car's pose by the previous step's command and the wheel speed, remember this step's cones, and
+        # recall the remembered cones it does not show: beside the car, or hidden behind an obstacle
+        recalled = self.local_map.step(observations, memory, self.action_policy.previous_speed_m_per_s,
+                                       self.action_policy.previous_curvature_per_m)
         # Detect the lane edges, centre line and where the car is in the lane
-        lanes = self.lane_detector.detect(observations)
+        lanes = self.lane_detector.detect(observations, recalled)
         self.lanes = lanes
         # Find the obstacles: inside the lane when there is one, otherwise in a straight corridor ahead of the car
         self.obstacles = detect_obstacles(observations, self.obstacle_detection_config)
@@ -156,7 +171,7 @@ class MovementPolicy:
         # The MPC follows it over its horizon, and the obstacle check follows it at each obstacle.
         usual_m = (self.action_policy.usual_offset_m(lanes.lane_width_m, lanes.path_curvature_per_m)
                    if lanes is not None and lanes.has_lane else None)
-        self.lane_path = self.avoidance.step(observations, lanes, self.lane_obstacles, usual_m)
+        self.lane_path = self.avoidance.step(observations, lanes, self.lane_obstacles, usual_m, memory)
         self.action_policy.avoidance_path = (
             self.lane_path if self.lane_path is not None and self.lane_path.segments else None)
         self.obstacle_distance_m = self._obstacle_distance_m(lanes)

@@ -211,6 +211,51 @@ def test_keeps_clear_of_the_obstacle_until_the_rear_has_passed_it():
     assert offsets[-1] == pytest.approx(0.0)
 
 
+@pytest.mark.parametrize("right_m, left_m", [(-0.30, -0.10), (0.10, 0.30)])
+def test_moves_back_before_the_rear_has_passed_a_thin_obstacle_when_the_body_keeps_clear(right_m, left_m):
+    item = obstacle(right_m, left_m, 2.5, 2.5)
+    # The car's origin where its front is pass_distance_m past the obstacle
+    front_past_m = item.far_distance_m + CAR.pass_distance_m
+    waiting = plan(LaneAvoidance(CAR, CAR_FRONT_M), [item])
+    assert waiting.segments[-1].start_m == pytest.approx(front_past_m + CAR_LENGTH_M)
+    early = LaneAvoidance(AvoidanceConfig(return_after_m=0.0), CAR_FRONT_M)
+    assert plan(early, [item]).segments[-1].start_m == pytest.approx(front_past_m)
+    # Turning back while the rear is still beside it, the body keeps the clearance
+    lines = approach(early, item)
+    for driven_m, path in lines:
+        if item.distance_m <= driven_m <= item.far_distance_m + CAR_LENGTH_M:
+            now = obstacle(item.right_m, item.left_m, item.distance_m - driven_m, item.far_distance_m - driven_m)
+            assert not early.in_way(path, now, CAR.obstacle_clearance_m, CAR.obstacle_clearance_m)
+    assert lines[-1][1].offset_at(0.0) == pytest.approx(0.0)
+
+
+def test_without_room_to_spare_the_move_back_waits_until_the_body_keeps_clear():
+    item = obstacle(-0.30, -0.10, 2.5, 2.5)
+    # clearance_weight 0 passes exactly obstacle_clearance_m from it, so turning back at once would bring the body
+    # nearer
+    avoidance = LaneAvoidance(AvoidanceConfig(return_after_m=0.0, clearance_weight=0.0), CAR_FRONT_M)
+    path = plan(avoidance, [item])
+    front_past_m = item.far_distance_m + CAR.pass_distance_m
+    assert front_past_m < path.segments[-1].start_m < front_past_m + CAR_LENGTH_M
+    assert not avoidance.in_way(path, item, CAR.obstacle_clearance_m, CAR.obstacle_clearance_m)
+
+
+def test_the_move_back_may_be_sharper_than_the_move_out():
+    item = obstacle(-0.30, -0.10, 2.5, 2.5)
+    config = AvoidanceConfig(max_return_curvature_per_m=0.45)
+    path = plan(LaneAvoidance(config, CAR_FRONT_M), [item])
+    out, back = path.segments[0], path.segments[-1]
+    # peak_curvature_per_m samples the segment, so it may fall just short of the peak
+    assert out.peak_curvature_per_m() == pytest.approx(CAR.max_ramp_curvature_per_m, rel=0.01)
+    assert back.peak_curvature_per_m() == pytest.approx(config.max_return_curvature_per_m, rel=0.01)
+    assert back.end_m - back.start_m == pytest.approx(move_length_m(0.175, config.max_return_curvature_per_m))
+    # Once past, with nothing left to drive around, the line from where the car is goes back as sharply
+    lines = approach(LaneAvoidance(config, CAR_FRONT_M), item)
+    assert max(segment.peak_curvature_per_m() for _, path in lines for segment in path.segments) <= (
+        config.max_return_curvature_per_m + 1e-6)
+    assert lines[-1][1].offset_at(0.0) == pytest.approx(0.0)
+
+
 def test_the_line_does_not_jump_when_more_obstacles_come_into_view():
     avoidance = LaneAvoidance(CAR, CAR_FRONT_M)
     path = plan(avoidance, [obstacle(-0.30, -0.10, 2.5, 2.7)])
@@ -300,7 +345,9 @@ def test_moves_keep_within_the_cars_limits_on_curves(curvature_per_m, plans):
 @pytest.mark.parametrize("change", [
     {"enabled": 1}, {"car_width_m": 0.0}, {"car_rear_m": -0.1}, {"cone_radius_m": math.nan},
     {"cone_clearance_m": -0.1}, {"obstacle_clearance_m": math.inf}, {"pass_distance_m": -0.1},
-    {"max_ramp_curvature_per_m": 0.0}, {"deviation_weight": -1.0}, {"smoothness_weight": math.nan},
+    {"return_after_m": -0.1}, {"return_after_m": math.nan},
+    {"max_ramp_curvature_per_m": 0.0}, {"max_return_curvature_per_m": 0.0}, {"max_return_curvature_per_m": math.inf},
+    {"deviation_weight": -1.0}, {"smoothness_weight": math.nan},
     {"clearance_weight": math.inf}, {"change_weight": -0.1},
 ])
 def test_invalid_settings_are_rejected(change):
@@ -315,12 +362,13 @@ def test_passing_line_must_clear_the_obstacle_check():
                        avoidance_config=AvoidanceConfig(obstacle_clearance_m=0.05))
 
 
-def test_moves_must_be_within_the_cars_curvature_limits():
+@pytest.mark.parametrize("name", ["max_ramp_curvature_per_m", "max_return_curvature_per_m"])
+def test_moves_must_be_within_the_cars_curvature_limits(name):
     with pytest.raises(ValueError):
         MovementPolicy(MpcConfig(max_curvature_per_m=0.48), ConeFilterConfig(), ControlConfig(),
-                       avoidance_config=AvoidanceConfig(max_ramp_curvature_per_m=0.5))
+                       avoidance_config=AvoidanceConfig(**{name: 0.5}))
     MovementPolicy(MpcConfig(max_curvature_per_m=0.48), ConeFilterConfig(), ControlConfig(),
-                   avoidance_config=AvoidanceConfig(enabled=False, max_ramp_curvature_per_m=0.5))
+                   avoidance_config=AvoidanceConfig(enabled=False, **{name: 0.5}))
 
 
 # ---------------------------------------------------------------------------------------------------------------

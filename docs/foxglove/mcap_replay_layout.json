@@ -20,9 +20,11 @@
       "topics": {
         "/cones/detected": {"visible": true},
         "/cones/used": {"visible": true},
+        "/memory/cones": {"visible": true},
         "/lidar/points": {"visible": true, "pointSize": 3, "pointShape": "circle", "colorMode": "flat", "flatColor": "#9a9a9aff"},
         "/lane": {"visible": true},
         "/obstacles": {"visible": true},
+        "/memory/obstacles": {"visible": true},
         "/plan/avoidance": {"visible": true},
         "/plan/mpc": {"visible": true},
         "/fiducials": {"visible": true},

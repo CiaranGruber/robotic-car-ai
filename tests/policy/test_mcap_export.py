@@ -12,8 +12,8 @@ from policy.memory import CarMemory
 from scenarios.scenario_wrapper import Scenario, ScenarioType
 from scripts import mcap_export
 
-TOPICS = {"/cones/detected", "/cones/used", "/lidar/points", "/lane", "/obstacles", "/plan/avoidance", "/plan/mpc",
-          "/fiducials", "/car", "/policy/state"}
+TOPICS = {"/cones/detected", "/cones/used", "/memory/cones", "/lidar/points", "/lane", "/obstacles",
+          "/memory/obstacles", "/plan/avoidance", "/plan/mpc", "/fiducials", "/car", "/policy/state"}
 """Every topic the export writes."""
 
 
