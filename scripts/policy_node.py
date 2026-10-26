@@ -80,12 +80,13 @@ from policy.data_logging.data_logging import (
 )
 from policy.input_output import ConeColour, convert_observations, convert_actions
 from policy.lane_detection.lane_detection import LaneDetectionConfig
+from policy.local_map.local_map import LocalMapConfig
 from policy.markers.markers import MarkerConfig
 from policy.action_policy.intersection import IntersectionConfig
 from policy.memory import CarMemory
 from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
 from policy.policy_runner import MovementPolicy
-from policy.visualisation import COLOURS, LINE_WIDTH_M, StepDrawer
+from policy.visualisation import COLOURS, LINE_WIDTH_M, TEXT_HEIGHT_M, StepDrawer
 
 # These values and the request/status topics match the previous AI4R policy.
 FSM_STATE_NOT_PUBLISHING_ACTIONS = 1
@@ -218,7 +219,7 @@ def visualisation_markers(layers, frame_id, stamp, lifetime_s):
         for text in layer.texts:
             marker = add(name, Marker.TEXT_VIEW_FACING, COLOURS["text"])
             marker.pose.position.x, marker.pose.position.y, marker.pose.position.z = map(float, text.position)
-            marker.scale.z = 0.08
+            marker.scale.z = TEXT_HEIGHT_M
             marker.text = text.text
     return MarkerArray(markers=markers)
 
@@ -293,7 +294,7 @@ class PolicyNode(Node):
         # floating-point number; 0 is an integer, which is a different ROS type.
 
         # Movement policy settings: see action_policy, mpc, open_space, cone_filter,
-        # control, lane_detection, obstacle_detection and avoidance in
+        # control, lane_detection, obstacle_detection, avoidance, local_map, markers and intersection in
         # ai4r_policy.yaml. MovementPolicy (policy/policy_runner.py) checks
         # action_policy and how the settings fit together. MpcConfig
         # (policy/action_policy/mpc.py), OpenSpaceConfig
@@ -302,15 +303,17 @@ class PolicyNode(Node):
         # (policy/control/control.py), LaneDetectionConfig
         # (policy/lane_detection/lane_detection.py), ObstacleDetectionConfig
         # (policy/obstacle_detection/obstacle_detection.py), AvoidanceConfig
-        # (policy/action_policy/avoidance.py) and MarkerConfig
-        # (policy/markers/markers.py) hold their defaults and check them.
+        # (policy/action_policy/avoidance.py), LocalMapConfig
+        # (policy/local_map/local_map.py) and MarkerConfig
+        # (policy/markers/markers.py), and IntersectionConfig
+        # (policy/action_policy/intersection.py) hold their defaults and check them.
         self.declare_parameter("action_policy", "mpc", ParameterDescriptor(read_only=True))
         settings = {}
         for prefix, config_type in (
                 ("mpc", MpcConfig), ("open_space", OpenSpaceConfig), ("cone_filter", ConeFilterConfig),
                 ("control", ControlConfig), ("lane_detection", LaneDetectionConfig),
                 ("obstacle_detection", ObstacleDetectionConfig), ("avoidance", AvoidanceConfig),
-                ("markers", MarkerConfig), ("intersection", IntersectionConfig)):
+                ("local_map", LocalMapConfig), ("markers", MarkerConfig), ("intersection", IntersectionConfig)):
             defaults = asdict(config_type())
             for name, default in defaults.items():
                 self.declare_parameter(f"{prefix}.{name}", default, ParameterDescriptor(read_only=True))
@@ -320,7 +323,8 @@ class PolicyNode(Node):
             settings["mpc"], settings["cone_filter"], settings["control"], settings["open_space"],
             self.get_parameter("action_policy").value, lane_detection_config=settings["lane_detection"],
             obstacle_detection_config=settings["obstacle_detection"], avoidance_config=settings["avoidance"],
-            marker_config=settings["markers"], intersection_config=settings["intersection"])
+            local_map_config=settings["local_map"], marker_config=settings["markers"],
+            intersection_config=settings["intersection"])
         if settings["intersection"].enabled and not {"cone_detections", "wheel_speed", "imu_angular_velocity", "lidar_cartesian"}.issubset(self.required_sensors):
             raise ValueError("Enabled intersections require cones, wheel speed, gyro and Cartesian lidar in required_sensors")
         if settings["intersection"].enabled and self.cone_empty_timeout_s < settings["intersection"].camera_empty_hold_s:

@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 
 from policy.input_output import CarActions, CarObservations, ConeColour
 from policy.lane_detection.lanes import LaneArc, LaneDetection
+from policy.obstacle_detection.obstacles import LaneObstacle
 from policy.policy_runner import MovementPolicy
 
 Colour = tuple[float, float, float, float]
@@ -26,17 +27,23 @@ COLOURS: dict[str, Colour] = {
     "centre": (0.2, 0.85, 0.3, 1.0),
     "detected": (0.9, 0.2, 0.2, 1.0),
     "obstacle": (1.0, 0.55, 0.1, 1.0),
+    "remembered_obstacle": (1.0, 0.55, 0.1, 0.4),
+    "remembered_cone": (0.6, 0.6, 0.6, 0.6),
     "corridor": (0.6, 0.6, 0.6, 0.8),
     "avoidance": (0.9, 0.3, 0.9, 1.0),
     "mpc": (0.2, 0.85, 0.95, 1.0),
     "fiducial": (0.7, 0.4, 1.0, 0.8),
     "car": (0.85, 0.85, 0.85, 0.35),
-    "text": (1.0, 1.0, 1.0, 1.0),
+    "text": (1.0, 1.0, 1.0, 0.6),
 }
-"""Drawing colours. The lane colours match scripts/lane_overlay_node.py."""
+"""Drawing colours. The lane colours match scripts/lane_overlay_node.py. Foxglove draws text on a black box with the
+text's opacity, so the text is see-through to keep what is under it visible."""
 
 CONE_COLOURS = {ConeColour.BLUE: COLOURS["left"], ConeColour.YELLOW: COLOURS["right"]}
 """Colour of a used cone."""
+
+RECALLED_OPACITY = 0.45
+"""Opacity of a remembered cone that lane detection used, drawn in its colour, so it stands apart from a seen one."""
 
 LINE_WIDTH_M = 0.03
 """Width of the drawn lines in metres."""
@@ -44,15 +51,28 @@ LINE_WIDTH_M = 0.03
 LINE_STEP_M = 0.1
 """Distance in metres along a drawn line between its points."""
 
-LAYERS = ("cones/detected", "cones/used", "lane/observed", "lane", "obstacles", "plan/avoidance", "plan/mpc", "fiducials", "car")
+TEXT_HEIGHT_M = 0.1
+"""Height of one line of drawn text in metres, so text grows and shrinks with the view like the other shapes."""
+
+SUMMARY_BEHIND_M = 1.0
+"""Distance in metres from the car's rear to the middle of the step's summary. The summary's lines are under 30
+characters, so it stays behind the car and off the lane ahead whichever way the view is turned."""
+
+LAYERS = ("cones/detected", "cones/used", "memory/cones", "lane/observed", "lane", "obstacles", "memory/obstacles",
+          "plan/avoidance", "plan/mpc", "fiducials", "car")
 """The layers of a drawing, in drawing order:
 
 - cones/detected: every detected cone, small and red, under cones/used.
-- cones/used: the cones the lane detection used, after the cone filter and camera yaw correction, in their colour.
+- cones/used: the cones of the batch the lane detection used, after the cone filter and camera yaw correction, in their
+  colour.
+- memory/cones: the cones the local map remembers. Those the lane detection also used, because the batch does not show
+  them (beside the car, or hidden), are in their colour but faded; the others are small and grey.
 - lane/observed: the acquisition-time measured edges/arc while a selected intersection path is active, faded.
 - lane: the active current-body selected intersection centre path, otherwise the measured lane edges/centre.
 - obstacles: objects inside the lane (orange outlines), or the corridor ahead without a lane (grey) and the nearest
   return in it.
+- memory/obstacles: the obstacles the avoidance remembers beside the car (faded orange outlines), where the lidar no
+  longer sees them.
 - plan/avoidance: the line across the lane planned past the obstacles (magenta). Away from obstacles it is the usual
   line (mpc.lane_side), which covers the centre line when lane_side is "CENTRE" and lane_offset_m is 0.
 - plan/mpc: the path the MPC predicted for the car (cyan), from the curvatures it solved, as long as the distance it
@@ -131,11 +151,13 @@ class StepDrawer:
                                              for cone in observations.cones or []]),
             "cones/used": Layer(spheres=[Sphere(cone.pos.x, cone.pos.y, 0.08, CONE_COLOURS[cone.colour])
                                          for cone in policy.cones or []]),
+            "memory/cones": _remembered_cone_layer(policy),
             "lane/observed": Layer(lines=[Line(line.points, (*line.colour[:3], .25), line.closed)
                                            for line in _lane_lines(policy.lanes)] if policy.selected_lane is not None else []),
             "lane": Layer(lines=[Line(list(policy.selected_lane.points), COLOURS["centre"])]
                           if policy.selected_lane is not None else _lane_lines(policy.lanes)),
             "obstacles": _obstacle_layer(policy),
+            "memory/obstacles": _remembered_obstacle_layer(policy),
             "plan/avoidance": Layer(lines=_avoidance_lines(policy)),
             "plan/mpc": Layer(lines=_mpc_lines(policy) if solved or policy.selected_lane is not None else []),
             "fiducials": _fiducial_layer(observations),
@@ -148,23 +170,25 @@ def summary(policy: MovementPolicy, observations: CarObservations, actions: CarA
     :return: A short text of the step's lane, obstacle, speed and actions, lane side and next intersection command.
     """
     lanes = policy.lanes
-    lane = "open space" if lanes is None else lanes.status.name
+    lines = [f"t {observations.policy.policy_elapsed_s:.2f} s  "
+             + ("open space" if lanes is None else lanes.status.name)]
     if lanes is not None and lanes.has_lane:
-        lane += f"  lateral {lanes.lateral_error_m:+.2f} m  heading {math.degrees(lanes.heading_error_rad):+.1f} deg"
+        lines += [f"lateral {lanes.lateral_error_m:+.2f} m",
+                  f"heading {math.degrees(lanes.heading_error_rad):+.1f} deg"]
     if policy.selected_lane is not None:
         selected = policy.selected_lane
-        lane += (f"  selected {selected.command.name} {selected.phase}"
-                 f"  route evidence {selected.evidence_age_s:.1f} s")
+        lines += [f"selected {selected.command.name} {selected.phase}",
+                  f"route evidence {selected.evidence_age_s:.1f} s"]
     obstacle = policy.obstacle_distance_m
     speed = observations.car.wheel_speed
     intersection = policy.intersection_command
-    return "\n".join((
-        f"t {observations.policy.policy_elapsed_s:.2f} s  {lane}",
+    return "\n".join(lines + [
+        f"memory {len(policy.local_map.map_cones)} cones, {len(policy.local_map.recalled)} used",
         "obstacle " + ("unknown" if obstacle is None else "clear" if math.isinf(obstacle) else f"{obstacle:.2f} m"),
-        "speed " + ("unknown" if speed is None else f"{float(speed):.2f} m/s")
-        + f"  drive {actions.drive_action:+.2f}  steer {actions.steering_action:+.2f}",
-        f"side {policy.action_policy.lane_side}  next intersection "
-        + ("none" if intersection is None else intersection.name)))
+        "speed " + ("unknown" if speed is None else f"{float(speed):.2f} m/s"),
+        f"drive {actions.drive_action:+.2f}  steer {actions.steering_action:+.2f}",
+        f"side {policy.action_policy.lane_side}  next intersection " + ("none" if intersection is None
+                                                                        else intersection.name)])
 
 
 def _along(start_m: float, end_m: float) -> list[float]:
@@ -207,14 +231,8 @@ def _obstacle_layer(policy: MovementPolicy) -> Layer:
     """
     car_front_m = policy.obstacle_detection_config.car_front_m
     if policy.lane_obstacles is not None:
-        centre_line = policy.lanes.centre_line
-        lines = []
-        for obstacle in policy.lane_obstacles:
-            near_m, far_m = car_front_m + obstacle.distance_m, car_front_m + obstacle.far_distance_m
-            outline = ([_lane_point(centre_line, s_m, obstacle.right_m) for s_m in _along(near_m, far_m)]
-                       + [_lane_point(centre_line, s_m, obstacle.left_m) for s_m in reversed(_along(near_m, far_m))])
-            lines.append(Line(outline, COLOURS["obstacle"], closed=True))
-        return Layer(lines=lines)
+        return Layer(lines=[Line(_lane_outline(policy.lanes.centre_line, car_front_m, obstacle), COLOURS["obstacle"],
+                                 closed=True) for obstacle in policy.lane_obstacles])
     obstacles = policy.obstacles
     if obstacles is None:
         return Layer()
@@ -226,6 +244,45 @@ def _obstacle_layer(policy: MovementPolicy) -> Layer:
     point = obstacles.in_path_point
     return Layer(lines=[Line(corridor, COLOURS["corridor"], closed=True)],
                  spheres=[] if point is None else [Sphere(point.x, point.y, 0.1, COLOURS["obstacle"])])
+
+
+def _lane_outline(centre_line: LaneArc, car_front_m: float, obstacle: LaneObstacle) -> list[tuple[float, float]]:
+    """
+    :param centre_line: The lane's centre line.
+    :param car_front_m: Distance in metres from base_link's origin forwards to the car's front, from which the
+        obstacle's distances are measured.
+    :param obstacle: An obstacle in the lane.
+    :return: The outline of the stretch of lane it covers, going around it.
+    """
+    near_m, far_m = car_front_m + obstacle.distance_m, car_front_m + obstacle.far_distance_m
+    return ([_lane_point(centre_line, s_m, obstacle.right_m) for s_m in _along(near_m, far_m)]
+            + [_lane_point(centre_line, s_m, obstacle.left_m) for s_m in reversed(_along(near_m, far_m))])
+
+
+def _remembered_cone_layer(policy: MovementPolicy) -> Layer:
+    """
+    :return: The remembered cones: those lane detection used in their colour, faded, and the others small and grey.
+    """
+    recalled = {id(cone) for cone in policy.local_map.recalled}
+    spheres = []
+    for cone in policy.local_map.map_cones:
+        if id(cone) in recalled:
+            spheres.append(Sphere(cone.pos.x, cone.pos.y, 0.08, CONE_COLOURS[cone.colour][:3] + (RECALLED_OPACITY,)))
+        else:
+            spheres.append(Sphere(cone.pos.x, cone.pos.y, 0.04, COLOURS["remembered_cone"]))
+    return Layer(spheres=spheres)
+
+
+def _remembered_obstacle_layer(policy: MovementPolicy) -> Layer:
+    """
+    :return: The outlines of the obstacles the avoidance remembers, in this step's lane; empty without a lane.
+    """
+    lanes = policy.lanes
+    if lanes is None or not lanes.has_lane:
+        return Layer()
+    car_front_m = policy.obstacle_detection_config.car_front_m
+    return Layer(lines=[Line(_lane_outline(lanes.centre_line, car_front_m, obstacle), COLOURS["remembered_obstacle"],
+                             closed=True) for obstacle in policy.avoidance.remembered])
 
 
 def _avoidance_lines(policy: MovementPolicy) -> list[Line]:
@@ -287,4 +344,4 @@ def _car_layer(policy: MovementPolicy, observations: CarObservations, actions: C
     return Layer(
         boxes=[Box(((front_m - rear_m) / 2.0, 0.0, 0.05), (front_m + rear_m, policy.avoidance.config.car_width_m, 0.1),
                    COLOURS["car"])],
-        texts=[Text((-rear_m - 0.4, 0.0, 0.3), summary(policy, observations, actions))])
+        texts=[Text((-rear_m - SUMMARY_BEHIND_M, 0.0, 0.3), summary(policy, observations, actions))])

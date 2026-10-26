@@ -8,11 +8,17 @@ import json
 import numpy as np
 import pytest
 
+from policy.action_policy.avoidance import AvoidanceConfig, LaneAvoidance
 from policy.action_policy.mpc import MpcConfig, MpcSolution
 from policy.action_policy.policy import MpcPolicy
 from policy.data_logging.data_logging import log_memory, start_data_log, validate_parameters
-from policy.input_output import ObservedCarState, PolicyState, SensorAge, WheelSpeed
-from policy.memory import CarMemory, MpcPlan, MpcStop
+from policy.input_output import CarObservations, ConeColour, ObservedCarState, PolicyState, SensorAge, WheelSpeed
+from policy.lane_detection.lanes import LaneArc, LaneDetection, LaneStatus
+from policy.intersection_state import IntersectionMemory
+from policy.markers.commands import MarkerCommand
+from policy.memory import CarMemory, CarPose, MpcPlan, MpcStop, RememberedCone
+from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
+from policy.obstacle_detection.obstacles import LaneObstacle
 from tests.policy.test_mpc import lane_cones, observe
 
 
@@ -33,6 +39,44 @@ def test_memory_with_a_stop_and_a_plan_survives_serialising():
 def test_memory_logged_before_the_mpc_kept_its_state_still_loads():
     old = CarMemory.deserialise({"policy_step": 7}).data
     assert (old.policy_step, old.mpc_stop, old.mpc_plan) == (7, None, None)
+    assert (old.pose, old.imu_heading_rad, old.cones, old.lane_obstacles) == (None, None, (), ())
+
+
+def test_memory_with_map_obstacles_and_intersection_survives_serialising():
+    memory = CarMemory()
+    memory.start_map(0.3)
+    memory.move_car(CarPose(1.0, -0.2, 0.1), 0.4)
+    memory.remember_cones([RememberedCone(1.5, 0.5, ConeColour.BLUE, 4, 2.0, 0.9)])
+    memory.remember_lane_obstacles([LaneObstacle(-0.2, 0.0, -0.3, -0.1, 12)])
+    memory.command_intersection(MarkerCommand.TURN_RIGHT, 2.0)
+    memory.update_intersection(IntersectionMemory(command=MarkerCommand.TURN_RIGHT))
+
+    data = json.loads(json.dumps(memory.data.serialise()))
+
+    assert data["cones"][0]["colour"] == "BLUE"
+    assert CarMemory.deserialise(data).data == memory.data
+    # A new map keeps the obstacles, which the avoidance forgets on its own at a new run
+    memory.start_map(None)
+    assert memory.data.pose == CarPose(0.0, 0.0, 0.0) and memory.data.cones == ()
+    assert len(memory.data.lane_obstacles) == 1
+
+
+def test_the_avoidance_keeps_the_obstacles_beside_the_car_in_the_memory_it_is_given():
+    avoidance, memory = LaneAvoidance(AvoidanceConfig(), ObstacleDetectionConfig().car_front_m), CarMemory()
+    lane = LaneDetection(LaneStatus.BOTH_EDGES, None, None, LaneArc(0.0, 0.0, 0.0, 0.0), 1.0, 3.0, 0.0, 0.0, 0.0,
+                         SensorAge(0.0, None))
+    near = LaneObstacle(0.2, 0.4, -0.3, -0.1, 10)
+    moving = CarObservations(None, None, None, None,
+                             ObservedCarState(None, None, None, WheelSpeed(0.5, SensorAge(0.0, None))),
+                             PolicyState(0.0, 0.0, True))
+    avoidance.step(moving, lane, [near], 0.0, memory)
+    assert memory.data.lane_obstacles == (near,) and avoidance.remembered == [near]
+    # Moved back by the distance driven once the lidar no longer sees it
+    avoidance.step(dataclasses.replace(moving, policy=PolicyState(0.1, 0.1, False)), lane, [], 0.0, memory)
+    assert memory.data.lane_obstacles[0].distance_m == pytest.approx(0.15)
+    # A new run forgets it
+    avoidance.step(moving, lane, [], 0.0, memory)
+    assert memory.data.lane_obstacles == ()
 
 
 def test_the_mpc_keeps_its_plan_and_stop_in_the_memory_it_is_given(monkeypatch):

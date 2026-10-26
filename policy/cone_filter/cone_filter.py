@@ -6,7 +6,7 @@ This file removes the cone detections that cannot belong to the lane, before the
 The cone detector already detects the cones: oakd_cone_detector on the car, or the simulated detector in dream-gym.
 It only drops cones below its confidence threshold or outside its depth range, so duplicate detections, cones of
 other lanes, misclassified colours and other objects still reach the policy. This filter removes, in order:
-1. Cones outside the space the lane can occupy, or below the confidence floor.
+1. Cones outside the space the lane can occupy or farther away than max_distance_m, or below the confidence floor.
 2. Duplicate detections of one cone: same-colour detections closer than merge_distance_m. The most confident is kept.
 3. Cones off their colour's row. Stage 1 is a straight lane, so each colour is one straight row and both rows are
    parallel. The rows are fitted together, so a long row can outvote a wrong cone in a short one. A curved lane's
@@ -42,6 +42,16 @@ class ConeFilterConfig:
     """Largest kept sideways distance (|y|) in metres. Must be positive.
 
     The default covers half the 1.0 m lane, a 0.2 m start offset and a 15 degree heading error seen 4 m ahead.
+    """
+    max_distance_m: float = 0.0
+    """Largest kept straight-line distance in metres from base_link's origin to a cone, or 0.0 for no limit. Must be
+    finite and at least 0.
+
+    Lane detection fits each edge with one curvature, so on an S-bend the far cones curving back the other way can
+    flip the fitted curvature near the car; 3.5 keeps only the next few cone pairs. Too short a limit leaves too few
+    cones for a steady lane fit beside an obstacle, so the obstacle can seem to be in the car's way. Keep it well above
+    mpc.lane_end_distance_m, because the MPC takes the farthest kept cone as where the rows may end (MovementPolicy
+    checks it).
     """
     min_height_m: float = -0.15
     """Lowest kept detected-point height (z) in metres above the nominal ground. Must be below max_height_m.
@@ -82,6 +92,8 @@ class ConeFilterConfig:
             value = getattr(self, name)
             if not (math.isfinite(value) and value > 0.0):
                 raise ValueError(f"cone_filter.{name} must be positive and finite, not {value}")
+        if not (math.isfinite(self.max_distance_m) and self.max_distance_m >= 0.0):
+            raise ValueError(f"cone_filter.max_distance_m must be finite and at least 0, not {self.max_distance_m}")
         if not (math.isfinite(self.min_height_m) and math.isfinite(self.max_height_m)
                 and self.min_height_m < self.max_height_m):
             raise ValueError("cone_filter.min_height_m and max_height_m must be finite, with min_height_m below "
@@ -141,6 +153,7 @@ def _is_plausible(cone: ConeDetection, config: ConeFilterConfig) -> bool:
     return (all(math.isfinite(v) for v in (cone.pos.x, cone.pos.y, cone.pos.z, cone.confidence))
             and 0.0 < cone.pos.x
             and abs(cone.pos.y) <= config.max_lateral_m
+            and (config.max_distance_m == 0.0 or math.hypot(cone.pos.x, cone.pos.y) <= config.max_distance_m)
             and config.min_height_m <= cone.pos.z <= config.max_height_m
             and config.min_confidence <= cone.confidence <= 1.0)
 

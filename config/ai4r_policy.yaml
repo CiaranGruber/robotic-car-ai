@@ -86,8 +86,12 @@
       # Rename any old lidar timeout to lidar_scan. Cartesian data must pass
       # BOTH deadlines and always match the latest accepted raw scan. A failed
       # conversion makes it unavailable immediately, without waiting for expiry.
-      lidar_scan: 0.5
-      lidar_cartesian: 0.5
+      # 0.8 for both: on 2026-10-20 scans reached the policy only every 0.2-0.3 s,
+      # about 0.1 s old, so 0.5 left no room for one late scan; two drives
+      # ended mid-run, most likely on stale lidar. The obstacle stop distance
+      # adds the lidar age.
+      lidar_scan: 0.8
+      lidar_cartesian: 0.8
       wheel_speed: 0.5
       imu_orientation: 0.5
       imu_angular_velocity: 0.5
@@ -303,8 +307,8 @@
       # The stop is requested once the obstacle is within
       # (obstacle_stop_distance_per_speed_s + lidar age) * speed
       # + obstacle_stop_margin_m of the car's front, using the larger of
-      # target_speed_m_per_s and the measured speed: 0.6 * 0.5 + 0.2 = 0.5 m
-      # (plus ~0.05 m lidar age) at 0.5 m/s. The car then brakes to a stop about
+      # target_speed_m_per_s and the measured speed: 0.8 * 0.5 + 0.2 = 0.6 m
+      # (plus lidar age * speed) at 0.5 m/s. The car then brakes to a stop about
       # this margin short of it. Metres, finite double >= 0. The node does not
       # start if that distance at the target speed is longer than
       # obstacle_detection.corridor_length_m.
@@ -312,16 +316,23 @@
       # How far the car travels after an obstacle stop request while braking,
       # in metres per m/s of speed (seconds), finite double >= 0. Shorter than
       # stop_distance_per_speed_s, so the car drives nearer before braking.
-      # 0.6 is an UNMEASURED starting guess for car 20 with brake_action 0.3.
-      # MEASURE IT with a soft obstacle: drive at a known speed, note where the
-      # stop was requested and where the car stopped, divide by the speed. With
+      # 0.8 is UNMEASURED, chosen in tests/policy/obstacle_simulation.py: with
+      # the settings marked "obstacle simulation" below, the simulated car
+      # stopped short of a box blocking the lane for any simulated braking of
+      # 0.4-1.0 s per m/s, and still passed every box it had room to pass; 0.0
+      # hit the box unless braking took under 0.2 s per m/s. MEASURE IT with a
+      # soft obstacle: drive at a known speed, note where the stop was
+      # requested and where the car stopped, divide by the speed. With
       # control.brake_action 0.0 the node does not start unless this is at
       # least stop_distance_per_speed_s.
-      obstacle_stop_distance_per_speed_s: 0.0
+      obstacle_stop_distance_per_speed_s: 0.8
       # Consecutive policy steps that must see the obstacle within that
       # distance, INTEGER >= 1, so one step of stray returns does not stop the
       # run. Each extra step is about 0.05 m more at 0.5 m/s with 10 Hz cones.
-      obstacle_confirm_steps: 2
+      # 3 (obstacle simulation): the lane estimate moves a box across the lane
+      # by about 0.1 m from step to step, and with 2 that often stopped the car
+      # for a box it was already passing.
+      obstacle_confirm_steps: 3
 
     # OPEN-SPACE SETTINGS, used when action_policy is open_space (OpenSpaceConfig
     # in policy/action_policy/open_space.py, which checks them and explains the
@@ -385,12 +396,20 @@
     # straight row (both rows share one fitted direction). Every later policy
     # stage only sees the kept cones. Replace the starting values after Task A1.
     cone_filter:
-      # Only cones ahead of base_link (x > 0) are kept. There is no maximum
-      # forward-distance limit here; the detector owns its depth limits.
+      # Only cones ahead of base_link (x > 0) are kept.
       # Keep cones with |y| <= this, metres, positive double. Default 2.0: half
       # the 1.0 m lane, a 0.2 m start offset and a 15 degree heading error
       # seen 4 m ahead.
       max_lateral_m: 2.0
+      # Keep cones at most this straight-line distance from base_link, metres,
+      # double >= 0.0; 0.0 keeps every distance (the detector's depth limits
+      # still apply). 3.5: on the 2026-10-20 S-bend the cones 4-5 m ahead,
+      # curving back left, flipped the fitted curvature near the car to a left
+      # bend in 18 of 28 steps (0 of 28 at 3.5). 3.0 left about 10 cones beside
+      # an obstacle, and the jumping lane fit put the obstacle in the car's way:
+      # obstacle_track_expands stopped at it. Must be above
+      # mpc.lane_end_distance_m.
+      max_distance_m: 3.5
       # Accepted detected-point height above nominal ground, metres, finite
       # doubles with min below max. The fixed camera pose ignores vehicle
       # pitch, so keep this band loose. Default max 0.45. 0.25 removes the
@@ -427,7 +446,7 @@
       # Colour of the LEFT edge's cones, string "AUTO", "BLUE" or "YELLOW".
       # "AUTO" works out each colour's side from where its edge lies relative
       # to the car, so either colour may be on the left.
-      left_colour: "BLUE"
+      left_colour: "AUTO"
       # Lane width, metres, positive double (shared default 1.0). Places the
       # centre line when only one edge is found, until both edges have been
       # seen; the width measured with both edges is used after that.
@@ -542,11 +561,13 @@
       # double >= 0. 0.30 is the notebook car's; measure your car.
       car_front_m: 0.30
       # Half the width of the way the car drives through, metres, positive
-      # double: half the car's width plus a margin (0.20 suits a 0.25 m wide
-      # car). Used across the lane, and for the straight corridor ahead when no
-      # lane is detected; there keep it well below half the lane width (0.4 m
-      # in the lab's 0.8 m lanes), or the cones beside the lane count.
-      corridor_half_width_m: 0.20
+      # double: half the car's width plus a margin. Used across the lane, and
+      # for the straight corridor ahead when no lane is detected; there keep it
+      # well below half the lane width (0.4 m in the lab's 0.8 m lanes), or the
+      # cones beside the lane count. 0.175 (obstacle simulation) leaves 0.05 m
+      # beside a 0.25 m wide car: with 0.20 the lane estimate's step-to-step
+      # jumps often put a box the car had room to pass into the way.
+      corridor_half_width_m: 0.175
       # Length of the straight corridor ahead of the car's front (used without
       # a lane), metres, positive double. It must hold the MPC's obstacle
       # stopping distance (mpc.obstacle_stop_margin_m). Longer sees obstacles
@@ -556,16 +577,25 @@
       # are searched for, metres, positive double; about as far as the camera
       # sees the lane. It must also hold the stopping distance. Driving around
       # an obstacle (avoidance below) needs it seen early: the move onto the
-      # line beside it is about 1.8 m long.
-      lane_length_m: 2.5
+      # line beside it is about 1.5 m long. 3.5 (drive 2026-10-22_15-42-42: a
+      # box near the centre, then one on the left 1.4 m on): with 2.5 the
+      # second box was first seen when the first was 1.0 m ahead, too late to
+      # weave between them; with 3.5 both are seen from the start, and the
+      # replay found no other object in the lane. Past the last cones the lane
+      # is extrapolated, so farther risks counting the cones of a bend.
+      lane_length_m: 3.5
       # Fewest lidar returns that make an obstacle (in the corridor, or in one
       # object in the lane), INTEGER >= 1, so stray returns do not count.
       min_points: 3
       # Returns this close inside either lane edge, or outside the lane, are
       # not obstacles in the lane: they are the cones or the lane's
       # surroundings. Metres, finite double >= 0: a cone's radius at the
-      # lidar's height plus the edge fit's error.
-      lane_edge_margin_m: 0.10
+      # lidar's height plus the edge fit's error. 0.15 (obstacle simulation)
+      # allows for the edge fit moving by about 0.1 m: in a 0.8 m lane it
+      # leaves out anything more than 0.25 m from the centre line, so an
+      # object standing entirely in the outer 0.15 m beside the cones is not
+      # seen; a centred 0.25 m wide car still has 0.125 m to it.
+      lane_edge_margin_m: 0.15
       # Neighbouring returns (in scan order) closer than this belong to one
       # object in the lane, metres, positive double.
       cluster_gap_m: 0.15
@@ -581,14 +611,15 @@
     # slope and curvature, so the line never jumps. Each candidate is checked
     # along its whole length: the car's body, turned along the line, keeps
     # obstacle_clearance_m from every obstacle and cone_clearance_m from the
-    # cones, and no move is sharper than max_ramp_curvature_per_m. The line
+    # cones, and no move is sharper than max_ramp_curvature_per_m (the move
+    # back to the usual line than max_return_curvature_per_m). The line
     # passing the most obstacles (nearest first) wins, then the one in place
     # before the stopping distance, then the cheapest by the *_weight costs.
     # The MPC follows the chosen line over its whole horizon. Without a line
     # that passes an obstacle, the MPC stops as before (mpc.obstacle_stop_*).
     # In a 0.8 m lane with these values the gap between the obstacle and the
-    # inner side of the cones must be at least 0.25 + 0.10 + 0.10 = 0.45 m, so
-    # an obstacle must end at least 0.10 m short of the centre line on its
+    # inner side of the cones must be at least 0.25 + 0.10 + 0.05 = 0.40 m, so
+    # an obstacle must end at least 0.05 m short of the centre line on its
     # side.
     avoidance:
       # true or false; false only stops for obstacles.
@@ -604,8 +635,10 @@
       # Smallest gaps while passing, metres, doubles >= 0: car side to cone,
       # and car side to obstacle. Half the car's width plus
       # obstacle_clearance_m must be at least
-      # obstacle_detection.corridor_half_width_m.
-      cone_clearance_m: 0.10
+      # obstacle_detection.corridor_half_width_m. cone_clearance_m 0.05
+      # (obstacle simulation) lets the car use 0.05 m narrower gaps beside an
+      # obstacle, passing as close as 0.05 m to the cones.
+      cone_clearance_m: 0.05
       obstacle_clearance_m: 0.10
       # How far along the lane before and after an obstacle the car's body also
       # keeps the clearances from it (its unseen depth, odometry error),
@@ -615,11 +648,39 @@
       # to weave between: with 0.05, a 0.6 m gap is enough in a 0.8 m lane
       # when each obstacle ends at least about 0.17 m short of the centre line.
       pass_distance_m: 0.05
+      # How far the car's front must be past an obstacle (past its farthest
+      # lidar return plus pass_distance_m) before the line may move back to
+      # the usual line, metres, double >= 0. The move back starts at the
+      # earliest of a few points from there to where the car's rear has passed
+      # it at which the car's body, turned along the line, keeps the
+      # clearances; else once the rear has passed. The car's length (0.60) or
+      # more always waits for the rear, as before. 0.0 suits the lab's thin
+      # sheet obstacles: the planned straight stretch after a sheet drops from
+      # 0.65 m to 0.05 m when the car has room to spare beside it, because the
+      # rear swings away from the sheet as the car turns back.
+      return_after_m: 0.0
       # Sharpest curvature a move across the lane may add to the lane's own,
       # 1/m, positive double, within the car's limits (mpc.max_curvature_per_m
       # and max_right_curvature_per_m). A move of d metres between lines
-      # parallel to the lane is sqrt(5.77 * d / this) long: 1.84 m for 0.175 m.
-      max_ramp_curvature_per_m: 0.30
+      # parallel to the lane is sqrt(5.77 * d / this) long: 1.50 m for 0.175 m.
+      # 0.45, near the left limit 0.48, so the MPC follows it less closely:
+      # with 0.30 no line weaves past the left of a box near the centre and
+      # then the right of a box 1.4 m on (drive 2026-10-22_15-42-42), as the
+      # move across is about 2.4 m long. With 0.45 and lane_length_m 3.5 the
+      # replay plans that weave, and the obstacle simulation of that layout
+      # passed in 8 of 40 runs and stopped short in the rest (0 of 40 passed
+      # with 0.30 and 2.5).
+      max_ramp_curvature_per_m: 0.45
+      # Sharpest curvature the move back to the usual line, once past the
+      # obstacles, may add to the lane's own, 1/m, positive double, within the
+      # car's limits like max_ramp_curvature_per_m. The car's body is still
+      # checked to keep the clearances while it turns back. 0.40 (obstacle
+      # simulation, 2 cm sheets): the car is back within 0.02 m of its line
+      # 0.2-0.6 m sooner than with 0.30 and overshoots it by under 0.03 m on
+      # average, but its closest pass between two sheets 1 m apart on one
+      # side fell from 0.11 to 0.09 m in 30 runs; 0.45 and 0.48 came back no
+      # sooner and stopped between those sheets in 2 and 4 of 10 runs.
+      max_return_curvature_per_m: 0.40
       # Candidate line costs, doubles >= 0, each per metre along the lane:
       # offset from the usual line (per m^2), curvature added to the lane's
       # (per (1/m)^2), and change from the previous step's line (per m^2),
@@ -631,6 +692,40 @@
       smoothness_weight: 1.0
       clearance_weight: 5.0
       change_weight: 1.0
+
+    # REMEMBERING THE CONES AROUND THE CAR (LocalMapConfig in
+    # policy/local_map/local_map.py, which checks them; invalid values stop the
+    # node from starting). Each step, dead reckoning moves the car's pose in a
+    # map of the run (the wheel speed, and the IMU's heading change, else its
+    # yaw rate, else the curvature requested), each cone of the batch is
+    # matched to the nearest remembered cone of its colour, and the pose is
+    # corrected so the batch lies on the matched remembered cones. Lane
+    # detection then also uses the confirmed remembered cones the batch does
+    # not show: beside the car (nearer than the camera sees) and hidden behind
+    # obstacles. They join only when the batch alone gives a lane, so the end
+    # of the cone rows and a lost lane are seen as before. The pose and cones
+    # are kept in the car memory, so the memory log and the replay
+    # (scripts/mcap_export.py, /memory/cones) show them.
+    local_map:
+      # true or false: whether lane detection uses the remembered cones. The
+      # map is kept and logged either way.
+      use_remembered_cones: true
+      # Farthest a cone of a batch may be from a remembered cone of its colour
+      # to be the same cone, metres, positive double: below half the spacing
+      # of the cones along an edge (about 0.25-0.3 m in the lab), above the
+      # detector's noise plus a step's dead-reckoning error.
+      cone_match_distance_m: 0.12
+      # Batches that must see a cone before lane detection uses it or it
+      # corrects the pose, INTEGER >= 1, so a cone detected once by mistake is
+      # not used.
+      cone_min_sightings: 3
+      # Remembered cones farther than this behind base_link are forgotten,
+      # metres, finite double >= 0. Cones beside the car fix where it is in the
+      # lane; farther back, a lane whose curve changes no longer fits them.
+      cone_keep_behind_m: 0.5
+      # Remembered cones not seen for this long are forgotten, seconds,
+      # positive double.
+      cone_keep_s: 4.0
 
     # MARKER COMMAND SETTINGS (MarkerConfig in policy/markers/markers.py,
     # which checks them; invalid values stop the node from starting). ArUco

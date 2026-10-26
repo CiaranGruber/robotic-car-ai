@@ -21,8 +21,9 @@ curvature keeps detector noise on a straight lane from looking like a curve. By 
 
 detect_lanes keeps no state between policy steps. LaneDetector wraps it and remembers only the lane width measured while
 both edges are seen, to place the centre line when one edge is seen, so lanes of any width work without setting their
-width. The work is bounded by the batch size and a fixed number of solver iterations, so it is safe to run inside the
-real-time policy step.
+width. It also adds the cones the local map remembers but the batch does not show (policy/local_map/local_map.py), when
+the batch alone gives a lane. The work is bounded by the batch size, the remembered cones and a fixed number of solver
+iterations, so it is safe to run inside the real-time policy step.
 """
 from __future__ import annotations
 
@@ -32,7 +33,7 @@ from dataclasses import dataclass, replace
 import numpy as np
 from scipy.optimize import least_squares
 
-from policy.input_output import CarObservations, ConeColour, ConeDetection
+from policy.input_output import CarObservations, ConeBatch, ConeColour, ConeDetection
 from policy.lane_detection.lanes import LaneArc, LaneDetection, LaneEdge, LaneStatus
 
 MIN_DIRECTION_SPAN_M = 0.25
@@ -145,16 +146,29 @@ class LaneDetector:
         self.lane_width_m = self.config.lane_width_m
         """Remembered lane width in metres, moved towards each width measured with both edges."""
 
-    def detect(self, observations: CarObservations) -> LaneDetection | None:
+    def detect(self, observations: CarObservations,
+               recalled: list[ConeDetection] | None = None) -> LaneDetection | None:
         """Detects the lane from the cones, as detect_lanes does, then remembers its width if both edges were seen.
 
         :param observations: The observations taken by the car at the current policy step, with the cones already
             filtered.
+        :param recalled: Cones remembered from earlier batches that this batch does not show, in the batch's frame
+            (LocalMap.step), or None. They join the batch only when the batch alone gives a lane, so a lane is never
+            found from remembered cones alone, and the end of the cone rows and a lost lane are seen as before. If the
+            fit with them gives no lane, the batch's own lane is kept.
         :return: The detected lane, or None when there is no cone data.
         """
         if observations.policy is not None and observations.policy.is_first_policy_step:
             self.reset()
         lane = detect_lanes(observations, self.config, self.lane_width_m)
+        if recalled and lane is not None and lane.has_lane:
+            cones = observations.cones
+            with_recalled = detect_lanes(
+                replace(observations, cones=ConeBatch([*cones, *recalled], cones.sensor_age,
+                                                      cones.acquisition_to_publish_latency_s)),
+                self.config, self.lane_width_m)
+            if with_recalled is not None and with_recalled.has_lane:
+                lane = with_recalled
         if lane is not None and lane.status == LaneStatus.BOTH_EDGES:
             self.lane_width_m += WIDTH_SMOOTHING * (lane.lane_width_m - self.lane_width_m)
         return lane

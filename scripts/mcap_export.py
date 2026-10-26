@@ -52,6 +52,7 @@ from policy.control.control import ControlConfig
 from policy.data_logging.data_logging import ACTIONS_LOG_SUFFIX, CONFIG_LOG_SUFFIX, OBSERVATIONS_LOG_SUFFIX
 from policy.input_output import CarActions, CarObservations
 from policy.lane_detection.lane_detection import LaneDetectionConfig
+from policy.local_map.local_map import LocalMapConfig
 from policy.markers.markers import MarkerConfig
 from policy.action_policy.intersection import IntersectionConfig
 from policy.memory import CarMemory
@@ -74,7 +75,8 @@ FRAME_ID = "base_link"
 CONFIG_TYPES = {
     "mpc": MpcConfig, "open_space": OpenSpaceConfig, "cone_filter": ConeFilterConfig, "control": ControlConfig,
     "lane_detection": LaneDetectionConfig, "obstacle_detection": ObstacleDetectionConfig,
-    "avoidance": AvoidanceConfig, "markers": MarkerConfig, "intersection": IntersectionConfig,
+    "avoidance": AvoidanceConfig, "local_map": LocalMapConfig, "markers": MarkerConfig,
+    "intersection": IntersectionConfig,
 }
 """The MovementPolicy settings, by their prefix in config/ai4r_policy.yaml, as policy_node reads them."""
 
@@ -149,7 +151,8 @@ def build_policy(settings: dict[str, Any]) -> MovementPolicy:
         configs["mpc"], configs["cone_filter"], configs["control"], configs["open_space"],
         settings.get("action_policy", "mpc"), lane_detection_config=configs["lane_detection"],
         obstacle_detection_config=configs["obstacle_detection"], avoidance_config=configs["avoidance"],
-        marker_config=configs["markers"], intersection_config=configs["intersection"])
+        local_map_config=configs["local_map"], marker_config=configs["markers"],
+        intersection_config=configs["intersection"])
 
 
 def read_data_log(observations_path: Path) -> list[RecordedStep]:
@@ -296,8 +299,8 @@ def _entity(name: str, layer: visualisation.Layer, stamp: Timestamp) -> SceneEnt
         cubes=[CubePrimitive(pose=_pose(box.position, box.orientation), color=_colour(box.colour),
                              size=Vector3(x=box.size[0], y=box.size[1], z=box.size[2]))
                for box in layer.boxes],
-        texts=[TextPrimitive(pose=_pose(text.position), billboard=True, font_size=14.0, scale_invariant=True,
-                             color=_colour(visualisation.COLOURS["text"]), text=text.text)
+        texts=[TextPrimitive(pose=_pose(text.position), billboard=True, font_size=visualisation.TEXT_HEIGHT_M,
+                             scale_invariant=False, color=_colour(visualisation.COLOURS["text"]), text=text.text)
                for text in layer.texts])
 
 
@@ -323,6 +326,10 @@ def _state(policy: MovementPolicy, step: RecordedStep, replayed: CarActions) -> 
             "visible_until_m": lanes.visible_until_m},
         "obstacle_distance_m": policy.obstacle_distance_m,
         "lane_obstacle_count": None if policy.lane_obstacles is None else len(policy.lane_obstacles),
+        "local_map": {"remembered_cones": len(policy.local_map.map_cones),
+                      "recalled_cones": len(policy.local_map.recalled),
+                      "remembered_obstacles": len(policy.avoidance.remembered),
+                      "pose": None if policy.local_map.pose is None else policy.local_map.pose.serialise()},
         "mpc": {"solve_count": mpc.solve_count, "solve_time_s": mpc.last_solve_time_s,
                 "stopped_for_obstacle": mpc.stopped_for_obstacle, "stopped_for_lane_loss": mpc.stopped_for_lane_loss,
                 "stopped_for_solver_failure": mpc.stopped_for_solver_failure},

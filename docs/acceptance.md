@@ -13,6 +13,45 @@ not actual sensor/vehicle response.
 Keep revision, command, result and limitations here; retain detailed logs in
 CI artifacts or merge requests rather than a tracked evidence directory.
 
+## Intersection and local-map conflict resolution, 2026-10-26
+
+The owner requested resolution of the in-progress merge of `cd7df7f` into
+`feature/aruco-marker-actions` at `d59e812`, for their own upload and team
+follow-up. Six conflicted files now preserve both intersection navigation and
+the incoming cone/obstacle memory. Node startup and MCAP replay load both
+configuration families; legacy memory deserialisation supplies defaults for
+both. Visualisation retains remembered cones/obstacles, the selected lane and
+the separate observed-lane layer. The merged summary uses the incoming line
+list, avoiding the conflicting reference to an undefined `lane` variable.
+On intersection takeover the old avoidance path and remembered lane-coordinate
+obstacles are cleared, so they cannot reappear in the outgoing lane's frame.
+Combined-memory round-trip and takeover checks cover this integration.
+
+`OPENBLAS_NUM_THREADS=1 MPLCONFIGDIR=/tmp/ai4r-mpl .venv/bin/python -m pytest
+-q tests/policy` completed with **730 passed, 5 failed, 3 skipped, 1 xfailed,
+6 subtests passed** in 33.84 s. The five failures are nominal straight travel
+through the .2 m-spaced cross and the two T orientations with straight exits,
+and left/right turns at the .4 m-spaced cross. All stop on the approach with
+`incoming corridor stopping envelope reached before exit support`.
+These remain explicit failing tests for team follow-up. Read-only ablation
+of the cross cases showed that disabling recalled cones did not recover them;
+using the historical `obstacle_stop_distance_per_speed_s: 0.0` instead of the
+incoming `0.8` did. The incoming stopping setting and all stop checks are
+preserved in the resolved source; the diagnostic does not establish that the
+historical value is physically appropriate.
+
+All 44 policy/helper Python files parsed, and the diff whitespace check passed.
+The required CONTRIBUTING fast command was attempted, but the pinned
+`.verification/dependencies/dream_interfaces` checkout is absent; no installed
+ROS gate or physical driving result is claimed. A bounded read-only Astra
+review found no omission in the combined conflict resolutions. Ignored
+`build/merge-conflict-resolution-20261026/` retains the conflicted working files,
+all three original index stages and the ablation results. No car connection,
+upload, commit, push or completed merge was performed for this request.
+Rules followed: `0.00_root_rule.md`, `0.01_coding_standards.md`,
+`2.01_branching_strategy.md`, `2.02_adding_parameters.md`, `2.05_car_memory.md`
+and `3.00_codebase_structure.md`.
+
 ## Car 10.43.254.33 RGB and junction configuration repair, 2026-10-26
 
 The owner explicitly requested changing the car after recent logs showed the

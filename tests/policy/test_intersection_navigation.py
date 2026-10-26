@@ -7,6 +7,7 @@ import pytest
 
 from policy.action_policy.avoidance import AvoidanceConfig
 from policy.action_policy.intersection import (IntersectionConfig, IntersectionNavigator, cross_fits, make_route)
+from policy.action_policy.lane_path import LanePath, PathSegment
 from policy.action_policy.mpc import MpcConfig, MpcController, PathTrackingState
 from policy.action_policy.policy import MpcPolicy
 from policy.input_output import (AngularVelocity, CarObservations, ConeBatch, LidarCartesian, LidarCartesianPoint,
@@ -16,6 +17,7 @@ from policy.markers.commands import MarkerCommand
 from policy.markers.markers import MarkerConfig, MarkerReader
 from policy.memory import CarMemory, Memory, MpcStop
 from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
+from policy.obstacle_detection.obstacles import LaneObstacle
 from tests.policy.intersection_simulation import CrossIntersection, make_policy, rollout, settings
 from tests.policy.test_markers import marker, straight_lane
 
@@ -135,6 +137,28 @@ def test_committed_choice_ignores_new_markers_and_serialises_with_legacy_default
     memory.start_marker_run()
     memory.start_mpc_run()
     assert memory.data.intersection is None and memory.data.mpc_stop is None
+
+
+def test_intersection_takeover_discards_obstacles_and_path_in_the_previous_lane_frame():
+    params, _ = settings()
+    policy = make_policy(params, navigation=True)
+    memory = CarMemory()
+    memory.update_intersection(active_state())
+    memory.remember_lane_obstacles([LaneObstacle(-.2, 0., -.3, -.1, 12)])
+    old_path = LanePath(0., (PathSegment.hold(0., 1., .2),))
+    policy.avoidance.path = old_path
+    policy.avoidance.driven_since_path_m = .2
+    policy.action_policy.avoidance_path = old_path
+
+    policy.step(observation(), memory)
+
+    assert policy.selected_lane is not None
+    assert memory.data.mpc_stop is None
+    assert memory.data.pose is not None
+    assert memory.data.lane_obstacles == ()
+    assert policy.avoidance.remembered == []
+    assert policy.avoidance.path is None and policy.avoidance.driven_since_path_m == 0.
+    assert policy.action_policy.avoidance_path is None
 
 
 def test_mpc_previews_the_route_curvature_before_the_turn_starts():
