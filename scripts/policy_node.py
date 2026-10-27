@@ -67,6 +67,7 @@ from dream_interfaces.msg import (ConeDetection, ConeDetections, DriveAndSteer,
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from policy.action_policy.avoidance import AvoidanceConfig
+from policy.action_policy.intersection import IntersectionConfig
 from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig
 from policy.cone_filter.cone_filter import ConeFilterConfig
@@ -303,15 +304,16 @@ class PolicyNode(Node):
         # (policy/lane_detection/lane_detection.py), ObstacleDetectionConfig
         # (policy/obstacle_detection/obstacle_detection.py), AvoidanceConfig
         # (policy/action_policy/avoidance.py), LocalMapConfig
-        # (policy/local_map/local_map.py) and MarkerConfig
-        # (policy/markers/markers.py) hold their defaults and check them.
+        # (policy/local_map/local_map.py), MarkerConfig
+        # (policy/markers/markers.py) and IntersectionConfig
+        # (policy/action_policy/intersection.py) hold their defaults and check them.
         self.declare_parameter("action_policy", "mpc", ParameterDescriptor(read_only=True))
         settings = {}
         for prefix, config_type in (
                 ("mpc", MpcConfig), ("open_space", OpenSpaceConfig), ("cone_filter", ConeFilterConfig),
                 ("control", ControlConfig), ("lane_detection", LaneDetectionConfig),
                 ("obstacle_detection", ObstacleDetectionConfig), ("avoidance", AvoidanceConfig),
-                ("local_map", LocalMapConfig), ("markers", MarkerConfig)):
+                ("local_map", LocalMapConfig), ("markers", MarkerConfig), ("intersection", IntersectionConfig)):
             defaults = asdict(config_type())
             for name, default in defaults.items():
                 self.declare_parameter(f"{prefix}.{name}", default, ParameterDescriptor(read_only=True))
@@ -321,7 +323,8 @@ class PolicyNode(Node):
             settings["mpc"], settings["cone_filter"], settings["control"], settings["open_space"],
             self.get_parameter("action_policy").value, lane_detection_config=settings["lane_detection"],
             obstacle_detection_config=settings["obstacle_detection"], avoidance_config=settings["avoidance"],
-            local_map_config=settings["local_map"], marker_config=settings["markers"])
+            local_map_config=settings["local_map"], marker_config=settings["markers"],
+            intersection_config=settings["intersection"])
         # Every parameter value this node runs with, saved beside each drive data log
         # (<stem>_config.json). Settings are startup-only, so reading them once is enough.
         self.parameter_values = {

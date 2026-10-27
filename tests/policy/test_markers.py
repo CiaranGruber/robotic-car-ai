@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import wide_tracks as wt  # noqa: E402
+from policy.action_policy.intersection import IntersectionConfig  # noqa: E402
 from policy.action_policy.mpc import MpcConfig  # noqa: E402
 from policy.action_policy.policy import MpcPolicy  # noqa: E402
 from policy.cone_filter.cone_filter import ConeFilterConfig  # noqa: E402
@@ -126,7 +127,9 @@ def test_memory_with_markers_saves_and_loads():
 
 
 def test_markers_set_the_lane_side_through_the_movement_policy():
-    policy = MovementPolicy(MpcConfig(), ConeFilterConfig(), ControlConfig(), marker_config=CONFIG)
+    # The turn marker only sets the intersection command here: this lane never ends, so no turn is driven
+    policy = MovementPolicy(MpcConfig(), ConeFilterConfig(), ControlConfig(), marker_config=CONFIG,
+                            intersection_config=IntersectionConfig(enabled=False))
     memory = CarMemory()
     policy.step(straight_lane(first=True), memory)
     assert policy.action_policy.lane_side == "CENTRE"

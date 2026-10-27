@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 
 from policy.input_output import CarActions, CarObservations, ConeColour
 from policy.lane_detection.lanes import LaneArc, LaneDetection
+from policy.markers.commands import MarkerCommand
+from policy.memory import TurnPhase
 from policy.obstacle_detection.obstacles import LaneObstacle
 from policy.policy_runner import MovementPolicy
 
@@ -32,6 +34,7 @@ COLOURS: dict[str, Colour] = {
     "avoidance": (0.9, 0.3, 0.9, 1.0),
     "mpc": (0.2, 0.85, 0.95, 1.0),
     "fiducial": (0.7, 0.4, 1.0, 0.8),
+    "intersection": (1.0, 0.45, 0.2, 1.0),
     "car": (0.85, 0.85, 0.85, 0.35),
     "text": (1.0, 1.0, 1.0, 0.6),
 }
@@ -58,7 +61,7 @@ SUMMARY_BEHIND_M = 1.0
 characters, so it stays behind the car and off the lane ahead whichever way the view is turned."""
 
 LAYERS = ("cones/detected", "cones/used", "memory/cones", "lane", "obstacles", "memory/obstacles", "plan/avoidance",
-          "plan/mpc", "fiducials", "car")
+          "plan/mpc", "plan/intersection", "fiducials", "car")
 """The layers of a drawing, in drawing order:
 
 - cones/detected: every detected cone, small and red, under cones/used.
@@ -75,6 +78,8 @@ LAYERS = ("cones/detected", "cones/used", "memory/cones", "lane", "obstacles", "
   line (mpc.lane_side), which covers the centre line when lane_side is "CENTRE" and lane_offset_m is 0.
 - plan/mpc: the path the MPC predicted for the car (cyan), from the curvatures it solved, as long as the distance it
   predicted at the measured speed: a point while the car stands. Empty when it has not solved since the last drawing.
+- plan/intersection: the intersection manoeuvre a marker asked for (orange): the entry across the approach lane, and
+  the arc planned from its start round the corner (or the line across, going straight), then the exit line.
 - fiducials: fiducial marker poses with their ids.
 - car: the car's outline, and a text summary of the step behind it.
 """
@@ -155,6 +160,7 @@ class StepDrawer:
             "memory/obstacles": _remembered_obstacle_layer(policy),
             "plan/avoidance": Layer(lines=_avoidance_lines(policy)),
             "plan/mpc": Layer(lines=_mpc_lines(policy) if solved else []),
+            "plan/intersection": Layer(lines=_intersection_lines(policy)),
             "fiducials": _fiducial_layer(observations),
             "car": _car_layer(policy, observations, actions),
         }
@@ -162,7 +168,8 @@ class StepDrawer:
 
 def summary(policy: MovementPolicy, observations: CarObservations, actions: CarActions) -> str:
     """
-    :return: A short text of the step's lane, obstacle, speed and actions, lane side and next intersection command.
+    :return: A short text of the step's lane, obstacle, speed and actions, lane side, next intersection command and the
+        phase of the intersection manoeuvre under way.
     """
     lanes = policy.lanes
     lines = [f"t {observations.policy.policy_elapsed_s:.2f} s  "
@@ -179,7 +186,8 @@ def summary(policy: MovementPolicy, observations: CarObservations, actions: CarA
         "speed " + ("unknown" if speed is None else f"{float(speed):.2f} m/s"),
         f"drive {actions.drive_action:+.2f}  steer {actions.steering_action:+.2f}",
         f"side {policy.action_policy.lane_side}  next intersection " + ("none" if intersection is None
-                                                                        else intersection.name)])
+                                                                        else intersection.name)]
+        + ([] if policy.intersection_turn is None else [f"turn {policy.intersection_turn.phase.name.lower()}"]))
 
 
 def _along(start_m: float, end_m: float) -> list[float]:
@@ -304,6 +312,57 @@ def _mpc_lines(policy: MovementPolicy) -> list[Line]:
         x, y = arc.point_at(step_m)
         arc = LaneArc(x, y, arc.heading_at(step_m), 0.0)
     return [Line(points, COLOURS["mpc"])]
+
+
+def _intersection_lines(policy: MovementPolicy) -> list[Line]:
+    """
+    :return: The intersection manoeuvre's entry, planned arc or line across, and exit line, in base_link at the step.
+    """
+    turn, pose = policy.intersection_turn, policy.pose
+    if turn is None or pose is None:
+        return []
+    cos_p, sin_p = math.cos(pose.heading_rad), math.sin(pose.heading_rad)
+
+    def local(x_m: float, y_m: float) -> tuple[float, float]:
+        dx, dy = x_m - pose.x_m, y_m - pose.y_m
+        return cos_p * dx + sin_p * dy, -sin_p * dx + cos_p * dy
+
+    cos_a, sin_a = math.cos(turn.heading_rad), math.sin(turn.heading_rad)
+
+    def approach(along_m: float, left_m: float) -> tuple[float, float]:
+        return local(turn.entry_x_m + along_m * cos_a - left_m * sin_a,
+                     turn.entry_y_m + along_m * sin_a + left_m * cos_a)
+
+    half = turn.lane_width_m / 2.0
+    colour = COLOURS["intersection"]
+    lines = [Line([approach(0.0, -half), approach(0.0, half)], colour)]
+    config = policy.turner.config
+    if turn.phase is TurnPhase.EXIT:
+        cos_e, sin_e = math.cos(turn.exit_heading_rad), math.sin(turn.exit_heading_rad)
+        end_m = config.exit_search_m + (turn.lane_width_m if turn.command is MarkerCommand.STRAIGHT else 0.0)
+        lines.append(Line([local(turn.exit_x_m + s_m * cos_e, turn.exit_y_m + s_m * sin_e)
+                           for s_m in _along(0.0, end_m)], colour))
+        return lines
+    if turn.command is MarkerCommand.STRAIGHT:
+        lines.append(Line([approach(s_m, 0.0) for s_m in _along(-config.hold_line_m, turn.lane_width_m)], colour))
+        return lines
+    side = 1.0 if turn.command is MarkerCommand.TURN_LEFT else -1.0
+    radius = config.left_turn_radius_m if side > 0.0 else config.right_turn_radius_m
+    if turn.phase is TurnPhase.ARC:
+        centre = (turn.arc_centre_x_m, turn.arc_centre_y_m)
+    elif policy.turner.arc_start_m is not None:
+        # The arc as planned from the car's offset now
+        dx, dy = pose.x_m - turn.entry_x_m, pose.y_m - turn.entry_y_m
+        across = -sin_a * dx + cos_a * dy + side * radius
+        start = policy.turner.arc_start_m
+        centre = (turn.entry_x_m + start * cos_a - across * sin_a, turn.entry_y_m + start * sin_a + across * cos_a)
+    else:
+        return lines
+    first = turn.heading_rad - side * math.pi / 2.0
+    lines.append(Line([local(centre[0] + radius * math.cos(first + side * angle),
+                             centre[1] + radius * math.sin(first + side * angle))
+                       for angle in _along(0.0, math.pi / 2.0)], colour))
+    return lines
 
 
 def _fiducial_layer(observations: CarObservations) -> Layer:

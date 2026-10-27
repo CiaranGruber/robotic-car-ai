@@ -51,7 +51,11 @@ class MpcPolicy:
         self.lane_offset_m = self.config.lane_offset_m
         """Where in the lane to drive while lane_side is "CENTRE", in metres from the centre line, positive to the
         left. Each run starts at mpc.lane_offset_m; a manoeuvre may change it between steps. It is kept
-        mpc.edge_clearance_m from both lane edges (usual_offset_m)."""
+        edge_clearance_m from both lane edges (usual_offset_m)."""
+        self.edge_clearance_m = self.config.edge_clearance_m
+        """Smallest distance in metres from the followed line to either lane edge while the line is off the centre.
+        Each run starts at mpc.edge_clearance_m; a manoeuvre may change it between steps, as the intersection turn
+        does to move to the outside of a narrow lane before turning."""
         self.previous_curvature_per_m = 0.0
         """Curvature requested at the previous step in 1/m."""
         self.previous_speed_m_per_s = 0.0
@@ -138,8 +142,7 @@ class MpcPolicy:
         :return: The lowest and highest offset in metres left of the lane centre; both 0.0 when the lane is too narrow
             to move over at all.
         """
-        config = self.config
-        room = max(0.0, lane_width_m / 2.0 - config.edge_clearance_m)
+        room = max(0.0, lane_width_m / 2.0 - self.edge_clearance_m)
         lowest, highest = -room, room
         if path_curvature_per_m > 0.0:
             highest = min(highest, inside_offset_limit_m(path_curvature_per_m))
@@ -275,6 +278,41 @@ class MpcPolicy:
             self.memory.drop_mpc_plan()
             return [self._command(0.0, 0.0)]
         return [self._command(self.config.target_speed_m_per_s, curvature)]
+
+    def follow_manoeuvre(self, observations: CarObservations, obstacle_distance_m: float | None, speed_m_per_s: float,
+                         curvature_per_m: float, memory: CarMemory | None = None) -> list[Instruction]:
+        """Drives a manoeuvre's command instead of following the lane, such as the intersection turn
+        (policy/action_policy/intersection.py), keeping the run's stops: a stop already latched holds, and an obstacle
+        in the car's way within the stopping distance stops the car for the rest of the run, as in run_policy.
+
+        The plan of the latest solve is dropped and the lane counts as usable, so lane following starts afresh from the
+        next lane rather than following an old plan or stopping where the approach lane's cones ended.
+
+        :param observations: The observations at this step.
+        :param obstacle_distance_m: As in run_policy.
+        :param speed_m_per_s: The manoeuvre's speed in m/s; 0.0 stops the car for the rest of the run.
+        :param curvature_per_m: The manoeuvre's curvature in 1/m, positive turning left.
+        :param memory: As in run_policy.
+        :return: The instructions for the control module.
+        """
+        if memory is not None:
+            self.memory = memory
+        if observations.policy.is_first_policy_step:
+            self.reset()
+        if self.stopped_for_lane_loss or self.stopped_for_solver_failure or self.stopped_for_obstacle:
+            return [self._command(0.0, 0.0, brake=self.stopped_for_obstacle)]
+        if self._obstacle_within_stopping_distance(observations, obstacle_distance_m):
+            self.memory.stop_mpc(MpcStop.OBSTACLE)
+            _LOGGER.info("Obstacle %.2f m ahead of the car's front in a manoeuvre: stopping for the rest of the run",
+                         obstacle_distance_m)
+            return [self._command(0.0, 0.0, brake=True)]
+        if speed_m_per_s <= 0.0:
+            self.memory.stop_mpc(MpcStop.LANE_LOSS)
+            return [self._command(0.0, 0.0)]
+        self.memory.drop_mpc_plan()
+        self.lane_lost_s = 0.0
+        self.farthest_cone_ahead_m = None
+        return [self._command(speed_m_per_s, curvature_per_m)]
 
     def _command_without_lane(self, observations: CarObservations) -> DriveCommand:
         """Chooses the command when the lane is missing or doubtful (the Task A7 rule).

@@ -7,7 +7,7 @@ set -euo pipefail
 # --------------------
 
 # Car number (1–20); used to form the host address.
-CAR_NUM=21
+CAR_NUM=13
 
 # SSH connection constants for the car.
 REMOTE_PORT=22
@@ -133,17 +133,23 @@ Upload this package to car ${CAR_NUM} (${REMOTE_USER}@${REMOTE_HOST}).
 Commands:
   dry_copy          List files that would be uploaded (rsync --dry-run)
   upload            Upload files to ${SRC_PATH}
-  upload_and_build [--debug-images <type>]
+  upload_and_build [--debug-images <type>] [--aruco]
                     Upload files, run: dream build ros student, then
                     start_runtime (options are passed through).
                     Ctrl+C during a step asks whether to cancel the rest
                     or skip that step and continue.
-  start_runtime [--debug-images <type>]
+  start_runtime [--debug-images <type>] [--aruco]
                     Restart the usual dream runtime services on the car,
                     including the lidar (rplidar_c1).
                     With --debug-images, oakd_gpu_cone_detector is restarted with
                     that flag (dream runtime restart oakd_gpu_cone_detector
                     --debug-images <type>).
+                    With --aruco, oakd_gpu_cone_detector is stopped and
+                    oakd_cone_detector runs instead: it publishes the RGB image
+                    (publish_rgb_image in config/oakd_cone_detector.yaml) that
+                    aruco_detector needs. On car 21 (2026-10-21) no image was
+                    published while the GPU detector ran, and no marker reached
+                    the policy.
   help              Show this help
 
 Paths in car_upload_filter.txt are rsync filter rules for the upload. Each
@@ -198,6 +204,8 @@ start_runtime() {
     #
     # Args:
     #   optional --debug-images <type>: pass through to oakd_gpu_cone_detector only.
+    #   optional --aruco: run oakd_cone_detector (which publishes the RGB image aruco_detector needs) instead of
+    #   oakd_gpu_cone_detector.
     # rplidar_c1 is restarted too: ai4r_policy requires lidar_cartesian, and the lidar is not running after a
     # reboot that interrupted it.
     local services=(
@@ -209,6 +217,7 @@ start_runtime() {
         ai4r_policy
     )
     local debug_images_type=""
+    local aruco=""
     local service
     local remote_cmd=""
     local restart_cmd
@@ -224,6 +233,10 @@ start_runtime() {
                 debug_images_type="$2"
                 shift 2
                 ;;
+            --aruco)
+                aruco=1
+                shift
+                ;;
             *)
                 echo "start_runtime: unknown option: $1" >&2
                 usage >&2
@@ -232,6 +245,15 @@ start_runtime() {
         esac
     done
 
+    if [[ -n "$aruco" ]]; then
+        if [[ -n "$debug_images_type" ]]; then
+            echo "start_runtime: --debug-images applies to oakd_gpu_cone_detector, which --aruco does not run" >&2
+            exit 1
+        fi
+        # Both detectors use the camera: stop the GPU one, then aruco_detector gets oakd_cone_detector's RGB image
+        services=("${services[@]/oakd_gpu_cone_detector/oakd_cone_detector}")
+        remote_cmd+='dream runtime stop oakd_gpu_cone_detector; '
+    fi
     log "Restarting dream runtime services on ${REMOTE_USER}@${REMOTE_HOST}..."
     # UNIT names whose STATE is running (column 1 / 2 of `dream runtime status`).
     remote_cmd+='running_services=$(dream runtime status | awk '\''$2 == "running" { print $1 }'\''); '

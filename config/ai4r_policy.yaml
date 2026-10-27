@@ -239,15 +239,22 @@
       # centre line, + left, finite double. Default 0.0, the centre.
       lane_offset_m: 0.0
       # Smallest distance from the followed line to either lane edge, metres,
-      # positive double. Default 0.40: 0.30-0.35 touched the outer cones in
-      # simulation with 3 degrees of camera yaw. An 0.8 m lane is then driven
-      # along its centre; 1.2 m gives 0.2 m of offset, 1.6 m gives 0.4 m.
-      edge_clearance_m: 0.40
+      # positive double. 0.28 for the marker lane changes in lab-width lanes:
+      # 0.12 m of offset in an 0.8 m lane and 0.22 m in a 1 m lane, so a keep
+      # left or right is visible. In the marker simulation (straight 0.8 and
+      # 1 m roads, keep left, right, centre; tests/policy/marker_simulation.py)
+      # no cone was touched and the body stayed 0.125 m inside the lane. The
+      # code default 0.40 (no offset at all in an 0.8 m lane) came from wide
+      # curved lanes, where 0.30-0.35 touched the outer cones with 3 degrees of
+      # camera yaw: keep side markers on straights.
+      edge_clearance_m: 0.28
       # Fastest sideways movement of the followed line, metres per metre
       # driven, positive double, when the side changes or the lane widens.
-      # Default 0.2: crossing a 1.2 m lane takes about 2.5 m; 0.5 and an
-      # instant switch ran into the cones in simulation.
-      offset_change_per_m: 0.2
+      # 0.3: a 1 m lane is crossed (0.44 m) in about 1.5 m, so the change is
+      # seen within a marker's spacing; 0.2 had not finished crossing 1.4 m
+      # after the marker (marker simulation). 0.5 and an instant switch ran
+      # into the cones in the wide-lane simulation.
+      offset_change_per_m: 0.3
       # How far left of the car's forwards direction the camera points, degrees,
       # finite double. The cones are rotated back by this much before the lane is
       # fitted. Default 0.0. The recordings showed 6-10 degrees, but with the
@@ -486,7 +493,7 @@
       # Car 20: 0.48 (fit 0.475). Car 22 fits gave 0.17-0.32 (car 22: 0.25).
       # Car 20 on 26 Oct: 0.25 still reached 0.87 m/s for a 0.5 target, so 0.15
       # is an estimate until the breakaway is measured again.
-      speed_ff_offset: 0.15
+      speed_ff_offset: 0.25
       # Speed map slope, m/s per unit drive, positive double. Car 20: 9.18.
       # Car 22 fits gave 7.65-24.7 (car 22: 12.0).
       speed_ff_gain: 9.18
@@ -734,20 +741,80 @@
     # policy steps in a row. KEEP_LEFT, KEEP_RIGHT and KEEP_CENTRE move the
     # car to that part of the lane and it stays there until another of them;
     # every new run starts again at mpc.lane_side. TURN_LEFT, TURN_RIGHT and
-    # STRAIGHT are remembered for the next intersection (Memory.
-    # intersection_command); the car does not turn at intersections yet.
+    # STRAIGHT start the intersection manoeuvre (intersection, below); the
+    # marker stands at the intersection like a road sign.
     markers:
       # ArUco ID of each command, integer, -1 for no marker. No two commands
       # may share an ID. Match the printed markers.
-      keep_left_id: 0
-      keep_right_id: 9
-      keep_centre_id: 1
-      turn_left_id: 3
-      turn_right_id: 4
+      keep_left_id: 13
+      keep_right_id: 14
+      keep_centre_id: 16
+      turn_left_id: 1
+      turn_right_id: 2
       straight_id: 5
       # Farthest a marker may be from base_link to count, metres, positive
-      # double. Markers without a pose never count.
-      max_distance_m: 1.5
+      # double. Markers without a pose never count. 2.0 so a turn marker is
+      # confirmed before the cross road's cones come into view (about 2.5 m)
+      # and bend the fitted lane; an 8 cm marker is still about 40 px wide.
+      max_distance_m: 2.0
       # Policy steps in a row that must see the same marker in range, integer
       # >= 1, on top of the aruco_detector's min_consecutive_frames.
       confirm_steps: 2
+
+    # INTERSECTION SETTINGS (IntersectionConfig in
+    # policy/action_policy/intersection.py, which checks them; invalid values
+    # stop the node from starting). A TURN_LEFT, TURN_RIGHT or STRAIGHT marker
+    # stands beside where the approach lane's cone rows end. The policy places
+    # the intersection from the marker and the car's dead-reckoned pose, keeps
+    # following the lane (only the approach road's cones), then near the entry
+    # holds the approach direction, turns along a planned arc round the inside
+    # corner (or drives straight across), and hands back to lane following once
+    # it sees the exit lane. The obstacle stop keeps working. Simulation only so
+    # far (tests/policy/marker_simulation.py, docs/marker-commands.md).
+    intersection:
+      # true or false: whether turn markers start the manoeuvre. false only
+      # remembers the command, and the car stops where the approach lane ends.
+      enabled: true
+      # true or false: keep to the outside of the approach lane before a turn
+      # (left before a right turn, like a hook turn), aside_clearance_m from
+      # its edge. From the middle of a lab-width lane the car cannot clear both
+      # the inside corner and the far side of the road it turns into.
+      move_aside: true
+      # Distance from the outside lane edge to the line followed before a turn,
+      # metres, positive double (mpc.edge_clearance_m while moving aside).
+      aside_clearance_m: 0.25
+      # How far past the marker the approach rows end, metres, finite double.
+      # Place the marker about 1 m before the intersection, like a road sign:
+      # beside the last cones it is confirmed too late, when the cross road's
+      # cones already confuse lane detection (simulation).
+      marker_to_entry_m: 1.0
+      # Radius of the planned arc, metres, positive double, at least the car's
+      # tightest turn that way. Defaults: about 10% over car 21's reported 1 m
+      # left radius (Yuhao) and the measured 0.92 1/m right limit (1.09 m).
+      # Car 20's 0.48 1/m left limit (2.1 m) is too wide for a lab crossing.
+      left_turn_radius_m: 1.1
+      right_turn_radius_m: 1.2
+      # Width of the road turned into, metres, double >= 0. 0.0: the same as
+      # the approach lane's measured width.
+      cross_lane_width_m: 0.0
+      # Gap kept between the car's body and a cone's edge at the inside corner
+      # and the exit's far row when planning where the arc starts, metres,
+      # double >= 0. 0.03: in 0.8 m roads 59/60 simulated turns kept clear of
+      # the cones against 53/60 at 0.05, which starts the arc too late for the
+      # car's front corner to clear the far row; 1 m roads pass either way.
+      corner_clearance_m: 0.03
+      # Speed near the entry, through the turn and on the exit, m/s, positive
+      # double.
+      turn_speed_m_per_s: 0.3
+      # From this far before the entry the car holds the approach direction
+      # instead of following the lane, metres, double >= 0.
+      hold_line_m: 0.8
+      # Pure pursuit lookahead on the approach line, the arc and the exit line,
+      # metres, positive double.
+      lookahead_m: 0.5
+      # Degrees the car must have turned before lane following may take over in
+      # the exit lane, double in [0, 90].
+      handover_heading_deg: 60.0
+      # How far along the exit the car looks for the exit lane before stopping
+      # for the rest of the run, metres, positive double.
+      exit_search_m: 1.5

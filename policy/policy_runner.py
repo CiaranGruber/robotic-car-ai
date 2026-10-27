@@ -4,6 +4,7 @@ import dataclasses
 import math
 
 from policy.action_policy.avoidance import AvoidanceConfig, LaneAvoidance
+from policy.action_policy.intersection import IntersectionConfig, IntersectionTurner
 from policy.action_policy.lane_path import LanePath
 from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig, OpenSpacePolicy
@@ -17,7 +18,7 @@ from policy.lane_detection.lanes import LaneDetection
 from policy.local_map.local_map import LocalMap, LocalMapConfig
 from policy.markers.commands import MarkerCommand
 from policy.markers.markers import MarkerConfig, MarkerReader
-from policy.memory import CarMemory
+from policy.memory import CarMemory, CarPose, IntersectionTurn
 from policy.obstacle_detection.obstacle_detection import (ObstacleDetectionConfig, detect_lane_obstacles,
                                                           detect_obstacles, nearest_in_band)
 from policy.obstacle_detection.obstacles import LaneObstacle, ObstacleDetection
@@ -37,7 +38,8 @@ class MovementPolicy:
                  lane_detection_config: LaneDetectionConfig = LaneDetectionConfig(),
                  obstacle_detection_config: ObstacleDetectionConfig = ObstacleDetectionConfig(),
                  avoidance_config: AvoidanceConfig = AvoidanceConfig(),
-                 local_map_config: LocalMapConfig = LocalMapConfig(), marker_config: MarkerConfig = MarkerConfig()):
+                 local_map_config: LocalMapConfig = LocalMapConfig(), marker_config: MarkerConfig = MarkerConfig(),
+                 intersection_config: IntersectionConfig = IntersectionConfig()):
         """
         :param mpc_config: The MPC settings, from the mpc parameters in config/ai4r_policy.yaml.
         :param cone_filter_config: The cone filter settings, from the cone_filter parameters in
@@ -63,6 +65,8 @@ class MovementPolicy:
             in config/ai4r_policy.yaml.
         :param marker_config: Which ArUco markers give which commands, from the markers parameters in
             config/ai4r_policy.yaml.
+        :param intersection_config: How the car turns or drives straight at an intersection a marker asks for, from
+            the intersection parameters in config/ai4r_policy.yaml.
         """
         if action_policy not in ACTION_POLICIES:
             raise ValueError(f"action_policy must be one of {ACTION_POLICIES}, not {action_policy!r}")
@@ -110,6 +114,15 @@ class MovementPolicy:
         """The command a marker gave in the latest step, or None."""
         self.intersection_command: MarkerCommand | None = None
         """What to do at the next intersection after the latest step (Memory.intersection_command), or None."""
+        self.turner = IntersectionTurner(intersection_config, self.action_policy, avoidance_config.car_width_m,
+                                         obstacle_detection_config.car_front_m)
+        self.manoeuvre: tuple[float, float] | None = None
+        """The (speed in m/s, curvature in 1/m) the intersection manoeuvre drove in the latest step, or None while
+        lane following drove."""
+        self.intersection_turn: IntersectionTurn | None = None
+        """The intersection manoeuvre after the latest step (Memory.intersection_turn), or None, for drawing."""
+        self.pose: CarPose | None = None
+        """The car's pose in the run's map frame after the latest step (Memory.pose), or None, for drawing."""
         self.cones: ConeBatch | None = None
         """The cones the latest step used, after the cone filter and the camera yaw correction, or None without fresh
         cones. The remembered cones lane detection also used are self.local_map.recalled."""
@@ -161,22 +174,47 @@ class MovementPolicy:
         # recall the remembered cones it does not show: beside the car, or hidden behind an obstacle
         recalled = self.local_map.step(observations, memory, self.action_policy.previous_speed_m_per_s,
                                        self.action_policy.previous_curvature_per_m)
-        # Detect the lane edges, centre line and where the car is in the lane
-        lanes = self.lane_detector.detect(observations, recalled)
+        # Detect the lane edges, centre line and where the car is in the lane. Approaching an intersection a marker
+        # asked for, only the approach road's cones are used: the cross road's would bend the fitted lane.
+        lane_observations = observations
+        if memory.data.intersection_turn is not None and observations.cones is not None:
+            lane_observations = dataclasses.replace(observations, cones=ConeBatch(
+                self.turner.lane_cones(observations.cones, memory), observations.cones.sensor_age,
+                observations.cones.acquisition_to_publish_latency_s))
+            recalled = self.turner.lane_cones(recalled, memory)
+        lanes = self.lane_detector.detect(lane_observations, recalled)
         self.lanes = lanes
-        # Find the obstacles: inside the lane when there is one, otherwise in a straight corridor ahead of the car
-        self.obstacles = detect_obstacles(observations, self.obstacle_detection_config)
-        self.lane_obstacles = detect_lane_obstacles(observations, lanes, self.obstacle_detection_config)
-        # Plan one line past all the known obstacles, chosen from candidate lines checked along their whole length.
-        # The MPC follows it over its horizon, and the obstacle check follows it at each obstacle.
-        usual_m = (self.action_policy.usual_offset_m(lanes.lane_width_m, lanes.path_curvature_per_m)
-                   if lanes is not None and lanes.has_lane else None)
-        self.lane_path = self.avoidance.step(observations, lanes, self.lane_obstacles, usual_m, memory)
-        self.action_policy.avoidance_path = (
-            self.lane_path if self.lane_path is not None and self.lane_path.segments else None)
-        self.obstacle_distance_m = self._obstacle_distance_m(lanes)
-        # Determine the policy to take based upon the car location; an obstacle in the car's way stops it
-        instructions = self.action_policy.run_policy(observations, lanes, self.obstacle_distance_m, memory)
+        # A turn or straight-on marker places the intersection ahead, from where the marker is
+        if self.marker_command is not None and self.markers.position is not None:
+            self.turner.start(self.marker_command, self.markers.position, lanes, self.action_policy.config.lane_width_m,
+                              memory)
+        # At an intersection, the manoeuvre drives until it finds the exit lane; otherwise the MPC follows the lane
+        self.manoeuvre = self.turner.step(lanes, memory)
+        self.intersection_command = memory.data.intersection_command
+        self.intersection_turn, self.pose = memory.data.intersection_turn, memory.data.pose
+        if self.manoeuvre is not None:
+            # The lane is not followed, so look for obstacles along the manoeuvre's path (its arc while turning): a
+            # straight corridor would take the cones of the road turned into for obstacles
+            self.obstacles = detect_obstacles(observations, self.obstacle_detection_config,
+                                              self.turner.path_curvature_per_m)
+            self.lane_obstacles, self.lane_path, self.action_policy.avoidance_path = None, None, None
+            self.obstacle_distance_m = None if self.obstacles is None else self.obstacles.in_path_distance_m
+            instructions = self.action_policy.follow_manoeuvre(observations, self.obstacle_distance_m,
+                                                               *self.manoeuvre, memory)
+        else:
+            # Find the obstacles: inside the lane when there is one, otherwise in a straight corridor ahead of the car
+            self.obstacles = detect_obstacles(observations, self.obstacle_detection_config)
+            self.lane_obstacles = detect_lane_obstacles(observations, lanes, self.obstacle_detection_config)
+            # Plan one line past all the known obstacles, chosen from candidate lines checked along their whole
+            # length. The MPC follows it over its horizon, and the obstacle check follows it at each obstacle.
+            usual_m = (self.action_policy.usual_offset_m(lanes.lane_width_m, lanes.path_curvature_per_m)
+                       if lanes is not None and lanes.has_lane else None)
+            self.lane_path = self.avoidance.step(observations, lanes, self.lane_obstacles, usual_m, memory)
+            self.action_policy.avoidance_path = (
+                self.lane_path if self.lane_path is not None and self.lane_path.segments else None)
+            self.obstacle_distance_m = self._obstacle_distance_m(lanes)
+            # Determine the policy to take based upon the car location; an obstacle in the car's way stops it
+            instructions = self.action_policy.run_policy(observations, lanes, self.obstacle_distance_m, memory)
         # The car actions to determine
         car_actions = self.car_controller.step(observations, instructions)
         # Hold the camera at zero pan: the camera's fixed transform to base_link assumes it, and any pan rotates every

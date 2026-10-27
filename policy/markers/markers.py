@@ -9,7 +9,7 @@ import logging
 import math
 from dataclasses import dataclass, fields
 
-from policy.input_output import CarObservations
+from policy.input_output import CarObservations, Position
 from policy.markers.commands import MarkerCommand
 from policy.memory import CarMemory
 
@@ -78,6 +78,9 @@ class MarkerReader:
         """
         self.config = config
         self.commands = config.commands
+        self.position: Position | None = None
+        """Where the marker counted at the latest step is, in base_link, or None when none counted. An intersection
+        manoeuvre places the intersection from it."""
 
     def nearest_in_range(self, observations: CarObservations) -> int | None:
         """
@@ -85,6 +88,7 @@ class MarkerReader:
         :return: The ID of the nearest mapped marker with a pose ahead of base_link within max_distance_m, or None
             without one or without a fresh fiducial batch.
         """
+        self.position = None
         fiducials = observations.fiducials
         if fiducials is None:
             return None
@@ -95,7 +99,7 @@ class MarkerReader:
             position = detection.pose.position
             distance_m = math.hypot(position.x, position.y)
             if position.x > 0.0 and distance_m <= self.config.max_distance_m and distance_m < nearest_m:
-                nearest_id, nearest_m = detection.id, distance_m
+                nearest_id, nearest_m, self.position = detection.id, distance_m, position
         return nearest_id
 
     def step(self, observations: CarObservations, memory: CarMemory) -> MarkerCommand | None:
