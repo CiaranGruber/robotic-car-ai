@@ -1,0 +1,17 @@
+name: Box in the lane
+description: >-
+  A 5 m lab lane with a 0.2 x 0.25 m box standing right of centre halfway along, like obstacle_simulation.py's
+  straight cases. The lidar sees the box and it hides the cones behind it from the camera. The policy should pass it
+  on the left or stop before it, without touching it.
+start: {x: -0.3, y: 0.0, heading_deg: 0.0}
+duration_s: 30.0
+roads:
+  - lane:
+      start: [0.0, 0.0]
+      heading_deg: 0.0
+      width_m: 0.8
+      cone_spacing_m: 0.2
+      left_colour: BLUE
+      pieces: [[straight, 5.0]]
+obstacles:
+  - {x: 2.6, y: -0.15, length_m: 0.2, width_m: 0.25, height_m: 0.25}

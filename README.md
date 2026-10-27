@@ -370,6 +370,20 @@ policy = Node(
 # Append one explicit policy overlay after the shipped file if needed.
 ```
 
+## Simulator and live 3D viewer
+
+To develop without the car, run the policy in a real-time 3D simulation of the car among cones, ArUco signs and
+boxes, viewed in your browser (chase, car-camera, top and orbit views):
+
+```bash
+.venv/bin/python -m tests.policy.simulator cross --marker-id 3
+```
+
+With the car connected, the same viewer rebuilds its surroundings from its live detections, read-only through its
+Foxglove bridge: `.venv/bin/python -m tests.policy.simulator --car 10.43.254.26:1234`. Tracks, options, the
+models and their limits are in [the simulator's README](tests/policy/simulator/README.md). It simulates decoded
+detections, not camera pixels.
+
 ## Integration status and development
 
 This is the standalone source repository. DREAM's AI4R integration defines the

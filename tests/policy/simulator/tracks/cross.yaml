@@ -1,0 +1,15 @@
+name: Four-way cross with an ArUco sign
+description: >-
+  The navigation evaluation's 2.4 m equal-width cross (intersection_simulation.py --navigate), cones every 0.2 m, with
+  one sign on the right of the incoming road. ID 3 turns left, 4 right and 5 goes straight; pick it in the viewer or
+  with --marker-id. The intersection navigator is on, with the sensors it needs, as on the car's own override.
+start: {x: -5.5, y: 0.0, heading_deg: 0.0}
+duration_s: 45.0
+roads:
+  - cross: {centre: [0.0, 0.0], width_m: 2.4, arm_length_m: 8.0, cone_spacing_m: 0.2}
+markers:
+  - {id: 3, x: -3.8, y: -0.7, facing_deg: 180, height_m: 0.2}
+policy_settings:
+  intersection.enabled: true
+  required_sensors: [cone_detections, wheel_speed, imu_angular_velocity, lidar_cartesian]
+  cone_empty_timeout_s: 4.0

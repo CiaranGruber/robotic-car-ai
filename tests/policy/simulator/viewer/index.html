@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI4R Car Simulator</title>
+<style>
+  :root {
+    --panel: rgba(17, 21, 27, 0.82); --panel-line: rgba(255, 255, 255, 0.10); --ink: #eef2f6; --ink-2: #a9b4c0;
+    --muted: #74808d; --blue: #3d7fff; --yellow: #f6c20f; --good: #2fbf4a; --warn: #e3a92a; --bad: #f06a6a;
+    --accent: #3d7fff; --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1116; color: var(--ink); font: 13px/1.4 var(--sans); }
+  #view { position: fixed; inset: 0; }
+  #view canvas { display: block; }
+  .panel { position: fixed; background: var(--panel); border: 1px solid var(--panel-line); border-radius: 8px;
+           backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  #bar { top: 12px; left: 12px; right: 12px; display: flex; align-items: center; gap: 12px; padding: 8px 12px; }
+  #bar .title { font-weight: 650; letter-spacing: 0.02em; }
+  .badge { font: 600 11px/1 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; padding: 5px 8px;
+           border-radius: 4px; background: rgba(61, 127, 255, 0.18); color: #9cc0ff; }
+  .badge.car { background: rgba(47, 191, 74, 0.18); color: #8be39c; }
+  .badge.manual { background: rgba(227, 169, 42, 0.22); color: #ffd27a; }
+  .badge.paused { background: rgba(240, 106, 106, 0.2); color: #ffb0b0; }
+  #trackname { color: var(--ink-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #clock { margin-left: auto; font: 600 14px var(--mono); font-variant-numeric: tabular-nums; }
+  #hud { top: 64px; left: 12px; width: 268px; padding: 10px 12px; }
+  #hud h2, #controls h2 { margin: 0 0 6px; font: 600 10px/1 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  #hud dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0 0 8px; }
+  #hud dt { color: var(--ink-2); }
+  #hud dd { margin: 0; text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .meter { position: relative; height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; margin-top: 5px; }
+  .meter i { position: absolute; top: 0; bottom: 0; background: var(--accent); border-radius: 3px; }
+  .meter::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: rgba(255,255,255,0.35); }
+  .state { padding: 6px 8px; border-radius: 6px; margin-bottom: 8px; font-size: 12px; background: rgba(255,255,255,0.06); }
+  .state.driving { background: rgba(47, 191, 74, 0.16); }
+  .state.zero { background: rgba(227, 169, 42, 0.14); }
+  #controls { top: 64px; right: 12px; width: 236px; padding: 10px 12px; display: flex; flex-direction: column; gap: 10px;
+              max-height: calc(100vh - 64px - 34vw * 9 / 16 - 96px); min-height: 120px; overflow: auto; box-sizing: border-box; }
+  summary { color: var(--ink-2); cursor: pointer; margin-top: 4px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; }
+  button, select { font: inherit; color: var(--ink); background: rgba(255,255,255,0.08); border: 1px solid var(--panel-line);
+                   border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+  button:hover, select:hover { background: rgba(255,255,255,0.14); }
+  button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button.on { background: rgba(61, 127, 255, 0.35); border-color: rgba(61, 127, 255, 0.7); }
+  select { width: 100%; }
+  label.check { display: flex; align-items: center; gap: 6px; color: var(--ink-2); cursor: pointer; }
+  #layers { display: grid; gap: 2px; max-height: 160px; overflow: auto; }
+  #events { left: 12px; bottom: 12px; width: min(520px, calc(100vw - 24px)); max-height: 150px; overflow: hidden; padding: 8px 12px;
+            font: 12px/1.5 var(--mono); color: var(--ink-2); white-space: pre-wrap; }
+  #inset-frame { position: fixed; border: 1px solid rgba(255,255,255,0.35); border-radius: 4px; pointer-events: none; display: none; }
+  #inset-frame span { position: absolute; left: 6px; top: 5px; font: 600 10px var(--sans); letter-spacing: 0.1em;
+                      text-transform: uppercase; color: #fff; text-shadow: 0 1px 2px #000; }
+  #banner { top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 14px 18px; display: none; text-align: center; max-width: 80vw; }
+  #banner button { margin-top: 10px; }
+  #help { right: 12px; bottom: 12px; padding: 8px 12px; font-size: 11px; color: var(--ink-2); }
+  kbd { font: 600 10px var(--mono); border: 1px solid var(--panel-line); border-radius: 3px; padding: 1px 4px; color: var(--ink); }
+  .hidden { display: none !important; }
+  @media (max-width: 760px) { #hud { width: 200px; } #controls { width: 180px; } #help { display: none; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+               "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div id="view"></div>
+<div id="inset-frame"><span id="inset-label">Car camera</span></div>
+
+<header id="bar" class="panel">
+  <span class="title">AI4R car simulator</span>
+  <span id="mode" class="badge">connecting</span>
+  <span id="manual-badge" class="badge manual hidden">manual drive</span>
+  <span id="paused-badge" class="badge paused hidden">paused</span>
+  <span id="trackname"></span>
+  <span id="clock">0.00 s</span>
+</header>
+
+<section id="hud" class="panel">
+  <div id="node" class="state">Waiting for the first frame</div>
+  <h2>Car</h2>
+  <dl>
+    <dt>Speed</dt><dd id="speed">-</dd>
+    <dt>Drive</dt><dd><span id="drive">-</span><div class="meter"><i id="drive-bar"></i></div></dd>
+    <dt>Steering</dt><dd><span id="steer">-</span><div class="meter"><i id="steer-bar"></i></div></dd>
+    <dt id="distance-label">Driven</dt><dd id="distance">-</dd>
+  </dl>
+  <h2 id="perception-title">Perception</h2>
+  <dl id="perception"></dl>
+</section>
+
+<section id="controls" class="panel">
+  <div>
+    <h2>Run</h2>
+    <div class="row">
+      <button id="pause" title="Space">Pause</button>
+      <button id="restart" title="R">Restart</button>
+      <button id="manual" class="sim-only" title="M">Drive by hand</button>
+    </div>
+  </div>
+  <div class="sim-only">
+    <h2>Speed</h2>
+    <select id="speed-select" aria-label="Simulation speed">
+      <option value="0.25">0.25x</option><option value="0.5">0.5x</option><option value="1" selected>1x real time</option>
+      <option value="2">2x</option><option value="4">4x</option>
+    </select>
+  </div>
+  <div class="sim-only">
+    <h2>Track</h2>
+    <select id="track-select" aria-label="Track"></select>
+  </div>
+  <div id="marker-box" class="sim-only hidden">
+    <h2>First marker's ID</h2>
+    <select id="marker-select" aria-label="Marker ID"></select>
+  </div>
+  <div>
+    <h2>View</h2>
+    <div class="row">
+      <button data-view="chase" class="on" title="1">Chase</button>
+      <button data-view="camera" title="2">Camera</button>
+      <button data-view="top" title="3">Top</button>
+      <button data-view="orbit" title="4">Orbit</button>
+    </div>
+  </div>
+  <div>
+    <h2>Show</h2>
+    <label class="check"><input type="checkbox" id="show-inset" checked> Camera inset (I)</label>
+    <label class="check"><input type="checkbox" id="show-fov" checked> Camera view area (V)</label>
+    <label class="check"><input type="checkbox" id="show-lidar" checked> Lidar (L)</label>
+    <label class="check"><input type="checkbox" id="show-policy" checked> Policy drawings (P)</label>
+    <details><summary>Drawing layers</summary><div id="layers"></div></details>
+  </div>
+</section>
+
+<section id="events" class="panel"></section>
+<section id="help" class="panel">
+  <kbd>Space</kbd> pause · <kbd>R</kbd> restart · <kbd>1</kbd>-<kbd>4</kbd> views · <kbd>M</kbd> hand driving, then arrow keys
+</section>
+<div id="banner" class="panel"><div id="banner-text"></div><button id="banner-restart" class="hidden">Restart</button></div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

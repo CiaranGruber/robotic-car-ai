@@ -1,0 +1,18 @@
+name: Wide lane with keep-left and keep-centre signs
+description: >-
+  A 1.4 m lane, wide enough for mpc.lane_side to matter, with two signs just outside its edges: ID 0 on the right
+  moves the car to the left of the lane, then ID 1 on the left brings it back to the centre (the markers.* settings).
+  A sign counts within markers.max_distance_m (1.5 m), so each stands on the side the car will be on.
+start: {x: -0.3, y: 0.0, heading_deg: 0.0}
+duration_s: 40.0
+roads:
+  - lane:
+      start: [0.0, 0.0]
+      heading_deg: 0.0
+      width_m: 1.4
+      cone_spacing_m: 0.2
+      left_colour: BLUE
+      pieces: [[straight, 8.0]]
+markers:
+  - {id: 0, x: 1.6, y: -0.8, facing_deg: 180, height_m: 0.2}
+  - {id: 1, x: 5.0, y: 0.8, facing_deg: 180, height_m: 0.2}

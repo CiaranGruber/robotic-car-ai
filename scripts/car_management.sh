@@ -7,7 +7,7 @@ set -euo pipefail
 # --------------------
 
 # Car number (1–20); used to form the host address.
-CAR_NUM=20
+CAR_NUM=13
 
 # SSH connection constants for the car.
 REMOTE_PORT=22

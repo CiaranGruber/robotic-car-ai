@@ -1,0 +1,14 @@
+name: Lab straight
+description: >-
+  The Stage 1 lab lane (real_car_measurements.LAB_LANE): 3.2 m long, 0.8 m wide, cones every 0.2 m, blue on the
+  left. The car starts at rest just behind the first cone pair and should stop 0 to 0.5 m past the last pair.
+start: {x: -0.3, y: 0.0, heading_deg: 0.0}
+duration_s: 20.0
+roads:
+  - lane:
+      start: [0.0, 0.0]
+      heading_deg: 0.0
+      width_m: 0.8
+      cone_spacing_m: 0.2
+      left_colour: BLUE
+      pieces: [[straight, 3.2]]

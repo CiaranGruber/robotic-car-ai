@@ -1,0 +1,14 @@
+name: T-junction, straight closed
+description: >-
+  The 2.4 m cross with its straight arm closed by a yellow row, as in t_intersection_simulation.py. ID 3 (left) and
+  ID 4 (right) are open exits; ID 5 (straight) asks for the closed road and the car must stop, not take another exit.
+start: {x: -5.5, y: 0.0, heading_deg: 0.0}
+duration_s: 45.0
+roads:
+  - cross: {centre: [0.0, 0.0], width_m: 2.4, arm_length_m: 8.0, cone_spacing_m: 0.2, closed_exit: straight}
+markers:
+  - {id: 3, x: -3.8, y: -0.7, facing_deg: 180, height_m: 0.2}
+policy_settings:
+  intersection.enabled: true
+  required_sensors: [cone_detections, wheel_speed, imu_angular_velocity, lidar_cartesian]
+  cone_empty_timeout_s: 4.0

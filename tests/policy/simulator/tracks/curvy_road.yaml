@@ -1,0 +1,14 @@
+name: Curvy road
+description: >-
+  A 0.8 m lab lane that bends left (2.5 m radius) and then right (2 m radius), cones every 0.2 m. Car 20 reaches
+  0.48 1/m left and 0.92 1/m right, so both bends are within its steering.
+start: {x: -0.3, y: 0.0, heading_deg: 0.0}
+duration_s: 40.0
+roads:
+  - lane:
+      start: [0.0, 0.0]
+      heading_deg: 0.0
+      width_m: 0.8
+      cone_spacing_m: 0.2
+      left_colour: BLUE
+      pieces: [[straight, 1.5], [arc, 0.4, 90], [straight, 1.0], [arc, -0.5, 90], [straight, 1.5]]
