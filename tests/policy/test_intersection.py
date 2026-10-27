@@ -136,8 +136,20 @@ def test_the_simulated_car_follows_the_markers(name):
     assert result.outcome == "passed", result.metrics
 
 
-def test_without_the_manoeuvre_the_car_stops_where_the_approach_ends():
+def test_without_the_manoeuvre_or_branch_association_the_car_stops_where_the_approach_ends():
     case = next(case for case in ms.CASES if case.name == "cross_left_1m")
-    result = ms.run_case(case, {**SETTINGS, "intersection.enabled": False}, seed=0)
+    result = ms.run_case(case, {**SETTINGS, "intersection.enabled": False,
+                                "lane_detection.associate_branches": False}, seed=0)
     assert result.outcome == "stopped"
     assert result.x[-1] < case.world.roads[1].x_m
+
+
+def test_without_the_manoeuvre_branch_association_carries_the_car_straight_across():
+    """lane_detection.associate_branches separates the crossing arms, so the approach lane continues across the
+    crossing: with the manoeuvre off the car ignores the turn marker and drives straight over, touching no cone."""
+    case = next(case for case in ms.CASES if case.name == "cross_left_1m")
+    result = ms.run_case(case, {**SETTINGS, "intersection.enabled": False}, seed=0)
+    assert result.outcome == "wrong exit"
+    assert result.x[-1] > case.world.roads[1].x_m
+    assert result.metrics["cones_touched"] == 0
+    assert result.metrics["max_outside_m"] < 0.0

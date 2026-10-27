@@ -789,13 +789,20 @@ def test_clipping_pan_hold_exception_and_overrun(make_node):
     assert node.action_publisher.messages[-1].drive == 0.0
 
 
-def test_shipped_student_calculation_is_zero_and_handles_missing_observations(make_node):
+def test_movement_calculation_handles_missing_optional_observations(make_node):
     node = make_node()
     request(node, 3)
     node.run_policy_step()
     assert node.action_publisher.messages[-1].drive == 0.0
+    assert node.action_publisher.messages[-1].steer == (
+        node.movement_policy.car_controller.config.steering_centre_action)
+    # The active lane follower requests the fixed zero-pan pose. A policy stop
+    # must hold that target without publishing another pan command.
+    assert [message.data for message in node.pan_publisher.messages] == [0.0]
+    request(node, 2)
+    assert node.action_publisher.messages[-1].drive == 0.0
     assert node.action_publisher.messages[-1].steer == 0.0
-    assert not node.pan_publisher.messages
+    assert [message.data for message in node.pan_publisher.messages] == [0.0]
 
 
 def test_invalid_sensor_content_and_runtime_parameter_changes(make_node):
@@ -911,25 +918,34 @@ def test_invalid_startup_settings_fail(make_node, mode, required, extra):
 
 
 def test_installed_configs_and_namespaced_loading(tmp_path):
-    assert yaml.safe_load((SHARE / "config/lidar_mount.yaml").read_text()) == {}
+    lidar_mount = yaml.safe_load((SHARE / "config/lidar_mount.yaml").read_text())
+    assert isinstance(lidar_mount, dict)
+    assert set(lidar_mount) <= {"forward_from_cg_m", "left_from_cg_m", "height_above_ground_m",
+                              "roll_deg", "pitch_deg", "yaw_deg"}
+    documents = {}
     for name in ("ai4r_policy", "traxxas_vehicle_interface", "oakd_cone_detector",
                  "bno08x_imu_interface", "aruco_detector"):
         document = yaml.safe_load((SHARE / "config" / f"{name}.yaml").read_text())
         assert list(document) == [f"/**/{name}"]
         assert isinstance(document[f"/**/{name}"]["ros__parameters"], dict)
+        documents[name] = document[f"/**/{name}"]["ros__parameters"]
     aruco_parameters = yaml.safe_load(
         (SHARE / "config/aruco_detector.yaml").read_text())["/**/aruco_detector"]["ros__parameters"]
-    assert aruco_parameters == {
-        "dictionary_name": "DICT_4X4_50", "default_marker_size_m": 0.25,
-        "allowed_marker_ids": [], "min_consecutive_frames": 3}
+    # These source files deliberately admit measured exercise/car settings. Verify their
+    # contract and actual loading; do not freeze an old marker size or cones-only exercise.
+    assert isinstance(aruco_parameters["dictionary_name"], str)
+    assert math.isfinite(aruco_parameters["default_marker_size_m"])
+    assert aruco_parameters["default_marker_size_m"] > 0.0
+    assert isinstance(aruco_parameters["allowed_marker_ids"], list)
+    assert aruco_parameters["min_consecutive_frames"] >= 1
     context = Context()
     rclpy.init(context=context)
     node = policy.PolicyNode(context=context, namespace="namespaced",
         cli_args=["--ros-args", "--params-file", str(SHARE / "config/ai4r_policy.yaml")])
     try:
         assert node.get_fully_qualified_name() == "/namespaced/ai4r_policy"
-        assert node.policy_update_mode == "cone_detection"
-        assert node.required_sensors == ["cone_detections"]
+        assert node.policy_update_mode == documents["ai4r_policy"]["policy_update_mode"]
+        assert node.required_sensors == documents["ai4r_policy"]["required_sensors"]
     finally:
         node.destroy_node()
         context.shutdown()
@@ -961,7 +977,9 @@ def test_installed_launch_starts_executable_and_shuts_down(tmp_path):
             cwd=tmp_path, env=environment, stdout=output_file, stderr=subprocess.STDOUT,
             text=True, start_new_session=True)
         try:
-            marker = "Policy update source: cone_detection"
+            parameters = yaml.safe_load((SHARE / "config/ai4r_policy.yaml").read_text())[
+                "/**/ai4r_policy"]["ros__parameters"]
+            marker = f"Policy update source: {parameters['policy_update_mode']}"
             deadline = time.monotonic() + 10.0
             output = ""
             while time.monotonic() < deadline:

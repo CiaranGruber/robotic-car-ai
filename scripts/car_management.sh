@@ -140,7 +140,7 @@ Commands:
                     or skip that step and continue.
   start_runtime [--debug-images <type>] [--aruco]
                     Restart the usual dream runtime services on the car,
-                    including the lidar (rplidar_c1).
+                    including the IMU, lidar and cone detector.
                     With --debug-images, oakd_gpu_cone_detector is restarted with
                     that flag (dream runtime restart oakd_gpu_cone_detector
                     --debug-images <type>).
@@ -206,12 +206,13 @@ start_runtime() {
     #   optional --debug-images <type>: pass through to oakd_gpu_cone_detector only.
     #   optional --aruco: run oakd_cone_detector (which publishes the RGB image aruco_detector needs) instead of
     #   oakd_gpu_cone_detector.
-    # rplidar_c1 is restarted too: ai4r_policy requires lidar_cartesian, and the lidar is not running after a
-    # reboot that interrupted it.
+    # rplidar_c1 and bno08x_imu_interface are restarted too: ai4r_policy requires lidar_cartesian and the IMU, and
+    # neither is running after a reboot that interrupted it.
     local services=(
         foxglove_bridge
         traxxas_vehicle_interface
         rplidar_c1
+        bno08x_imu_interface
         oakd_gpu_cone_detector
         aruco_detector
         ai4r_policy
@@ -219,7 +220,7 @@ start_runtime() {
     local debug_images_type=""
     local aruco=""
     local service
-    local remote_cmd=""
+    local remote_cmd="set -e; set -o pipefail; "
     local restart_cmd
 
     while [[ $# -gt 0 ]]; do
@@ -252,11 +253,14 @@ start_runtime() {
         fi
         # Both detectors use the camera: stop the GPU one, then aruco_detector gets oakd_cone_detector's RGB image
         services=("${services[@]/oakd_gpu_cone_detector/oakd_cone_detector}")
-        remote_cmd+='dream runtime stop oakd_gpu_cone_detector; '
     fi
     log "Restarting dream runtime services on ${REMOTE_USER}@${REMOTE_HOST}..."
     # UNIT names whose STATE is running (column 1 / 2 of `dream runtime status`).
     remote_cmd+='running_services=$(dream runtime status | awk '\''$2 == "running" { print $1 }'\''); '
+    # Both detectors use the same camera: stop the one not wanted before restarting the other
+    local unwanted_detector=oakd_cone_detector
+    [[ -n "$aruco" ]] && unwanted_detector=oakd_gpu_cone_detector
+    remote_cmd+="if printf '%s\\n' \"\$running_services\" | grep -qx ${unwanted_detector}; then dream runtime stop ${unwanted_detector}; fi; "
     for service in "${services[@]}"; do
         if [[ "$service" == "foxglove_bridge" ]]; then
             remote_cmd+='if ! printf "%s\n" "$running_services" | grep -qx foxglove_bridge; then dream runtime restart foxglove_bridge; fi; '

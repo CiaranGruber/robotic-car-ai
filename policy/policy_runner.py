@@ -6,6 +6,7 @@ import math
 from policy.action_policy.avoidance import AvoidanceConfig, LaneAvoidance
 from policy.action_policy.intersection import IntersectionConfig, IntersectionTurner
 from policy.action_policy.lane_path import LanePath
+from policy.action_policy.intersection_navigator import IntersectionNavigator, IntersectionNavigatorConfig
 from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig, OpenSpacePolicy
 from policy.action_policy.policy import MpcPolicy
@@ -13,8 +14,9 @@ from policy.action_policy.reference import rotate_cones
 from policy.cone_filter.cone_filter import ConeFilterConfig, filter_cones, remove_implausible_cones
 from policy.control.control import CarController, ControlConfig
 from policy.input_output import CarActions, CarObservations, ConeBatch
-from policy.lane_detection.lane_detection import LaneDetectionConfig, LaneDetector
+from policy.lane_detection.lane_detection import LaneDetectionConfig, LaneDetector, detect_lanes
 from policy.lane_detection.lanes import LaneDetection
+from policy.lane_detection.selection import SelectedIntersectionLane
 from policy.local_map.local_map import LocalMap, LocalMapConfig
 from policy.markers.commands import MarkerCommand
 from policy.markers.markers import MarkerConfig, MarkerReader
@@ -39,7 +41,8 @@ class MovementPolicy:
                  obstacle_detection_config: ObstacleDetectionConfig = ObstacleDetectionConfig(),
                  avoidance_config: AvoidanceConfig = AvoidanceConfig(),
                  local_map_config: LocalMapConfig = LocalMapConfig(), marker_config: MarkerConfig = MarkerConfig(),
-                 intersection_config: IntersectionConfig = IntersectionConfig()):
+                 intersection_config: IntersectionConfig = IntersectionConfig(),
+                 navigator_config: IntersectionNavigatorConfig = IntersectionNavigatorConfig()):
         """
         :param mpc_config: The MPC settings, from the mpc parameters in config/ai4r_policy.yaml.
         :param cone_filter_config: The cone filter settings, from the cone_filter parameters in
@@ -67,6 +70,9 @@ class MovementPolicy:
             config/ai4r_policy.yaml.
         :param intersection_config: How the car turns or drives straight at an intersection a marker asks for, from
             the intersection parameters in config/ai4r_policy.yaml.
+        :param navigator_config: The experimental sensed junction navigator (off by default), from the
+            intersection_navigator parameters in config/ai4r_policy.yaml. While it is on, it drives intersections instead of
+            the intersection manoeuvre (policy_node refuses to start with both enabled).
         """
         if action_policy not in ACTION_POLICIES:
             raise ValueError(f"action_policy must be one of {ACTION_POLICIES}, not {action_policy!r}")
@@ -103,6 +109,7 @@ class MovementPolicy:
         self.action_policy_name = action_policy
         self.local_map = LocalMap(local_map_config)
         self.lane_detector = LaneDetector(lane_detection_config)
+        self.initial_lane_detection_config = lane_detection_config
         self.obstacle_detection_config = obstacle_detection_config
         self.action_policy = MpcPolicy(mpc_config)
         self.avoidance = LaneAvoidance(avoidance_config, obstacle_detection_config.car_front_m, max_left, max_right,
@@ -110,6 +117,8 @@ class MovementPolicy:
         self.open_space_policy = OpenSpacePolicy(open_space_config, control_config.positive_steering_turns_left)
         self.car_controller = CarController(control_config)
         self.markers = MarkerReader(marker_config)
+        self.intersections = IntersectionNavigator(navigator_config, mpc_config, obstacle_detection_config,
+                                                   avoidance_config)
         self.marker_command: MarkerCommand | None = None
         """The command a marker gave in the latest step, or None."""
         self.intersection_command: MarkerCommand | None = None
@@ -128,6 +137,8 @@ class MovementPolicy:
         cones. The remembered cones lane detection also used are self.local_map.recalled."""
         self.lanes: LaneDetection | None = None
         """The lane detected in the latest step, or None in the open-space policy."""
+        self.selected_lane: SelectedIntersectionLane | None = None
+        """Active ArUco-selected junction centre path used by control, separate from measured cone edges."""
         self.obstacles: ObstacleDetection | None = None
         """The lidar obstacle observation of the latest step, with a straight corridor ahead of the car, or None
         without fresh Cartesian lidar points."""
@@ -154,6 +165,7 @@ class MovementPolicy:
         if observations.policy.is_first_policy_step:
             self.action_policy.reset()
             memory.start_marker_run()
+            self.lane_detector.config = self.initial_lane_detection_config
         # Follow the nearest command marker: keep to its side of the lane until another side marker, or remember the
         # next intersection's turn
         self.marker_command = self.markers.step(observations, memory)
@@ -170,6 +182,10 @@ class MovementPolicy:
             observations = dataclasses.replace(observations, cones=ConeBatch(
                 rotate_cones(cones, yaw_offset_rad), cones.sensor_age, cones.acquisition_to_publish_latency_s))
         self.cones = observations.cones
+        self.selected_lane = None
+        previous_intersection = memory.data.intersection
+        if previous_intersection is not None and previous_intersection.phase == "complete":
+            self.lane_detector.config = dataclasses.replace(self.lane_detector.config, left_colour="AUTO")
         # Move the car's pose by the previous step's command and the wheel speed, remember this step's cones, and
         # recall the remembered cones it does not show: beside the car, or hidden behind an obstacle
         recalled = self.local_map.step(observations, memory, self.action_policy.previous_speed_m_per_s,
@@ -184,12 +200,41 @@ class MovementPolicy:
             recalled = self.turner.lane_cones(recalled, memory)
         lanes = self.lane_detector.detect(lane_observations, recalled)
         self.lanes = lanes
-        # A turn or straight-on marker places the intersection ahead, from where the marker is
-        if self.marker_command is not None and self.markers.position is not None:
+        # The experimental navigator (intersection_navigator.enabled, off by default) drives the whole junction itself
+        instructions = self.intersections.step(observations, lanes, memory, self.action_policy)
+        self.selected_lane = self.intersections.selected_lane
+        intersection = memory.data.intersection
+        if instructions is not None:
+            # Remembered obstacle offsets and the old avoidance path belong to the incoming lane.
+            # Intersection control checks its own swept path; outgoing lane following must start fresh.
+            self.avoidance.memory = memory
+            self.avoidance.reset()
+            self.action_policy.avoidance_path = None
+            self.intersection_command = intersection.command
+            self.obstacles = detect_obstacles(observations, self.obstacle_detection_config)
+            self.lane_obstacles, self.lane_path, self.obstacle_distance_m = None, None, None
+            actions = self.car_controller.step(observations, instructions)
+            tracking = self.action_policy.lane_state
+            if self.selected_lane is not None and tracking is not None:
+                actions = dataclasses.replace(actions, debug1=tracking.lateral_error_m, debug2=tracking.heading_error_rad)
+            return dataclasses.replace(actions, camera_pan_action=0.0)
+        if (intersection is not None and intersection.phase == "complete"
+                and self.lane_detector.config.left_colour != "AUTO"):
+            # The right exit reverses the old colour-side convention. Keep the same lane fitting
+            # algorithm but establish the observed sides in the new lane.
+            self.lane_detector.config = dataclasses.replace(self.lane_detector.config, left_colour="AUTO")
+            # A transition may need a new side assignment, but must not update remembered
+            # width twice from the same camera batch.
+            lanes = detect_lanes(observations, self.lane_detector.config, self.lane_detector.lane_width_m)
+            self.lanes = lanes
+        # A turn or straight-on marker places the intersection ahead, from where the marker is (unless the experimental
+        # navigator is on, which drives intersections itself)
+        navigator_on = self.intersections.config.enabled
+        if not navigator_on and self.marker_command is not None and self.markers.position is not None:
             self.turner.start(self.marker_command, self.markers.position, lanes, self.action_policy.config.lane_width_m,
                               memory)
         # At an intersection, the manoeuvre drives until it finds the exit lane; otherwise the MPC follows the lane
-        self.manoeuvre = self.turner.step(lanes, memory)
+        self.manoeuvre = None if navigator_on else self.turner.step(lanes, memory)
         self.intersection_command = memory.data.intersection_command
         self.intersection_turn, self.pose = memory.data.intersection_turn, memory.data.pose
         if self.manoeuvre is not None:

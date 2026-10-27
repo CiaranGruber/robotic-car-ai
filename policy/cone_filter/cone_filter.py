@@ -150,11 +150,12 @@ def _is_plausible(cone: ConeDetection, config: ConeFilterConfig) -> bool:
     """
     :return: True when the cone is within the space the lane can occupy and is confident enough.
     """
-    return (0.0 < cone.pos.x
+    return (all(math.isfinite(v) for v in (cone.pos.x, cone.pos.y, cone.pos.z, cone.confidence))
+            and 0.0 < cone.pos.x
             and abs(cone.pos.y) <= config.max_lateral_m
             and (config.max_distance_m == 0.0 or math.hypot(cone.pos.x, cone.pos.y) <= config.max_distance_m)
             and config.min_height_m <= cone.pos.z <= config.max_height_m
-            and cone.confidence >= config.min_confidence)
+            and config.min_confidence <= cone.confidence <= 1.0)
 
 
 def _merge_duplicates(cones: list[ConeDetection], merge_distance_m: float) -> list[ConeDetection]:
@@ -163,8 +164,10 @@ def _merge_duplicates(cones: list[ConeDetection], merge_distance_m: float) -> li
     :return: The kept cones, in their received order.
     """
     kept = []
-    # Most confident first; sorted is stable, so equally confident cones keep their received order
-    for i in sorted(range(len(cones)), key=lambda i: cones[i].confidence, reverse=True):
+    # Equal-confidence duplicates use a geometric tie break so packet ordering cannot move
+    # the retained measurement and change its boundary association.
+    for i in sorted(range(len(cones)), key=lambda i: (-cones[i].confidence,
+                    math.hypot(cones[i].pos.x, cones[i].pos.y), cones[i].pos.x, cones[i].pos.y, cones[i].pos.z)):
         if all(cones[i].colour != cones[j].colour
                or math.hypot(cones[i].pos.x - cones[j].pos.x, cones[i].pos.y - cones[j].pos.y) >= merge_distance_m
                for j in kept):

@@ -68,6 +68,7 @@ from tf2_ros import Buffer, TransformException, TransformListener
 
 from policy.action_policy.avoidance import AvoidanceConfig
 from policy.action_policy.intersection import IntersectionConfig
+from policy.action_policy.intersection_navigator import IntersectionNavigatorConfig
 from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig
 from policy.cone_filter.cone_filter import ConeFilterConfig
@@ -294,7 +295,8 @@ class PolicyNode(Node):
         # floating-point number; 0 is an integer, which is a different ROS type.
 
         # Movement policy settings: see action_policy, mpc, open_space, cone_filter,
-        # control, lane_detection, obstacle_detection, avoidance and local_map in
+        # control, lane_detection, obstacle_detection, avoidance, local_map, markers, intersection and
+        # intersection_navigator in
         # ai4r_policy.yaml. MovementPolicy (policy/policy_runner.py) checks
         # action_policy and how the settings fit together. MpcConfig
         # (policy/action_policy/mpc.py), OpenSpaceConfig
@@ -305,7 +307,8 @@ class PolicyNode(Node):
         # (policy/obstacle_detection/obstacle_detection.py), AvoidanceConfig
         # (policy/action_policy/avoidance.py), LocalMapConfig
         # (policy/local_map/local_map.py), MarkerConfig
-        # (policy/markers/markers.py) and IntersectionConfig
+        # (policy/markers/markers.py), IntersectionNavigatorConfig
+        # (policy/action_policy/intersection_navigator.py) and IntersectionConfig
         # (policy/action_policy/intersection.py) hold their defaults and check them.
         self.declare_parameter("action_policy", "mpc", ParameterDescriptor(read_only=True))
         settings = {}
@@ -313,7 +316,8 @@ class PolicyNode(Node):
                 ("mpc", MpcConfig), ("open_space", OpenSpaceConfig), ("cone_filter", ConeFilterConfig),
                 ("control", ControlConfig), ("lane_detection", LaneDetectionConfig),
                 ("obstacle_detection", ObstacleDetectionConfig), ("avoidance", AvoidanceConfig),
-                ("local_map", LocalMapConfig), ("markers", MarkerConfig), ("intersection", IntersectionConfig)):
+                ("local_map", LocalMapConfig), ("markers", MarkerConfig), ("intersection", IntersectionConfig),
+                ("intersection_navigator", IntersectionNavigatorConfig)):
             defaults = asdict(config_type())
             for name, default in defaults.items():
                 self.declare_parameter(f"{prefix}.{name}", default, ParameterDescriptor(read_only=True))
@@ -324,7 +328,18 @@ class PolicyNode(Node):
             self.get_parameter("action_policy").value, lane_detection_config=settings["lane_detection"],
             obstacle_detection_config=settings["obstacle_detection"], avoidance_config=settings["avoidance"],
             local_map_config=settings["local_map"], marker_config=settings["markers"],
-            intersection_config=settings["intersection"])
+            intersection_config=settings["intersection"], navigator_config=settings["intersection_navigator"])
+        navigator = settings["intersection_navigator"]
+        if navigator.enabled and settings["intersection"].enabled:
+            raise ValueError("intersection.enabled and intersection_navigator.enabled cannot both be true: both act "
+                             "on the same marker command")
+        if navigator.enabled and not {"cone_detections", "wheel_speed", "imu_angular_velocity",
+                                      "lidar_cartesian"}.issubset(self.required_sensors):
+            raise ValueError("intersection_navigator.enabled requires cones, wheel speed, gyro and Cartesian lidar in "
+                             "required_sensors")
+        if navigator.enabled and self.cone_empty_timeout_s < navigator.camera_empty_hold_s:
+            raise ValueError("cone_empty_timeout_s must cover intersection_navigator.camera_empty_hold_s when it is "
+                             "enabled")
         # Every parameter value this node runs with, saved beside each drive data log
         # (<stem>_config.json). Settings are startup-only, so reading them once is enough.
         self.parameter_values = {

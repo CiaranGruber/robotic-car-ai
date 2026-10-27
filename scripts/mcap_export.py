@@ -46,6 +46,7 @@ from foxglove.messages import (Color, CubePrimitive, LinePrimitive, LinePrimitiv
 from policy import visualisation
 from policy.action_policy.avoidance import AvoidanceConfig
 from policy.action_policy.intersection import IntersectionConfig
+from policy.action_policy.intersection_navigator import IntersectionNavigatorConfig
 from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig
 from policy.cone_filter.cone_filter import ConeFilterConfig
@@ -76,7 +77,7 @@ CONFIG_TYPES = {
     "mpc": MpcConfig, "open_space": OpenSpaceConfig, "cone_filter": ConeFilterConfig, "control": ControlConfig,
     "lane_detection": LaneDetectionConfig, "obstacle_detection": ObstacleDetectionConfig,
     "avoidance": AvoidanceConfig, "local_map": LocalMapConfig, "markers": MarkerConfig,
-    "intersection": IntersectionConfig,
+    "intersection": IntersectionConfig, "intersection_navigator": IntersectionNavigatorConfig,
 }
 """The MovementPolicy settings, by their prefix in config/ai4r_policy.yaml, as policy_node reads them."""
 
@@ -152,7 +153,7 @@ def build_policy(settings: dict[str, Any]) -> MovementPolicy:
         settings.get("action_policy", "mpc"), lane_detection_config=configs["lane_detection"],
         obstacle_detection_config=configs["obstacle_detection"], avoidance_config=configs["avoidance"],
         local_map_config=configs["local_map"], marker_config=configs["markers"],
-        intersection_config=configs["intersection"])
+        intersection_config=configs["intersection"], navigator_config=configs["intersection_navigator"])
 
 
 def read_data_log(observations_path: Path) -> list[RecordedStep]:

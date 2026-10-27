@@ -12,10 +12,18 @@ from policy.memory import CarMemory
 from scenarios.scenario_wrapper import Scenario, ScenarioType
 from scripts import mcap_export
 
-TOPICS = {"/cones/detected", "/cones/used", "/memory/cones", "/lidar/points", "/lane", "/obstacles",
+TOPICS = {"/cones/detected", "/cones/used", "/memory/cones", "/lidar/points", "/lane", "/lane/observed", "/obstacles",
           "/memory/obstacles", "/plan/avoidance", "/plan/mpc", "/plan/intersection", "/fiducials", "/car",
           "/policy/state"}
 """Every topic the export writes."""
+
+
+def test_replay_uses_the_recorded_intersection_settings():
+    settings = mcap_export.read_settings(mcap_export.DEFAULT_SETTINGS_PATH)
+    settings.update({"intersection_navigator.enabled": True, "intersection_navigator.turning_radius_m": 3.})
+    policy = mcap_export.build_policy(settings)
+    assert policy.intersections.config.enabled
+    assert policy.intersections.config.turning_radius_m == 3.
 
 
 def _record_data_log(tmp_path, step_count):

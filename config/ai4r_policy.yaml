@@ -475,6 +475,10 @@
       # Cones farther than this from their fitted edge are left out and the
       # edges refitted, metres, positive double.
       outlier_distance_m: 0.15
+      # Separate supported crossing arms before fitting the incoming lane,
+      # boolean. Coherent circular rows keep the usual arc fit. Does not choose
+      # an exit; ArUco route selection is handled by the intersection navigator.
+      associate_branches: true
 
     # LOW-LEVEL CONTROL SETTINGS (ControlConfig in policy/control/control.py,
     # which checks them; invalid values stop the node from starting). They turn
@@ -818,3 +822,50 @@
       # How far along the exit the car looks for the exit lane before stopping
       # for the rest of the run, metres, positive double.
       exit_search_m: 1.5
+
+    # EXPERIMENTAL INTERSECTION NAVIGATOR SETTINGS (IntersectionNavigatorConfig
+    # in policy/action_policy/intersection_navigator.py). A separate, sensed
+    # equal-width perpendicular cross/T navigator. It cannot be enabled together
+    # with intersection.enabled above; both act on the same marker. Default false;
+    # locally simulated only. Enable only with measured steering/motion/frames.
+    # Keep the existing trigger. When enabled, required_sensors must include
+    # cone_detections, wheel_speed, imu_angular_velocity and lidar_cartesian.
+    # Set cone_empty_timeout_s >= camera_empty_hold_s too: the independent
+    # empty-camera watchdog must admit the intended bounded blind interval.
+    # Incoming width/frame come from cones; current lidar must support the
+    # selected exit's boundaries. A sign alone never starts a turn. No camera
+    # pan, learned weights, vehicle enable or hardware-limit changes are used.
+    # A committed ArUco direction selects the lane centre path shown in the
+    # Foxglove lane layer and used by MPC. Measured edges stay separate in
+    # lane/observed. Ordinary straight/curved lane fitting continues until
+    # junction admission and resumes after fresh outgoing-boundary confirmation.
+    # Equal-width perpendicular T junctions are also supported: current lidar
+    # must corroborate the selected exit's boundaries. Closing cone rows block
+    # that direction; missing returns leave it unknown. A side turn needs its
+    # near wall plus separated far-wall returns; straight needs two continued
+    # rows beyond the crossing. Unknown exits stop at the admission deadline.
+    # Geometry/exit flags are retained with the original finite route evidence;
+    # predicted paths do not make an unseen exit available.
+    # While waiting for exit evidence, a fresh incoming cone frame plus paired
+    # current lidar rows can support a slower straight approach. Its endpoint
+    # is fixed before the road mouth; the configured stopping margin/time and
+    # sensor/actuation/step allowance bound approach commands. This neither
+    # consumes the marker nor commits an exit; all stop latches remain active.
+    intersection_navigator:
+      enabled: false
+      # Planned radius, metres, finite > 0 and at least both physical minimum
+      # turning radii. 2.5 m respects the current .48/.92 per-metre limits.
+      turning_radius_m: 2.5
+      # Turning target speed, m/s, finite > 0 and <= mpc.target_speed_m_per_s.
+      # .4 retains wheel-speed feedback with the shipped control settings.
+      turn_speed_m_per_s: 0.4
+      # Maximum wheel/gyro/lidar age and step interval, seconds, finite > 0.
+      sensor_timeout_s: 0.3
+      # Maximum complete cone invisibility through a retained turn, seconds > 0.
+      camera_empty_hold_s: 4.0
+      # Pending marker command expiry from acquisition, seconds > 0.
+      command_max_age_s: 12.0
+      # Committed route lifetime from original support, seconds/metres > 0.
+      # Predictions and surviving single rows do not renew either anchor.
+      route_max_age_s: 24.0
+      route_max_distance_m: 10.0

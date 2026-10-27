@@ -127,10 +127,10 @@ def test_corridor_follows_the_steering_curvature(curvature_per_m):
     assert detect_obstacles(observe_lidar(on_curve), CONFIG).path_clear
 
 
-def lane_view(points, **lane):
+def lane_view(points, *, max_curvature_per_m=0., **lane):
     """Observations of a lab-width (0.8 m) lane from lane_cones with lidar returns at the points, and its lane."""
     observations = dataclasses.replace(observe(lane_cones(width_m=0.8, **lane)), lidar_cartesian=lidar(points))
-    return observations, detect_lanes(observations, LaneDetectionConfig())
+    return observations, detect_lanes(observations, LaneDetectionConfig(max_curvature_per_m=max_curvature_per_m))
 
 
 def test_object_in_the_lane_is_found_in_lane_coordinates():
@@ -168,7 +168,7 @@ def test_object_split_by_the_scan_start_is_one_object():
 
 
 def test_object_on_a_curved_lane_is_found_along_it():
-    observations, lane = lane_view([], radius_m=2.0)
+    observations, lane = lane_view([], radius_m=2.0, max_curvature_per_m=2.)
     centre_line = lane.centre_line
     points = [centre_line.offset(left).point_at(CONFIG.car_front_m + 1.0) for left in (-0.05, -0.025, 0.0, 0.025, 0.05)]
     observations = dataclasses.replace(observations, lidar_cartesian=lidar(points))
