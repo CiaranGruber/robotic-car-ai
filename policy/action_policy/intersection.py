@@ -10,17 +10,19 @@ When the marker is confirmed, the manoeuvre places the intersection's entry in t
 position and the car's pose (CarPose, kept by the local map's dead reckoning), and remembers the approach lane's
 centre line and direction. Then, in phases (TurnPhase, kept in CarMemory.intersection_turn):
 
-1. APPROACH: lane following (the MPC) drives on, with the lane refining the remembered centre line. Lane detection
+1. APPROACH: the lane refines the remembered centre line. Lane detection
    only gets the cones of the approach road, as the cross road's cones past the entry would bend the fitted lane. For a
-   turn, the MPC keeps to the outside of the lane (left before a right turn, as a hook turn does), aside_clearance_m
+   turn, bounded pure pursuit aims at the outside of the lane from confirmation (left before a right turn), aside_clearance_m
    from its edge: from the middle of a lab-width lane the car cannot steer tightly enough to clear both the inside
-   corner and the far side of the road it turns into. The lane side the car had is given back at the end. From
-   hold_line_m before the entry, where the approach rows end and lane detection loses the lane, or whenever there is
-   no lane, the car holds the remembered approach direction instead, slowing to turn_speed_m_per_s.
+   corner and the far side of the road it turns into. The lane side the car had is given back at the end.
+   The remembered outside line remains the target when cones disappear. Preparation uses turn_speed_m_per_s.
+   Without move_aside, the MPC follows the approach until hold_line_m before the entry or loss of the lane, then
+   holds the remembered direction at its current lateral offset.
 2. ARC: at the arc's start (arc_start_m), the car follows a circle of the turn's radius round the intersection's
    inside corner, with pure pursuit on the circle and the car's pose. The start puts the arc's end on the exit lane's
    centre line where the car can steer that tightly; otherwise it keeps the car corner_clearance_m clear of the
-   inside corner cone and of the exit's far cone row, or splits the difference when it cannot do both.
+   inside corner cone and of the exit's far cone row. Its radius respects both the MPC's calibrated limits and the
+   steering action map. If no start keeps both clearances, the car stops instead of attempting an infeasible arc.
 3. EXIT: once turned to the exit's direction (or, going straight, once past the entry), the car follows the exit line
    until lane detection gives a lane lined up with it, then lane following takes over and the manoeuvre is finished.
    Lane following may also take over during the arc, once the car has turned handover_heading_deg. Without an exit
@@ -32,13 +34,15 @@ few metres of the manoeuvre.
 """
 import logging
 import math
+import copy
 from dataclasses import dataclass, replace
 
 from policy.action_policy.policy import MpcPolicy
+from policy.control.control import ControlConfig, curvature_bounds
 from policy.input_output import ConeDetection, Position
 from policy.lane_detection.lanes import LaneDetection
 from policy.markers.commands import MarkerCommand
-from policy.memory import CarMemory, CarPose, IntersectionTurn, TurnPhase
+from policy.memory import CarMemory, CarPose, IntersectionTurn, MpcStop, TurnPhase
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,6 +61,8 @@ not ask for curves far tighter than the car can drive when it falls behind the a
 CORRIDOR_MARGIN_M = 0.25
 """While approaching, cones more than this far outside the approach lane's edges, or this far past the entry, are
 left out of lane detection, in metres."""
+PREVIEW_STEP_M, PREVIEW_MAX_STEPS = .05, 128
+"""Maximum spatial step and number of steps for geometric obstacle previews."""
 
 
 @dataclass(frozen=True)
@@ -69,12 +75,10 @@ class IntersectionConfig:
     """How far past the marker, along the approach lane, its cone rows end and the intersection starts, in metres.
     Finite. 0.0: the marker stands beside the last cones."""
     left_turn_radius_m: float = 1.1
-    """Radius of the arc turned along for a left turn, in metres, positive. At least the car's tightest left turn:
-    the default is about 10% more than car 21's reported 1 m (Yuhao's measurement, docs/marker-commands.md). Car 20's
-    measured left limit, 0.48 1/m, is a 2.1 m radius, too wide for a lab intersection."""
+    """Preferred minimum radius of a left turn, in metres, positive. The planned radius is enlarged when needed to
+    respect the MPC's left curvature limit and the steering action map; a smaller setting cannot override them."""
     right_turn_radius_m: float = 1.2
-    """Radius of the arc for a right turn, in metres, positive: about 10% more than the 1.09 m of the measured
-    0.92 1/m right limit."""
+    """Preferred minimum right turn radius in metres, positive, also bounded by the right curvature and action limits."""
     cross_lane_width_m: float = 0.0
     """Width of the road turned into, in metres, finite and at least 0. 0.0: the approach lane's measured width."""
     corner_clearance_m: float = 0.03
@@ -82,10 +86,10 @@ class IntersectionConfig:
     when planning the arc's start. At least 0. In the marker simulation's 0.8 m roads, 0.05 started the arc too late
     for the car's front corner to clear the far row (53/60 turns against 59/60)."""
     move_aside: bool = True
-    """Whether the car keeps to the outside of the approach lane before a turn (left before a right turn)."""
+    """Whether bounded pursuit prepares on the outside approach line immediately after a turn marker confirms."""
     aside_clearance_m: float = 0.25
-    """Distance in metres from the outside lane edge to the line followed before a turn (mpc.edge_clearance_m while
-    moving aside). Positive. 0.25 leaves 0.075 m between the car's side and the cones' edges."""
+    """Distance in metres from the outside lane edge to the preparation line. Positive. 0.25 leaves 0.075 m between
+    the car's side and the cones' edges for a 0.25 m-wide body and 0.05 m cone radius."""
     turn_speed_m_per_s: float = 0.3
     """Speed for the end of the approach, the arc and the exit, in m/s, positive."""
     hold_line_m: float = 0.8
@@ -120,11 +124,12 @@ class IntersectionConfig:
 
 
 def arc_start_m(approach_width_m: float, cross_width_m: float, radius_m: float, away_m: float, half_width_m: float,
-                front_m: float, margin_m: float) -> tuple[float, bool]:
+                front_m: float, margin_m: float, heading_error_rad: float = 0.0,
+                turn_side: float = 1.0) -> tuple[float, bool]:
     """Where to start turning, as a distance along the approach line from the entry (negative before it).
 
-    The arc is a quarter circle of base_link towards the turn side, starting with the car on the approach line's
-    direction. Its end is on the exit lane's centre line when that start keeps the car's body margin_m from the
+    The arc is a circle of base_link towards the turn side, tangent to the car's current heading. Its end is on the
+    exit lane's centre line when that start keeps the car's body margin_m from the
     inside corner cone (where the approach row on the turn side ends) and from the exit's far row; otherwise the
     nearest start that does, or halfway between the two limits when no start does. Turning, the car's inner side sweeps
     radius_m - half_width_m from the arc's centre and its outer front corner sqrt(front_m^2 + (radius_m +
@@ -138,17 +143,29 @@ def arc_start_m(approach_width_m: float, cross_width_m: float, radius_m: float, 
     :param half_width_m: Half the car's width in metres.
     :param front_m: Distance in metres from base_link to the car's front.
     :param margin_m: Gap in metres to keep between the body and a cone's edge.
+    :param heading_error_rad: Car heading minus approach heading in radians; zero for an aligned approach.
+    :param turn_side: +1 for left, -1 for right.
     :return: The start in metres, and whether it keeps both clearances.
     """
-    ideal = cross_width_m / 2.0 - radius_m
-    reach_m = math.hypot(front_m, radius_m + half_width_m)
-    latest = cross_width_m - CONE_RADIUS_M - margin_m - reach_m
-    inside_m = radius_m - away_m - approach_width_m / 2.0
-    room_m = radius_m - half_width_m - CONE_RADIUS_M - margin_m
-    earliest = -math.sqrt(room_m * room_m - inside_m * inside_m) if room_m >= abs(inside_m) else 0.0
+    earliest, latest = _arc_start_limits(approach_width_m, cross_width_m, radius_m, away_m, half_width_m, front_m,
+                                        margin_m, heading_error_rad, turn_side)
+    ideal = cross_width_m / 2.0 - radius_m + turn_side * radius_m * math.sin(heading_error_rad)
     if earliest <= latest:
         return min(max(ideal, earliest), latest), True
     return (earliest + latest) / 2.0, False
+
+
+def _arc_start_limits(approach_width_m: float, cross_width_m: float, radius_m: float, away_m: float,
+                      half_width_m: float, front_m: float, margin_m: float, heading_error_rad: float,
+                      turn_side: float) -> tuple[float, float]:
+    """Earliest/latest car positions for the tangent arc's corner/far-row clearances, along the approach line."""
+    shift = turn_side * radius_m * math.sin(heading_error_rad)
+    reach_m = math.hypot(front_m, radius_m + half_width_m)
+    latest = cross_width_m - CONE_RADIUS_M - margin_m - reach_m + shift
+    inside_m = radius_m * math.cos(heading_error_rad) - away_m - approach_width_m / 2.0
+    room_m = radius_m - half_width_m - CONE_RADIUS_M - margin_m
+    earliest = -math.sqrt(room_m * room_m - inside_m * inside_m) if room_m >= abs(inside_m) else 0.0
+    return earliest + shift, latest
 
 
 def _wrapped(angle_rad: float) -> float:
@@ -174,27 +191,37 @@ def _pursuit_curvature(pose: CarPose, target_x: float, target_y: float) -> float
 class IntersectionTurner:
     """Carries out the intersection manoeuvre a marker asks for. It keeps its state in CarMemory.intersection_turn."""
 
-    def __init__(self, config: IntersectionConfig, mpc: MpcPolicy, car_width_m: float, car_front_m: float):
+    def __init__(self, config: IntersectionConfig, mpc: MpcPolicy, car_width_m: float, car_front_m: float,
+                 control_config: ControlConfig = ControlConfig()):
         """
         :param config: The intersection settings.
         :param mpc: The MPC, whose lane side and edge clearance the manoeuvre changes while approaching a turn.
         :param car_width_m: The car's width in metres (avoidance.car_width_m).
         :param car_front_m: Distance in metres from base_link to the car's front (obstacle_detection.car_front_m).
+        :param control_config: The steering map and action limits used by CarController.
         """
         self.config = config
+        self._preview = False
         self.mpc = mpc
         self.half_width_m = car_width_m / 2.0
         self.front_m = car_front_m
         self.clearance_m = self.half_width_m + CONE_RADIUS_M + config.corner_clearance_m
+        right, left = curvature_bounds(control_config)
+        self.max_left_curvature_per_m = min(mpc.config.max_curvature_per_m, left)
+        self.max_right_curvature_per_m = min(mpc.config.max_right_curvature_per_m or mpc.config.max_curvature_per_m,
+                                              -right)
+        curve = max(min(CURVATURE_HEADROOM / config.left_turn_radius_m, self.max_left_curvature_per_m),
+                    min(CURVATURE_HEADROOM / config.right_turn_radius_m, self.max_right_curvature_per_m))
+        self.preview_chord_margin_m = curve * PREVIEW_STEP_M ** 2 / 8.
+        """Bound on arc-to-chord deviation for the geometric preview; does not cover sensing or actuator errors."""
         self.arc_start_m: float | None = None
         """The planned start of the arc at the latest step, in metres along the approach line from the entry, or None
         without a turn being approached."""
         self.feasible = True
         """Whether that start keeps both clearances (arc_start_m)."""
         self.path_curvature_per_m = 0.0
-        """Curvature in 1/m of the path the manoeuvre drove at the latest step, which the obstacle check looks along:
-        the arc's while turning, otherwise the curvature it asked for (steering back onto the approach or exit line, so
-        a car still angled from moving aside does not take the lane's own cones ahead for an obstacle)."""
+        """Bounded steering curvature in 1/m at the latest step. The obstacle corridor follows this command, including
+        pursuit corrections, rather than an ideal arc the car may not currently be steering along."""
 
     def start(self, command: MarkerCommand, marker: Position, lanes: LaneDetection | None, default_width_m: float,
               memory: CarMemory):
@@ -266,19 +293,59 @@ class IntersectionTurner:
         :param memory: The car memory.
         :return: The (speed in m/s, curvature in 1/m) to drive, None for lane following to drive, or (0.0, 0.0) when
             the exit lane was not found and the car must stop. The curvature is at most CURVATURE_HEADROOM times the
-            arcs' each way.
+            arcs' each way, and never exceeds the MPC or steering action limits.
         """
-        self.path_curvature_per_m = None
-        command = self._step(lanes, memory)
+        # Keep the displayed manoeuvre at the reason/phase where this run stopped. Pose updates after a stop must
+        # not make it announce a later arc that it never actually drives.
+        command = (0.0, 0.0) if memory.data.mpc_stop is not None else self._step(lanes, memory)
         if command is None:
             self.path_curvature_per_m = 0.0
             return None
-        highest = CURVATURE_HEADROOM / self.config.left_turn_radius_m
-        lowest = -CURVATURE_HEADROOM / self.config.right_turn_radius_m
+        highest = min(CURVATURE_HEADROOM / self.config.left_turn_radius_m, self.max_left_curvature_per_m)
+        lowest = -min(CURVATURE_HEADROOM / self.config.right_turn_radius_m, self.max_right_curvature_per_m)
         command = command[0], min(max(command[1], lowest), highest)
-        if self.path_curvature_per_m is None:
-            self.path_curvature_per_m = command[1]
+        self.path_curvature_per_m = command[1]
         return command
+
+    def preview_path(self, memory: CarMemory, length_m: float) -> list[tuple[float, float]]:
+        """Bounded geometric rollout of the same steering law, in current base_link, for the obstacle corridor.
+
+        Preparation steers out then straightens; extending its first curvature through the whole lidar corridor
+        would hit the outside cones on paper. This uses a private state copy, no invented cones or future markers.
+        It predicts geometry, not actual actuator response. A predicted stop continues straight for roll-out checking.
+        """
+        pose = memory.data.pose
+        if (pose is None or not math.isfinite(length_m)
+                or not 0. < length_m <= PREVIEW_STEP_M * PREVIEW_MAX_STEPS):
+            raise ValueError("Intersection preview requires a pose and length in (0, 6.4] m")
+        scratch = CarMemory()
+        scratch.start_map(None)
+        scratch.move_car(pose, None)
+        if memory.data.intersection_turn is not None:
+            scratch.plan_turn(memory.data.intersection_turn)
+        preview = copy.copy(self)
+        preview.mpc = copy.copy(self.mpc)
+        preview._preview = True
+        count = min(PREVIEW_MAX_STEPS, max(1, math.ceil(length_m / PREVIEW_STEP_M)))
+        distance = length_m / count
+        cos_h, sin_h = math.cos(pose.heading_rad), math.sin(pose.heading_rad)
+        origin_x, origin_y = pose.x_m, pose.y_m
+        points = [(0., 0.)]
+        for _ in range(count):
+            command = preview.step(None, scratch)
+            if command is not None and command[0] <= 0.:
+                scratch.stop_mpc(MpcStop.LANE_LOSS)
+            curvature = 0. if command is None or command[0] <= 0. else command[1]
+            heading = pose.heading_rad + distance * curvature
+            if abs(curvature) > 1e-6:
+                pose = CarPose(pose.x_m + (math.sin(heading) - math.sin(pose.heading_rad)) / curvature,
+                               pose.y_m + (math.cos(pose.heading_rad) - math.cos(heading)) / curvature, heading)
+            else:
+                pose = CarPose(pose.x_m + distance * math.cos(heading), pose.y_m + distance * math.sin(heading), heading)
+            scratch.move_car(pose, None)
+            dx, dy = pose.x_m - origin_x, pose.y_m - origin_y
+            points.append((cos_h * dx + sin_h * dy, -sin_h * dx + cos_h * dy))
+        return points
 
     def _step(self, lanes: LaneDetection | None, memory: CarMemory) -> tuple[float, float] | None:
         """
@@ -291,6 +358,11 @@ class IntersectionTurner:
         if pose is None:
             self._finish(turn, memory)
             return None
+        if turn.command is not MarkerCommand.STRAIGHT and not math.isfinite(self.radius_m(turn)):
+            self.feasible = False
+            if not self._preview:
+                _LOGGER.warning("%s: no steering range available: stopping", turn.command.name)
+            return 0.0, 0.0
         config = self.config
         cos_a, sin_a = math.cos(turn.heading_rad), math.sin(turn.heading_rad)
         dx, dy = pose.x_m - turn.entry_x_m, pose.y_m - turn.entry_y_m
@@ -312,29 +384,45 @@ class IntersectionTurner:
                     return self._exit_step(turn, pose, lanes, memory, good_lane)
             else:
                 side = 1.0 if turn.command is MarkerCommand.TURN_LEFT else -1.0
-                radius = self._radius(turn)
+                radius = self.radius_m(turn)
                 cross = config.cross_lane_width_m or turn.lane_width_m
+                heading_error = _wrapped(pose.heading_rad - turn.heading_rad)
                 self.arc_start_m, self.feasible = arc_start_m(turn.lane_width_m, cross, radius, -side * left_m,
                                                               self.half_width_m, self.front_m,
-                                                              config.corner_clearance_m)
+                                                              config.corner_clearance_m, heading_error, side)
                 if along_m >= self.arc_start_m:
-                    if not self.feasible:
-                        _LOGGER.warning("%s: the arc cannot keep clear of both the corner and the far cones",
-                                        turn.command.name)
-                    # The arc starts beside the car on the approach direction, wherever the car is pointing
-                    across_m = left_m + side * radius
+                    _, latest = _arc_start_limits(turn.lane_width_m, cross, radius, -side * left_m,
+                                                  self.half_width_m, self.front_m, config.corner_clearance_m,
+                                                  heading_error, side)
+                    if not self.feasible or along_m > latest:
+                        self.feasible = False
+                        if not self._preview:
+                            _LOGGER.warning("%s: %.2f m radius has no clear start at the current pose: stopping",
+                                            turn.command.name, radius)
+                        return 0.0, 0.0
+                    # Use the admitted tangent circle. Starting a circle on the remembered approach heading while
+                    # the car still points outwards requires more curvature than the configured left limit permits.
+                    centre_along = along_m - side * radius * math.sin(heading_error)
+                    across_m = left_m + side * radius * math.cos(heading_error)
                     turn = replace(turn, phase=TurnPhase.ARC,
-                                   arc_centre_x_m=turn.entry_x_m + along_m * cos_a - across_m * sin_a,
-                                   arc_centre_y_m=turn.entry_y_m + along_m * sin_a + across_m * cos_a)
+                                   arc_centre_x_m=turn.entry_x_m + centre_along * cos_a - across_m * sin_a,
+                                   arc_centre_y_m=turn.entry_y_m + centre_along * sin_a + across_m * cos_a)
                     memory.plan_turn(turn)
-                    _LOGGER.info("%s: turning, %.2f m from the entry", turn.command.name, along_m)
+                    if not self._preview:
+                        _LOGGER.info("%s: turning, %.2f m from the entry, %.2f m radius",
+                                     turn.command.name, along_m, radius)
                     return self._arc_step(turn, pose, lanes, memory, good_lane)
-            if along_m < -config.hold_line_m and lanes is not None and lanes.has_lane:
+            preparing = config.move_aside and turn.command is not MarkerCommand.STRAIGHT
+            if not preparing and along_m < -config.hold_line_m and lanes is not None and lanes.has_lane:
                 return None
-            # Hold the approach direction at the car's own offset from the centre line (kept inside the lane), so a car
-            # keeping to one side before the turn stays there
+            # Aim for the outside line immediately, instead of waiting for the MPC's moving offset target to catch
+            # up. Keep that target through cone loss: freezing the current offset can leave too little turn room.
             half_m = max(0.0, turn.lane_width_m / 2.0 - self.clearance_m)
-            offset_m = min(max(left_m, -half_m), half_m)
+            if preparing:
+                outside_m = max(0.0, turn.lane_width_m / 2.0 - config.aside_clearance_m)
+                offset_m = -side * min(outside_m, half_m)
+            else:
+                offset_m = min(max(left_m, -half_m), half_m)
             target = along_m + config.lookahead_m
             target_x = turn.entry_x_m + target * cos_a - offset_m * sin_a
             target_y = turn.entry_y_m + target * sin_a + offset_m * cos_a
@@ -350,13 +438,16 @@ class IntersectionTurner:
         self.mpc.lane_side, self.mpc.edge_clearance_m = turn.lane_side_before, self.mpc.config.edge_clearance_m
         self.mpc.side_offset_m = None
 
-    def _radius(self, turn: IntersectionTurn) -> float:
+    def radius_m(self, turn: IntersectionTurn) -> float:
         """
-        :return: The arc's radius for the turn, in metres.
+        :return: The planned radius in metres, enlarged to respect curvature/action limits; infinity without steering
+            range in that direction. The plan display uses this same radius.
         """
         if turn.command is MarkerCommand.TURN_LEFT:
-            return self.config.left_turn_radius_m
-        return self.config.right_turn_radius_m
+            radius, limit = self.config.left_turn_radius_m, self.max_left_curvature_per_m
+        else:
+            radius, limit = self.config.right_turn_radius_m, self.max_right_curvature_per_m
+        return max(radius, 1.0 / limit) if limit > 0.0 else math.inf
 
     @staticmethod
     def _refine(turn: IntersectionTurn, pose: CarPose, lanes: LaneDetection) -> IntersectionTurn:
@@ -387,10 +478,11 @@ class IntersectionTurner:
         """
         config = self.config
         side = 1.0 if turn.command is MarkerCommand.TURN_LEFT else -1.0
-        radius = self._radius(turn)
+        radius = self.radius_m(turn)
         turned = side * _wrapped(pose.heading_rad - turn.heading_rad)
         if good_lane and turned >= math.radians(config.handover_heading_deg):
-            _LOGGER.info("%s: exit lane found after turning %.0f deg", turn.command.name, math.degrees(turned))
+            if not self._preview:
+                _LOGGER.info("%s: exit lane found after turning %.0f deg", turn.command.name, math.degrees(turned))
             self._finish(turn, memory)
             return None
         exit_heading = _wrapped(turn.heading_rad + side * math.pi / 2.0)
@@ -398,11 +490,17 @@ class IntersectionTurner:
             # The arc's end: follow the exit lane's centre line, cross_lane_width_m / 2 past the entry
             cross = config.cross_lane_width_m or turn.lane_width_m
             cos_a, sin_a = math.cos(turn.heading_rad), math.sin(turn.heading_rad)
-            turn = self._exit(turn, turn.entry_x_m + cross / 2.0 * cos_a, turn.entry_y_m + cross / 2.0 * sin_a,
-                              exit_heading)
+            centre_x = turn.entry_x_m + cross / 2.0 * cos_a
+            centre_y = turn.entry_y_m + cross / 2.0 * sin_a
+            end_x = turn.arc_centre_x_m + radius * cos_a
+            end_y = turn.arc_centre_y_m + radius * sin_a
+            cos_e, sin_e = math.cos(exit_heading), math.sin(exit_heading)
+            # Search for the exit lane from the arc's end. A wide left arc can already extend more than
+            # exit_search_m past the junction centre, which used to consume the entire search before EXIT began.
+            end_along = cos_e * (end_x - centre_x) + sin_e * (end_y - centre_y)
+            turn = self._exit(turn, centre_x + end_along * cos_e, centre_y + end_along * sin_e, exit_heading)
             memory.plan_turn(turn)
             return self._exit_step(turn, pose, lanes, memory, good_lane)
-        self.path_curvature_per_m = side / radius
         # Pure pursuit on the circle: the point lookahead_m further round it than the car
         angle = (math.atan2(pose.y_m - turn.arc_centre_y_m, pose.x_m - turn.arc_centre_x_m)
                  + side * config.lookahead_m / radius)
@@ -421,11 +519,13 @@ class IntersectionTurner:
         if turn.command is MarkerCommand.STRAIGHT:
             past_m -= config.cross_lane_width_m or turn.lane_width_m
         if good_lane and (turn.command is not MarkerCommand.STRAIGHT or past_m >= 0.0):
-            _LOGGER.info("%s: exit lane found", turn.command.name)
+            if not self._preview:
+                _LOGGER.info("%s: exit lane found", turn.command.name)
             self._finish(turn, memory)
             return None
         if past_m > config.exit_search_m:
-            _LOGGER.warning("%s: no exit lane within %.1f m: stopping", turn.command.name, config.exit_search_m)
+            if not self._preview:
+                _LOGGER.warning("%s: no exit lane within %.1f m: stopping", turn.command.name, config.exit_search_m)
             self._finish(turn, memory)
             return 0.0, 0.0
         target = along_m + config.lookahead_m

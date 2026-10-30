@@ -67,11 +67,10 @@ def test_settings_are_checked():
 
 
 @pytest.mark.parametrize("detection", [
-    marker(9),  # Not mapped
     marker(1, posed=False),  # No pose, so no distance
     marker(1, x=1.6, y=0.0),  # Beyond max_distance_m
     marker(1, x=-0.5, y=0.3),  # Behind base_link
-], ids=["unmapped", "no-pose", "too-far", "behind"])
+], ids=["no-pose", "too-far", "behind"])
 def test_markers_that_do_not_count(detection):
     reader, memory = MarkerReader(CONFIG), CarMemory()
     assert read(reader, memory, *[[detection]] * 4) == [None] * 4
@@ -91,11 +90,11 @@ def test_a_gap_restarts_the_confirmation():
         [None, None, None, None, None, MarkerCommand.KEEP_RIGHT]
 
 
-def test_the_nearest_mapped_marker_counts():
+def test_the_nearest_marker_counts_even_if_its_id_is_unsupported():
     reader, memory = MarkerReader(CONFIG), CarMemory()
     batch = [marker(9, x=0.5), marker(4, x=1.2), marker(3, x=0.8, y=-0.4)]
-    assert read(reader, memory, batch, batch) == [None, MarkerCommand.TURN_LEFT]
-    assert memory.data.intersection_command is MarkerCommand.TURN_LEFT
+    assert read(reader, memory, batch, batch) == [None, MarkerCommand.STOP]
+    assert memory.data.intersection_command is None
 
 
 def test_only_the_nearest_marker_is_followed():

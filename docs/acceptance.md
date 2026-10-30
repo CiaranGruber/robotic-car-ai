@@ -13,6 +13,280 @@ not actual sensor/vehicle response.
 Keep revision, command, result and limitations here; retain detailed logs in
 CI artifacts or merge requests rather than a tracked evidence directory.
 
+## Left-turn preparation, tangent admission and exit search, 2026-10-30
+
+Following the detector-size correction, the owner reported another unsuccessful
+attempt. A read-only snapshot of the 15:02:12 and 15:02:43 runs is retained in
+`build/car-left-after-size-20261030/`. The latter was captured while its logs
+were still being written; `analyse.py` decodes complete prefix records without
+altering the raw capture, then aligns action i with pre-step memory i+1. It has
+705 aligned post-step records available. No partial final record is used.
+
+The 15:02:43 run confirms ID 1 as TURN_LEFT at index 32 / 3.025 s, placing the
+entry 2.483 m ahead with a 1.013 m lane. At index 63 / 5.438 s it latches
+LANE_LOSS because the configured 2.083 m left arc has insufficient room from
+the current pose. The updated lane width is 1.037 m; actual outside offset is
+.1738 m right, compared with .1823 m needed by the aligned-arc clearance model
+and a .2685 m outside target. Its heading remains 4.61 degrees outward and its
+longitudinal position is 26.5 mm past that model's latest clear start. The
+later ARC message is internal state progression while the stop stays latched;
+the recorded action remains zero. The initial 15:02:12 attempt was stopped by
+the operator before marker confirmation. Detector recognition is therefore no
+longer the immediate cause in the longer run.
+
+Local changes now:
+
+- Request bounded pursuit toward the outside line at turn speed immediately
+  after confirmation, keeping that remembered target through missing cones.
+- Admit and initialise a circle tangent to the actual heading, with mirrored
+  heading-dependent corner/far-row clearances and rejection beyond the actual
+  latest clear start. No clearance tolerance or steering calibration is relaxed.
+- Search for the outgoing lane from the planned arc endpoint, instead of
+  consuming `exit_search_m` from the junction centre before a wide arc ends.
+- Freeze stopped manoeuvre phases and draw the effective tangent/remaining arc.
+- Check preparation obstacles along a geometric rollout of the same steering
+  sequence, so the initial sideways curvature is not extended through a later
+  straightening/turn. The preview uses scratch memory and copied controller
+  scalar state, cannot change the active turn, and emits no preview phase logs.
+  Predicted stops remain latched in that scratch state and continue straight
+  for roll-out checking. There are at most 128 segments, each at most .05 m;
+  longer than 6.4 m including the car front is rejected at startup. The corridor
+  widens by max-curvature * .05^2 / 8 to cover geometric chord error. This does
+  not account for real actuator lag, sensing error or future lane refinements.
+
+The previous focused command in this document, with the added regressions,
+completed with **180 passed, 15 deselected in 4.10 s**. The exclusions remain
+14 longer scenarios and the existing camera-pan expectation failure. New checks
+cover immediate preparation and obstacle stops in both directions, missing
+cones, tangent geometry and display, late-start rejection, stopped-phase
+persistence, exit-search origin, preview isolation/limits/chord widening and a
+physical-object-on-preview versus outside-cone counterexample. Two short ideal
+kinematic feedback cases start at the latest run's approximate relative pose
+(-2.483 m, +.055 m, -.205 rad), mirrored for right, on a 1.037 m cross. Both
+reach EXIT with body containment checked at .05-second samples. These use
+instantaneous steering, fixed geometry and no perception noise; they are not
+continuous collision proofs or vehicle qualification.
+
+The frozen-sensor replay verifies changed preparation commands; the old poses
+still lead to an infeasible-start rejection. It cannot establish how earlier
+preparation changes the actual trajectory. Recorded/source evidence and
+`new-preparation-replay.json` remain diagnostic. Bounded read-only Astra review
+found no blocker. All changes from this task remain local for the owner's
+upload; no service restart, enable or drive command occurred. The existing .3
+camera-pan command versus fixed-zero TF remains unresolved. The required
+CONTRIBUTING fast gate was attempted and remains blocked by the absent pinned
+interfaces checkout. Physical left-turn success is not established.
+
+Rules followed: `0.00_root_rule.md`, `0.01_coding_standards.md`,
+`2.02_adding_parameters.md`, `2.05_car_memory.md`, `3.00_codebase_structure.md`,
+`3.01_using_car_management_script.md`, `3.02_creating_real_scenario_data.md`.
+
+## Left-turn retest: stale ArUco size snapshot, 2026-10-30
+
+After the owner reported that left turning still did not work, a read-only car
+inspection downloaded the 14:46:15 and 14:50:00 recordings (219 total steps)
+and saved detector/runtime evidence under ignored
+`build/car-left-retest-20261030/`. Relevant source and installed symlink target
+hashes match the local fix, including intersection planning, controller, marker
+mapping and runner. Both runs enable intersection control with the requested
+ID groups, a 2 m marker range and two policy confirmation steps.
+
+| Run | Posed ID-1 observations | Reported planar range | Within 2 m | Turn states |
+| --- | --- | --- | --- | --- |
+| 14:46:15 | 14 | 3.373–4.594 m | 0 | 0 |
+| 14:50:00 | 27 | 3.279–6.369 m | 0 | 0 |
+
+All 41 observations declare `marker_size_m: 0.25`. The active ArUco runtime
+snapshot created at 14:29:56 contains `default_marker_size_m: 0.25`, although
+the current uploaded `config/aruco_detector.yaml` already says `0.081`, the
+owner's confirmed printed outer black square. The preceding 13:51 detector
+snapshot used `0.081`. The policy was restarted at 14:45; the detector was not.
+Consequently, neither new run reaches marker confirmation or left-turn planning.
+The 14:46 run later latches its ordinary obstacle stop, without a manoeuvre.
+
+This identifies a separate recognition-distance problem, not proof that the
+new left trajectory succeeds or fails. The minimal recovery is to restart
+`aruco_detector` so DREAM admits the already-uploaded source settings, then
+verify a new snapshot and fresh detections use `0.081`. Restarting only the
+policy or starting an already-running detector does not reload that component.
+No transformed poses were rescaled, range limit widened, or policy/controller
+logic changed during diagnosis. The physical manoeuvre remains unverified.
+
+The owner was asked to confirm stationary/Policy ZERO before a detector-only
+restart, because applying marker recognition can select a turn in an active
+run. At this evidence checkpoint no service/configuration changes, upload or
+driving were performed. Bounded read-only Astra review independently confirmed
+the diagnosis. Existing policy test results and the missing pinned ROS-gate
+dependency are unchanged. Rules followed: `0.00_root_rule.md`,
+`0.01_coding_standards.md`, `3.01_using_car_management_script.md`,
+`3.02_creating_real_scenario_data.md`.
+
+The owner subsequently confirmed stationary/Policy ZERO and authorised only
+the detector restart. `dream runtime restart aruco_detector` succeeded at
+14:59:32 Melbourne time, creating running snapshot
+`537976ea-2b6b-4782-bfbd-fae5cec67861`. Its admitted settings contain
+`default_marker_size_m: 0.081`; a direct read of the live
+`/car/aruco_detector` parameter independently returned `Double value is: 0.081`.
+Evidence is retained as `aruco-after-restart.json` and `aruco-live-size.txt` in
+the same ignored collection. No upload, policy/vehicle restart, enable or drive
+request was issued. The owner also described the failed attempts as moving
+forward with barely any left steering, consistent with no selected turn in
+those recordings. A fresh physical turn remains not run by the assistant.
+
+## Left-turn capability and obstacle-path correction, 2026-10-30
+
+The owner requested a local fix after observing that right turns work but left
+turns do not. Intersection planning now shares the existing asymmetric MPC
+limits and the actual controller's steering-map action range. The preferred
+1.1 m left arc is enlarged to 1/.48 = 2.083 m with the saved/current settings;
+the right arc remains 1.2 m. Arc initiation uses this effective radius, pursuit
+commands cannot exceed either limit, and the obstacle corridor follows the
+bounded pursuit command. Foxglove draws the same effective arc. No new physical
+calibration, obstacle masking, confirmation reset or shorter stopping envelope
+was introduced. An arc that cannot fit both clearances returns zero and latches
+the existing no-path stop instead of attempting the old compromise arc. A
+steering centre outside its configured action range is rejected for planning.
+
+Offline replays of all six downloaded recordings used their own saved settings
+and observations (`build/car-marker1-20261030/fix-replay.json`). Left runs
+13:58:45 and 13:59:21 now begin steering at 2.436 s and 2.475 s, versus recorded
+4.330 s and 4.160 s. Run 13:59:59 reports infeasible geometry and stops at
+3.778 s instead of initiating that arc. The first two replays still encounter
+the later obstacle stops with the old observations: those observations contain
+the original trajectory, not the response to earlier steering. These replays
+establish earlier command timing and preserved stops, not successful physical
+turns or clearance while braking. The marker-to-entry geometry and existing
+steering calibration still need verification on the actual course/car. The
+owner's newer report that right turning works is not contradicted by the older
+captured right run.
+
+The bounded check command was:
+
+```bash
+OPENBLAS_NUM_THREADS=1 MPLCONFIGDIR=/tmp/ai4r-mpl .venv/bin/python -m pytest -q \
+  tests/policy/test_control.py tests/policy/test_obstacle_detection.py \
+  tests/policy/test_marker_action_mapping.py tests/policy/test_markers.py \
+  tests/policy/test_intersection.py tests/policy/test_mcap_export.py \
+  -k 'not wide_track and not simulated_car and not without_the_manoeuvre and not movement_policy_turns_back_to_the_lane_centre_within_the_drive_limit'
+```
+
+Result: **161 passed, 15 deselected in 3.84 s**. Coverage includes both steering
+polarities, trimmed/reduced action limits, earlier reachable left initiation,
+the existing right radius, infeasible/no-steering stops, explicit recovery,
+corrected Foxglove arc geometry and real obstacles stopping both turn directions.
+Fourteen longer simulation cases were excluded to honour the owner's request
+for short checks. The remaining exclusion is a known failure expecting camera
+pan zero while the owner's preserved edit commands .3; an initial run confirmed
+that failure. No full simulation matrix is claimed. Bounded read-only Astra
+review supplements these checks; physical driving remains not run.
+
+The required CONTRIBUTING fast command was attempted for the final policy
+source and failed because `.verification/dependencies/dream_interfaces` is
+absent. No installed ROS result is claimed. All work stayed local, with no car
+contact/upload, service changes or enabling. Existing edits were preserved.
+Rules followed: `0.00_root_rule.md`, `0.01_coding_standards.md`,
+`2.02_adding_parameters.md`, `2.05_car_memory.md`, `3.00_codebase_structure.md`.
+
+## Marker 1 physical-run log review, 2026-10-30
+
+The owner requested recent recordings after ID 1 did not produce a visible
+left turn. Six runs from 13:55:24 to 14:01:30 Melbourne time were downloaded
+read-only from car 20 (10.43.254.33), with runtime snapshots and deployed source,
+under ignored `build/car-marker1-20261030/`. All six observation/action/memory
+arrays parse and have matching lengths, totalling 1,135 steps. Relevant remote
+source hashes, including the mapping and reset fix, match the local files.
+Saved run parameters contain the requested grouped IDs and enable the incoming
+marker-based intersection controller.
+
+All three ID-1 runs confirm TURN_LEFT on action index 1 and enter ARC, then latch
+OBSTACLE. Memory is logged before a step: action i is aligned with memory i+1,
+and the previous run's memory at index 0 is excluded as a new stopping cause.
+
+| Run | First ARC (elapsed s) | Obstacle stop (elapsed s) | Full-left outputs before stop | Lidar path distance from front |
+| --- | --- | --- | --- | --- |
+| 13:58:45 | 4.3295 | 4.7563 | 9 | .6465 m |
+| 13:59:21 | 4.1597 | 4.1998 | 1 | .5905 m |
+| 13:59:59 | 4.8672 | 4.8672 | 0 | .6295 m |
+
+Thus left steering lasts .4268 s, .0400 s and zero respectively before the
+obstacle brake replaces it with centre steering (.02) and drive -.3. Recomputing
+the nominal 1.1 m-radius lidar corridor at those saved observations reproduces
+the console stop distances. Its stop returns are .16–.21 m from the nearest
+camera-detected yellow cone, with different acquisition ages; that association
+does not prove the return is a cone or a false positive. The 14:01:30 ID-6 right
+turn also stops for an obstacle (.6588 m) after .6366 s in ARC.
+
+There is a separate planning/calibration inconsistency: a 1.1 m left arc requests
+.909 per metre, while the saved MPC left limit is .48 and the manoeuvre bypasses
+that MPC limit. The saved steering map gives .02 - 1.587*.909 = -1.423 before
+clipping to -1. The boundary warning in convert_actions does not discard that
+requested steering. This is not a measurement of the physical turning radius.
+Every run requests camera pan .3 despite the fixed zero-pan TF contract; its
+physical/frame effect remains unverified. Next work should align turn planning,
+actual steering geometry and the turn-time obstacle corridor, without bypassing
+the obstacle stop.
+
+No vehicle command, service restart, configuration change or code upload was
+made. Rules followed: `0.00_root_rule.md`, `0.01_coding_standards.md`,
+`3.01_using_car_management_script.md`, `3.02_creating_real_scenario_data.md`.
+
+## Grouped marker turn preparation, 2026-10-30
+
+The owner requested synchronising the pulled turn-preparation behaviour with the
+new ID groups. Every ID 1–4 prepares on the right before turning left; 5–6
+prepares on the left before turning right; 7–8 uses the original lane side.
+The existing `move_aside`/clearance logic already consumes command enums, so the
+groups share one preparation implementation. Marker disappearance preserves the
+manoeuvre; a straight override during approach and completed turns restore the
+original side/clearance.
+
+End-to-end checks exposed a first-step reset defect: with `confirm_steps: 1`,
+the runner reset, applied preparation, then MPC reset again and reverted to
+CENTRE. The runner now disables that second reset in both MPC control paths;
+direct callers retain the original default. All first-step timing flags and the
+explicit new-run reset remain. The short marker/intersection checks completed
+with **64 passed, 14 deselected in 2.54 s**, including every alias with one/two
+confirmation steps, disappearance and restoration. Bounded read-only Astra
+review found no blocker. The required fast gate was attempted but its pinned
+interfaces checkout is still missing; no installed ROS or physical result is
+claimed. No car contact or upload occurred. Existing user edits were preserved.
+Rules followed: `0.00_root_rule.md`, `0.01_coding_standards.md`,
+`2.02_adding_parameters.md`, `2.05_car_memory.md` and
+`3.00_codebase_structure.md`.
+
+## Grouped marker actions and latest-branch pull, 2026-10-30
+
+The owner requested IDs 1–4 left, 5–6 right, 7–8 straight, stopping for other
+IDs or a missing path, and confirmed that a direction must survive marker
+disappearance. The current YAML uses grouped integer-array marker parameters;
+legacy scalar assignments are disabled. Nearest posed markers retain their
+distance and confirmation gates. An unsupported confirmed ID now latches
+`MpcStop.MARKER` before either controller can drive, including during an active
+turn. It clears queued/active manoeuvres, selected routes, MPC/avoidance plans
+and stale observed display fields; pan holds. Only an explicit new run clears
+the stop. Existing missing-lane, blocked-route and bounded exit-search stops
+remain; the pulled marker-based controller estimates junction geometry from the
+marker and does not provide the experimental navigator's pre-entry exit checks.
+
+At the owner's request, fetched and fast-forwarded `d1d8096` to `a9b04a4`,
+then reapplied the local mapping edits and resolved conflicts in the policy
+YAML, runner and lane-selection test. The incoming marker-based intersection
+controller, experimental navigator and other settings are retained. A separate
+concurrent edit setting ordinary driving pan to 0.3 was preserved; it differs
+from the fixed zero-pan TF assumption and was not physically validated here.
+The pre-pull stash and ignored `build/marker-mapping-pull-20261030/` backup
+retain the original local edits.
+
+Following the owner's request to shorten testing for their own car trials,
+the final focused marker/turn-memory checks completed with **47 passed,
+14 deselected in 1.27 s**. No full simulation matrix was repeated after the
+pull. The required fast command was attempted earlier in this task but the
+pinned interfaces checkout is absent, so no installed ROS result is claimed.
+No car contact, upload or hardware test was performed. Rules followed:
+`0.00_root_rule.md`, `0.01_coding_standards.md`,
+`2.01_branching_strategy.md`, `2.02_adding_parameters.md`,
+`2.05_car_memory.md` and `3.00_codebase_structure.md`.
+
 ## Intersection and local-map conflict resolution, 2026-10-26
 
 The owner requested resolution of the in-progress merge of `cd7df7f` into

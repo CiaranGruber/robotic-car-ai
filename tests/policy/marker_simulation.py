@@ -54,6 +54,7 @@ from policy.markers.commands import MarkerCommand  # noqa: E402
 from policy.memory import CarMemory  # noqa: E402
 from real_car_measurements import LAB_CAR  # noqa: E402
 from scripts.mcap_export import DEFAULT_SETTINGS_PATH, build_policy, read_settings  # noqa: E402
+from policy.markers.markers import MarkerConfig  # noqa: E402
 from stage1_scenarios import POLICY_PERIOD_S  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -221,7 +222,9 @@ def _marker_ids() -> dict[str, int]:
     :return: The marker ID of each command, from the markers settings in config/ai4r_policy.yaml.
     """
     settings = read_settings(DEFAULT_SETTINGS_PATH)
-    return {command.name: settings[f"markers.{command.name.lower()}_id"] for command in MarkerCommand}
+    config = MarkerConfig(**{key.removeprefix("markers."): value for key, value in settings.items()
+                             if key.startswith("markers.")})
+    return {command.name: marker_id for marker_id, command in config.commands.items()}
 
 
 @dataclass(frozen=True)
@@ -248,7 +251,7 @@ def _cases() -> tuple[MarkerCase, ...]:
                    lane_change_world(0.8, lanes, 9.0), "lanes", checks),
         MarkerCase("lanes_1m", "1 m road: keep left, right, then centre markers", lane_change_world(1.0, lanes, 9.0),
                    "lanes", checks),
-    ]
+    ] if all(command in _marker_ids() for command, _, _ in lanes) else []
     for width in (1.0, 0.8):
         label = f"{width:g}m"
         for command, goal in (("TURN_LEFT", "left"), ("TURN_RIGHT", "right"), ("STRAIGHT", "straight")):
@@ -258,7 +261,8 @@ def _cases() -> tuple[MarkerCase, ...]:
                                 intersection_world(width, "TURN_LEFT", exits=("LEFT", "RIGHT")), "left"))
         cases.append(MarkerCase(f"t_right_{label}", f"T, {width:g} m roads, no straight exit: TURN_RIGHT marker",
                                 intersection_world(width, "TURN_RIGHT", exits=("LEFT", "RIGHT")), "right"))
-    cases.append(MarkerCase("hook_right_0.8m", "Four-way, 0.8 m roads: KEEP_LEFT 1.5 m before, then TURN_RIGHT",
+    if "KEEP_LEFT" in _marker_ids():
+        cases.append(MarkerCase("hook_right_0.8m", "Four-way, 0.8 m roads: KEEP_LEFT 1.5 m before, then TURN_RIGHT",
                             intersection_world(0.8, "TURN_RIGHT", approach_m=3.5,
                                                extra_markers=(("KEEP_LEFT", 0.6, "LEFT"),)), "right"))
     return tuple(cases)

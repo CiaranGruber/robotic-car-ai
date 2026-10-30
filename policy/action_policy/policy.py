@@ -199,7 +199,8 @@ class MpcPolicy:
         self.side_offset_m = min(max(moved, lowest), highest)
 
     def run_policy(self, observations: CarObservations, lanes: LaneDetection | None,
-                   obstacle_distance_m: float | None = None, memory: CarMemory | None = None) -> list[Instruction]:
+                   obstacle_distance_m: float | None = None, memory: CarMemory | None = None, *,
+                   reset_on_first_step: bool = True) -> list[Instruction]:
         """Chooses the instructions for the car to follow from the observations and detected lanes
 
         :param observations: The observations taken by the car at the current policy step
@@ -212,11 +213,12 @@ class MpcPolicy:
             mpc.obstacle_stop_margin_m), the car stops for the rest of the run.
         :param memory: The car memory to keep the MPC's stop and plan in, the same one for every step (MovementPolicy
             passes the node's). None keeps using the latest one given, or the MPC's own.
+        :param reset_on_first_step: False when the caller already reset this run before applying marker preparation.
         :return: The instructions for the control module to convert into car actions
         """
         if memory is not None:
             self.memory = memory
-        if observations.policy.is_first_policy_step:
+        if observations.policy.is_first_policy_step and reset_on_first_step:
             self.reset()
         cones = observations.cones
         lane_width_m = self.config.lane_width_m
@@ -280,7 +282,8 @@ class MpcPolicy:
         return [self._command(self.config.target_speed_m_per_s, curvature)]
 
     def follow_manoeuvre(self, observations: CarObservations, obstacle_distance_m: float | None, speed_m_per_s: float,
-                         curvature_per_m: float, memory: CarMemory | None = None) -> list[Instruction]:
+                         curvature_per_m: float, memory: CarMemory | None = None, *,
+                         reset_on_first_step: bool = True) -> list[Instruction]:
         """Drives a manoeuvre's command instead of following the lane, such as the intersection turn
         (policy/action_policy/intersection.py), keeping the run's stops: a stop already latched holds, and an obstacle
         in the car's way within the stopping distance stops the car for the rest of the run, as in run_policy.
@@ -293,11 +296,12 @@ class MpcPolicy:
         :param speed_m_per_s: The manoeuvre's speed in m/s; 0.0 stops the car for the rest of the run.
         :param curvature_per_m: The manoeuvre's curvature in 1/m, positive turning left.
         :param memory: As in run_policy.
+        :param reset_on_first_step: As in run_policy; MovementPolicy resets before applying the marker command.
         :return: The instructions for the control module.
         """
         if memory is not None:
             self.memory = memory
-        if observations.policy.is_first_policy_step:
+        if observations.policy.is_first_policy_step and reset_on_first_step:
             self.reset()
         if self.stopped_for_lane_loss or self.stopped_for_solver_failure or self.stopped_for_obstacle:
             return [self._command(0.0, 0.0, brake=self.stopped_for_obstacle)]

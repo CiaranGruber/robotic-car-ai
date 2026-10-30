@@ -5,9 +5,9 @@
     dictionary_name: DICT_4X4_50
     default_marker_size_m: 0.081
 
-    # Only these IDs may reach the policy. [] (or an omitted setting) allows
-    # every ID in the selected dictionary. For an exercise with IDs 4 and 5,
-    # change this to [4, 5]. This list is independent of marker-size groups.
+    # Keep [] so every dictionary ID can reach the policy: 1-4 left, 5-6 right,
+    # 7-8 straight, and other confirmed in-range IDs stop it. Filtering other
+    # IDs here would prevent the policy from seeing those stop requests.
     allowed_marker_ids: []
 
     # Require this many consecutive processed images containing an ID before
@@ -19,6 +19,7 @@
 
     # Both controls belong to aruco_detector, not oakd_cone_detector. After
     # editing this file, use: dream runtime restart aruco_detector
+    # Restarting ai4r_policy alone leaves the detector's old size snapshot active.
 
     # Optional per-ID size overrides. Marker size is the outer black square in
     # metres. Omit marker_size_groups to use the default for every valid ID.

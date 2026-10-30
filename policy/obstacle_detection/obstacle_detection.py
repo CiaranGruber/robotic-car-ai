@@ -120,13 +120,18 @@ class ObstacleDetectionConfig:
 
 
 def detect_obstacles(observations: CarObservations, config: ObstacleDetectionConfig,
-                     path_curvature_per_m: float = 0.0) -> ObstacleDetection | None:
+                     path_curvature_per_m: float = 0.0, *,
+                     path_points_m: list[tuple[float, float]] | None = None,
+                     path_error_m: float = 0.0) -> ObstacleDetection | None:
     """Finds what the lidar sees ahead of the car, and the nearest obstacle in its path.
 
     :param observations: The observations taken by the car at the current policy step.
     :param config: The obstacle detection settings.
     :param path_curvature_per_m: Curvature in 1/m of the path the car will drive, positive turning left, normally the
         curvature it is steering along. 0.0 gives a straight corridor ahead.
+    :param path_points_m: Optional geometric steering preview in base_link, starting at (0, 0). When present, the
+        corridor follows these segments rather than extending the initial steering curvature indefinitely.
+    :param path_error_m: Nonnegative geometric approximation margin added to a preview's half width, in metres.
     :return: The obstacle observation, or None when there are no fresh Cartesian lidar points
         (observations.lidar_cartesian is None). A fresh scan with no returns gives a clear observation.
     """
@@ -137,6 +142,10 @@ def detect_obstacles(observations: CarObservations, config: ObstacleDetectionCon
     beam_spacing_rad = 2.0 * half_view_rad / (config.beam_count - 1)
     ranges = [config.max_range_m] * config.beam_count
     in_path = []
+    segments = None if path_points_m is None else _path_segments(path_points_m)
+    if not math.isfinite(path_error_m) or path_error_m < 0.:
+        raise ValueError("Obstacle preview error must be finite and nonnegative")
+    half_width = config.corridor_half_width_m + (path_error_m if segments is not None else 0.)
     for point in lidar.points:
         x, y = point.pos.x, point.pos.y
         # Forwards fan: the beam nearest the return's direction from base_link's origin
@@ -144,10 +153,14 @@ def detect_obstacles(observations: CarObservations, config: ObstacleDetectionCon
         distance = math.hypot(x, y)
         if 0 <= beam < config.beam_count and distance < ranges[beam]:
             ranges[beam] = max(config.min_range_m, distance)
+        if (segments is not None
+                and distance > segments[-1][5] + segments[-1][4] + half_width):
+            continue  # Euclidean range exceeds the entire preview plus its margin.
         # Corridor: the return's position along the path and to its side
-        along, left = _path_coordinates(x, y, path_curvature_per_m)
+        along, left = (_path_coordinates(x, y, path_curvature_per_m) if segments is None
+                       else _preview_coordinates(x, y, segments))
         if (config.car_front_m < along <= config.car_front_m + config.corridor_length_m
-                and abs(left) <= config.corridor_half_width_m):
+                and abs(left) <= half_width):
             in_path.append((along, point.pos))
     in_path.sort(key=lambda item: item[0])
     if len(in_path) >= config.min_points:
@@ -156,6 +169,35 @@ def detect_obstacles(observations: CarObservations, config: ObstacleDetectionCon
     else:
         distance_m, nearest = math.inf, None
     return ObstacleDetection(ranges, distance_m, nearest, len(in_path), path_curvature_per_m, lidar.sensor_age)
+
+
+def _path_segments(points: list[tuple[float, float]]) -> list[tuple[float, ...]]:
+    """Precompute nonzero preview segments and their cumulative distances once per scan."""
+    if len(points) < 2 or points[0] != (0., 0.) or any(not math.isfinite(v) for point in points for v in point):
+        raise ValueError("Obstacle preview must contain finite points starting at (0, 0)")
+    segments, along = [], 0.
+    for (ax, ay), (bx, by) in zip(points, points[1:]):
+        dx, dy = bx - ax, by - ay
+        length = math.hypot(dx, dy)
+        if length > 1e-9:
+            segments.append((ax, ay, dx, dy, length, along))
+            along += length
+    if not segments:
+        raise ValueError("Obstacle preview must have positive length")
+    return segments
+
+
+def _preview_coordinates(x: float, y: float, segments: list[tuple[float, ...]]) -> tuple[float, float]:
+    """Distance along and signed distance to the nearest segment, including the finite path's end caps."""
+    nearest_sq, result = math.inf, (0., math.inf)
+    for ax, ay, dx, dy, length, start in segments:
+        t = min(1., max(0., ((x - ax) * dx + (y - ay) * dy) / (length * length)))
+        px, py = x - ax - t * dx, y - ay - t * dy
+        distance_sq = px * px + py * py
+        if distance_sq < nearest_sq:
+            nearest_sq = distance_sq
+            result = start + t * length, math.copysign(math.sqrt(distance_sq), dx * py - dy * px)
+    return result
 
 
 def detect_lane_obstacles(observations: CarObservations, lane: LaneDetection | None,

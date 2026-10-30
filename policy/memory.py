@@ -20,6 +20,8 @@ class MpcStop(Serialisable, Enum):
     """An MPC solve did not converge."""
     INTERSECTION = 3
     """Intersection admission, motion, route lifetime or swept-clearance validation failed."""
+    MARKER = 4
+    """A confirmed unsupported marker stopped this run; only an explicit new run clears it."""
 
     def serialise(self) -> str:
         """

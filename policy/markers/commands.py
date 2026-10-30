@@ -22,6 +22,9 @@ class MarkerCommand(Serialisable, Enum):
     KEEP_CENTRE = 5
     """Drive along the lane at mpc.lane_offset_m (lane side "CENTRE") from now on."""
 
+    STOP = 6
+    """An unsupported marker requests a stop until an explicit new run."""
+
     @property
     def lane_side(self) -> str | None:
         """

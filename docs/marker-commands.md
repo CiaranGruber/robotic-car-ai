@@ -1,7 +1,7 @@
 # ArUco marker commands
 
-ArUco markers give the car commands: keep to the left, right or centre of the lane, or turn left, turn right or go
-straight at an intersection. Each command's marker ID is set in the `markers` parameters of
+ArUco markers ask the car to turn left, turn right or go straight at an intersection.
+Each command's marker IDs are set in the `markers` parameters of
 [config/ai4r_policy.yaml](../config/ai4r_policy.yaml); how the car turns is set in its `intersection` parameters.
 
 | | |
@@ -14,22 +14,27 @@ straight at an intersection. Each command's marker ID is set in the `markers` pa
 
 ## Commands
 
-| Command | ID in the yaml | What it does |
-| --- | --- | --- |
-| `KEEP_LEFT` | 0 | Keeps to the left side of the lane until another side marker |
-| `KEEP_RIGHT` | 9 | Keeps to the right side of the lane until another side marker |
-| `KEEP_CENTRE` | 1 | Keeps to `mpc.lane_offset_m` (normally the centre) until another side marker |
-| `TURN_LEFT` | 3 | Turns left at the intersection the marker stands at |
-| `TURN_RIGHT` | 4 | Turns right at the intersection |
-| `STRAIGHT` | 5 | Drives straight across the intersection |
+| Command | ID in the yaml | Preparation before the turn | What it does |
+| --- | --- | --- | --- |
+| `TURN_LEFT` | 1–4 | Moves toward the right side | Turns left at the intersection the marker stands at |
+| `TURN_RIGHT` | 5–6 | Moves toward the left side | Turns right at the intersection |
+| `STRAIGHT` | 7–8 | Keeps the normal lane-side setting | Drives straight across the intersection |
+| `STOP` | All other IDs | Cancels preparation | Stops the current run, including during a turn |
 
-Only the nearest marker in range is followed. A side marker's side is kept after the marker is passed, until another
-side marker is confirmed. Every new run (explicit resume) starts again at `mpc.lane_side` with no intersection command.
+Only the nearest posed marker in range is followed, with the confirmation gate below.
+A confirmed direction is retained after its marker disappears. An unsupported-ID
+stop persists through marker loss and later valid markers; explicitly starting a
+new run clears it. Every new run starts at `mpc.lane_side` with no intersection command.
+
+With `intersection.move_aside: true`, every ID in a turn's group uses the same
+outside-lane preparation, `intersection.aside_clearance_m` from that edge.
+The preparation survives marker disappearance. A straight command during the
+approach, or completion of the turn, restores the original lane side and clearance.
 
 ## When a marker counts
 
 The `aruco_detector` confirms a marker over `min_consecutive_frames` images (3 in `config/aruco_detector.yaml`).
-The policy then counts a mapped marker only when:
+The policy then counts a marker only when:
 
 - its pose is ahead of `base_link` and at most `markers.max_distance_m` (2.0 m) from it; a marker without a pose
   never counts, and
@@ -44,6 +49,9 @@ marker's size (the outer black square): 0.081 m for the markers used on 2026-10-
 looks farther away and may never come within range.
 
 ## Lane changes
+
+These are historical examples using the legacy single-ID assignments, which are
+disabled by the current direction-only mapping. IDs outside 1–8 now request STOP.
 
 A side marker sets the MPC's `lane_side`. The MPC then follows the line `mpc.edge_clearance_m` from that side's
 cones, moving over at most `mpc.offset_change_per_m` per metre driven.
@@ -74,20 +82,29 @@ had already bent the fitted lane and the MPC had stopped for a lost lane. When t
 places the intersection's entry from the marker's position and the car's pose (the local map's dead reckoning, with
 the IMU heading), and remembers the approach lane's centre line and direction. Then, in phases:
 
-1. **Approach.** The MPC keeps following the lane, refining the remembered centre line. Lane detection only gets the
-   approach road's cones (not those past the entry or outside the lane's edges). For a turn, the MPC keeps to the
-   outside of the lane (left before a right turn, as a Melbourne hook turn does), 0.25 m from its edge: from the middle
-   of a lab-width lane the car cannot steer tightly enough to clear both the inside corner and the far side of the
-   road it turns into. From 0.8 m before the entry, where the lane runs out, the car holds the approach direction
-   at 0.3 m/s.
-2. **Arc.** At the planned start, the car follows a quarter circle (1.1 m radius left, 1.2 m right) round the inside
+1. **Approach.** Lane detection refines the remembered centre line using only the approach road's cones. When
+   `move_aside` is enabled, a confirmed turn immediately requests turn speed (0.3 m/s) and bounded pure pursuit
+   toward the outside line, 0.25 m from that edge. The remembered target persists through cone loss; it does not
+   freeze at an unfinished sideways position. Straight travel and disabled preparation retain normal MPC approach
+   following, then hold direction from `hold_line_m` or lane loss. Requested speed is not a measured stopping or
+   acceleration guarantee. Preparation obstacle checks follow a bounded geometric preview of the same steering
+   sequence, including straightening or arc initiation, instead of extending the initial sideways curvature forever.
+   Objects in that corridor still stop the run. Chord approximation widens the checked corridor slightly; sensing,
+   actuator response and future lane changes remain unmodelled.
+2. **Arc.** At the planned start, the car follows a circle tangent to its actual heading round the inside
    corner, with pure pursuit on the circle. The start puts the arc's end on the exit lane's centre line where it
    can, and otherwise as close as it can while keeping the car's body 0.03 m clear of the inside corner cone (its
    inner side, `radius - half width` from the arc's centre) and of the exit's far row (its outer front corner,
-   `sqrt(front^2 + (radius + half width)^2)`).
+   `sqrt(front^2 + (radius + half width)^2)`). The preferred radii (1.1 m left, 1.2 m right) are enlarged to respect
+   each side's configured MPC curvature limit and the steering map's action range. With the current settings this
+   means 2.08 m left and 1.2 m right, starting the wider left arc earlier. A geometry that cannot fit the arc stops
+   the run; it no longer drives a compromise arc after warning. Pure pursuit and the obstacle corridor use the same
+   bounded curvature, and Foxglove draws the effective tangent circle. The admission check also rejects an actual
+   position past the last clear start, even if an earlier start would fit. These limits need physical verification.
 3. **Exit.** Lane following takes over once the car has turned 60 degrees and sees a lane lined up with it, or after
    the quarter circle along the exit line. Going straight, the car holds the approach line across the intersection
-   until it sees the exit lane. Without an exit lane within 1.5 m, it stops for the rest of the run.
+   until it sees the exit lane. Without an exit lane within 1.5 m **past the arc's end**, it stops for the rest of the
+   run. A latched stop freezes the manoeuvre phase until an explicit new run.
 
 The obstacle stop keeps working throughout, along the path the manoeuvre drives (a straight corridor would take the
 cones of the road being turned into for obstacles). Foxglove draws the plan (`/plan/intersection`, orange: the entry,
@@ -101,7 +118,8 @@ speed and the IMU heading. The car is the lab car with car 21's provisional stee
 reported 1 m radius) and 0.92 1/m right, the camera pan held at zero. Intersections are four-way or T crossings of
 roads as wide as the approach road; the roads and the car 21 limits are assumptions, not measurements of the lab.
 
-Over 20 noise seeds each:
+The historical simulation below used the preferred arcs before the 2026-10-30 capability-bound planning fix. It does
+not establish success for the current calibrated left limit or the new earlier turn timing. Over 20 noise seeds each:
 
 | Case | 1 m roads | 0.8 m roads |
 | --- | --- | --- |

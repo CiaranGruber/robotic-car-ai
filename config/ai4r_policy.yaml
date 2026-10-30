@@ -497,7 +497,7 @@
       # Car 20: 0.48 (fit 0.475). Car 22 fits gave 0.17-0.32 (car 22: 0.25).
       # Car 20 on 26 Oct: 0.25 still reached 0.87 m/s for a 0.5 target, so 0.15
       # is an estimate until the breakaway is measured again.
-      speed_ff_offset: 0.25
+      speed_ff_offset: 0.48
       # Speed map slope, m/s per unit drive, positive double. Car 20: 9.18.
       # Car 22 fits gave 7.65-24.7 (car 22: 12.0).
       speed_ff_gain: 9.18
@@ -581,6 +581,8 @@
       # a lane), metres, positive double. It must hold the MPC's obstacle
       # stopping distance (mpc.obstacle_stop_margin_m). Longer sees obstacles
       # sooner, but a heading error brings cones into the straight corridor.
+      # With intersection preparation enabled, this plus car_front_m must be
+      # <= 6.4 m, keeping its geometric preview within 128 steps of at most 5 cm.
       corridor_length_m: 1.5
       # How far along the lane, ahead of the car's front, obstacles in the lane
       # are searched for, metres, positive double; about as far as the camera
@@ -742,20 +744,26 @@
     # DICT_4X4_50, so IDs 0-49) give the car commands. A marker counts when
     # its pose is ahead of the car within max_distance_m; only the nearest
     # such marker is followed, once it has been the nearest in confirm_steps
-    # policy steps in a row. KEEP_LEFT, KEEP_RIGHT and KEEP_CENTRE move the
-    # car to that part of the lane and it stays there until another of them;
-    # every new run starts again at mpc.lane_side. TURN_LEFT, TURN_RIGHT and
-    # STRAIGHT start the intersection manoeuvre (intersection, below); the
-    # marker stands at the intersection like a road sign.
+    # policy steps in a row. IDs 1-4 turn LEFT, 5-6 turn RIGHT and 7-8 go
+    # STRAIGHT at the next intersection. Every other confirmed in-range ID
+    # stops the run, even during a turn; an explicit new run is required.
+    # A confirmed direction survives marker disappearance. The optional
+    # intersection manoeuvre below uses the marker to place the junction and
+    # stops if no outgoing lane is found within its bounded exit search.
     markers:
-      # ArUco ID of each command, integer, -1 for no marker. No two commands
-      # may share an ID. Match the printed markers.
-      keep_left_id: 13
-      keep_right_id: 14
-      keep_centre_id: 16
-      turn_left_id: 1
-      turn_right_id: 2
-      straight_id: 5
+      # Legacy single-ID assignments, integers, -1 to disable. They remain for
+      # old recorded configurations; the current mapping uses the groups below.
+      keep_left_id: -1
+      keep_right_id: -1
+      keep_centre_id: -1
+      turn_left_id: -1
+      turn_right_id: -1
+      straight_id: -1
+      # Integer arrays; no ID may appear twice or belong to two commands.
+      # Use [-1] to disable a group (avoids ambiguous ROS empty-array types).
+      turn_left_ids: [1, 2, 3, 4]
+      turn_right_ids: [5, 6]
+      straight_ids: [7, 8]
       # Farthest a marker may be from base_link to count, metres, positive
       # double. Markers without a pose never count. 2.0 so a turn marker is
       # confirmed before the cross road's cones come into view (about 2.5 m)
@@ -779,23 +787,25 @@
       # true or false: whether turn markers start the manoeuvre. false only
       # remembers the command, and the car stops where the approach lane ends.
       enabled: true
-      # true or false: keep to the outside of the approach lane before a turn
-      # (left before a right turn, like a hook turn), aside_clearance_m from
-      # its edge. From the middle of a lab-width lane the car cannot clear both
+      # true or false: aim at the outside approach line immediately after a
+      # turn marker confirms, using bounded pursuit at turn_speed_m_per_s.
+      # Keep aside_clearance_m from its edge, including when cones disappear.
+      # From the middle of a lab-width lane the car cannot clear both
       # the inside corner and the far side of the road it turns into.
       move_aside: true
       # Distance from the outside lane edge to the line followed before a turn,
-      # metres, positive double (mpc.edge_clearance_m while moving aside).
+      # metres, positive double.
       aside_clearance_m: 0.25
       # How far past the marker the approach rows end, metres, finite double.
       # Place the marker about 1 m before the intersection, like a road sign:
       # beside the last cones it is confirmed too late, when the cross road's
       # cones already confuse lane detection (simulation).
       marker_to_entry_m: 1.0
-      # Radius of the planned arc, metres, positive double, at least the car's
-      # tightest turn that way. Defaults: about 10% over car 21's reported 1 m
-      # left radius (Yuhao) and the measured 0.92 1/m right limit (1.09 m).
-      # Car 20's 0.48 1/m left limit (2.1 m) is too wide for a lab crossing.
+      # Preferred minimum arc radius, metres, positive double. Planning enlarges
+      # it to respect mpc.max_curvature_per_m / max_right_curvature_per_m and
+      # the control steering map's action range. With the current limits the
+      # left arc is 2.08 m; the right remains 1.2 m. An arc that cannot fit
+      # between the corner and far cone row stops the run rather than driving it.
       left_turn_radius_m: 1.1
       right_turn_radius_m: 1.2
       # Width of the road turned into, metres, double >= 0. 0.0: the same as

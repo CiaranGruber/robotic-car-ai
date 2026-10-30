@@ -63,8 +63,7 @@ def test_unadmitted_command_cannot_form_an_active_lane_reference():
 def test_direction_markers_leave_normal_straight_and_curved_lanes_unchanged(curvature):
     params, _ = settings()
     outcomes = []
-    markers = params["markers"]
-    for marker_id in (None, markers["turn_left_id"], markers["turn_right_id"], markers["straight_id"]):
+    for marker_id in (None, 1, 5, 7):
         policy, memory = make_policy(params, navigation=True), CarMemory()
         actions = []
         for step in range(5):

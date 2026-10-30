@@ -162,8 +162,8 @@ Five commented ROS parameter files are installed:
 - [aruco_detector.yaml](config/aruco_detector.yaml): dictionary, marker sizes and detection filtering.
 
 ArUco filtering runs in `aruco_detector`, before observations reach the policy.
-Set `allowed_marker_ids: [4, 5]` for an exercise using only those IDs; the shipped
-empty list allows every dictionary ID. `min_consecutive_frames: 3` requires an
+Keep the shipped `allowed_marker_ids: []` so unsupported IDs reach the policy's
+stop check as well as direction IDs. `min_consecutive_frames: 3` requires an
 ID in three consecutive processed images before publishing the current result,
 adding about 0.2 s at 10 Hz. Set it to `1` to disable confirmation. A missed
 detection removes the ID immediately; reacquisition must confirm again. A gap
@@ -174,8 +174,21 @@ ID. Repeated-ID observations remain separate and poses are never replayed.
 An image with no accepted markers still supplies a fresh empty batch; the
 student continues to decide the driving response to marker absence.
 
-This branch maps IDs **3 / 4 / 5** to **left / right / straight at the next
-intersection**. The optional `intersection` navigator connects a confirmed
+This branch maps **IDs 1–4 to left, 5–6 to right and 7–8 to straight at the next
+intersection**, using `markers.turn_left_ids`, `turn_right_ids` and `straight_ids`.
+Every other confirmed, posed marker ahead within `markers.max_distance_m` stops
+the current run, including during a turn. The stop remains after the marker
+disappears or a valid marker appears; only explicitly starting a new run clears
+it. A confirmed valid direction is remembered when its marker leaves view.
+The legacy scalar/keep-side assignments are disabled in the shipped configuration
+and remain available for replaying older settings.
+The current `intersection` manoeuvre is enabled in the shipped settings. It
+places the junction from the marker's position, retains the approach direction,
+follows a planned turn and searches for the outgoing lane within a bounded
+distance; it stops if that exit lane is not found. See
+[marker commands](docs/marker-commands.md).
+
+The separate experimental `intersection_navigator` connects a confirmed
 command to a finite path through an **equal-width perpendicular cross or T-junction**.
 It estimates incoming rows from motion-compensated cone tracks and uses current
 lidar boundary evidence for the requested exit. Supported closing rows block a
@@ -184,9 +197,9 @@ MPC steers through the turn, then fresh outgoing boundaries and heading alignmen
 admit handoff to normal lane following. Camera pan and steering limits are unchanged;
 no trained model is used. It is **disabled by default and locally simulated only**.
 
-The ArUco command selects the **formed lane centre path** once sensor evidence
-admits an exit. ID 3 connects the approach to the left exit, ID 4 to the right,
-and ID 5 to the straight exit. A sign ahead of an ordinary straight or curved
+With that experimental navigator, the ArUco command selects the **formed lane centre path** once sensor evidence
+admits an exit. IDs 1–4 connect the approach to the left exit, 5–6 to the right,
+and 7–8 to the straight exit. A sign ahead of an ordinary straight or curved
 road only queues the command; its measured lane fit and normal control remain
 the source, subject to command expiry and sensor-stop checks. At a sensed junction,
 fresh incoming cone geometry plus current paired lidar rows can support a slower,

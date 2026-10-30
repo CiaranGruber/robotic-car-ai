@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate DICT_4X4_50 markers 3–5 as PNGs with white margins.
+"""Generate DICT_4X4_50 direction markers 1–8 as PNGs with white margins.
 
 Usage: python scripts/generate_aruco_markers.py --output build/aruco-markers
 Print without stretching; the configured physical size is the black square's
@@ -32,7 +32,7 @@ def main():
 
     dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
     args.output.mkdir(parents=True, exist_ok=True)
-    for marker_id in (3, 4, 5):
+    for marker_id in range(1, 9):
         marker = cv2.aruco.generateImageMarker(dictionary, marker_id, args.size)
         image = cv2.copyMakeBorder(
             marker, args.margin, args.margin, args.margin, args.margin,

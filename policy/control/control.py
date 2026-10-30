@@ -138,6 +138,22 @@ def steering_for_curvature(curvature_per_m: float, config: ControlConfig) -> flo
     return max(-config.max_steering_action, min(config.max_steering_action, steering))
 
 
+def curvature_bounds(config: ControlConfig) -> tuple[float, float]:
+    """Curvatures representable by the steering map without action clipping, as (right, left) in 1/m.
+
+    These are limits of the configured action map, not new measurements of the car's turning radius. A planner must
+    also respect its calibrated curvature limits. A centre at an action limit leaves no room to steer one way.
+    """
+    if abs(config.steering_centre_action) > config.max_steering_action:
+        raise ValueError("control.steering_centre_action must lie within max_steering_action for turn planning")
+    sign = 1.0 if config.positive_steering_turns_left else -1.0
+    left = max(0.0, (config.max_steering_action - sign * config.steering_centre_action)
+               / abs(config.steering_left_action_per_curvature))
+    right = max(0.0, (config.max_steering_action + sign * config.steering_centre_action)
+                / abs(config.steering_right_action_per_curvature))
+    return -right, left
+
+
 class SpeedController:
     """Feedforward + PI wheel-speed controller.
 

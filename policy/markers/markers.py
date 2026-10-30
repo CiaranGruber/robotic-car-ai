@@ -1,9 +1,8 @@
 """
 markers.py
 
-Reads the ArUco markers the car sees and turns the ones mapped in the markers parameters of config/ai4r_policy.yaml
-into commands: keep to the left, right or centre of the lane, or turn left, turn right or go straight at the next
-intersection.
+Reads the ArUco markers the car sees using the command mapping in config/ai4r_policy.yaml.
+An in-range confirmed marker outside that mapping requests a stop.
 """
 import logging
 import math
@@ -23,8 +22,7 @@ NO_MARKER = -1
 class MarkerConfig:
     """Settings for the marker commands, loaded from the markers parameters in config/ai4r_policy.yaml.
 
-    Each *_id setting is the ArUco ID, in the aruco_detector's dictionary, that gives that command, or NO_MARKER (-1)
-    for none. No two commands may share an ID.
+    Invalid or overlapping marker assignments raise ValueError at startup.
     """
     keep_left_id: int = NO_MARKER
     """Marker that moves the car to the left side of the lane (lane side "LEFT") until another side marker."""
@@ -45,16 +43,35 @@ class MarkerConfig:
     """Consecutive policy steps that must see the same command marker in range before its command is given, on top of
     the aruco_detector's own min_consecutive_frames. At least 1."""
 
+    turn_left_ids: tuple[int, ...] = (NO_MARKER,)
+    """Additional IDs for a left turn. (-1,) disables the group, preserving older scalar configurations."""
+    turn_right_ids: tuple[int, ...] = (NO_MARKER,)
+    """Additional IDs for a right turn. (-1,) disables the group."""
+    straight_ids: tuple[int, ...] = (NO_MARKER,)
+    """Additional IDs for straight travel. (-1,) disables the group."""
+
     def __post_init__(self):
         ids = [getattr(self, field.name) for field in fields(self) if field.name.endswith("_id")]
-        if any(not isinstance(marker_id, int) or marker_id < NO_MARKER for marker_id in ids):
+        for name in ("turn_left_ids", "turn_right_ids", "straight_ids"):
+            value = getattr(self, name)
+            if isinstance(value, (str, bytes)):
+                raise ValueError(f"markers.{name} must be an integer array")
+            try:
+                group = tuple(value)
+            except TypeError as exc:
+                raise ValueError(f"markers.{name} must be an integer array") from exc
+            if not group:
+                raise ValueError(f"markers.{name} must be nonempty; use [-1] to disable it")
+            object.__setattr__(self, name, group)
+            ids.extend(group)
+        if any(isinstance(marker_id, bool) or not isinstance(marker_id, int) or marker_id < NO_MARKER for marker_id in ids):
             raise ValueError(f"markers.*_id must be integers, {NO_MARKER} for no marker or an ArUco ID >= 0: {ids}")
         used = [marker_id for marker_id in ids if marker_id != NO_MARKER]
         if len(used) != len(set(used)):
             raise ValueError(f"Two marker commands share an ID: {ids}")
         if not (math.isfinite(self.max_distance_m) and self.max_distance_m > 0.0):
             raise ValueError(f"markers.max_distance_m must be positive and finite, not {self.max_distance_m}")
-        if self.confirm_steps < 1:
+        if isinstance(self.confirm_steps, bool) or not isinstance(self.confirm_steps, int) or self.confirm_steps < 1:
             raise ValueError(f"markers.confirm_steps must be at least 1, not {self.confirm_steps}")
 
     @property
@@ -66,6 +83,10 @@ class MarkerConfig:
                    self.keep_centre_id: MarkerCommand.KEEP_CENTRE,
                    self.turn_left_id: MarkerCommand.TURN_LEFT, self.turn_right_id: MarkerCommand.TURN_RIGHT,
                    self.straight_id: MarkerCommand.STRAIGHT}
+        for name, command in (("turn_left_ids", MarkerCommand.TURN_LEFT),
+                              ("turn_right_ids", MarkerCommand.TURN_RIGHT),
+                              ("straight_ids", MarkerCommand.STRAIGHT)):
+            mapping.update((marker_id, command) for marker_id in getattr(self, name) if marker_id != NO_MARKER)
         return {marker_id: command for marker_id, command in mapping.items() if marker_id != NO_MARKER}
 
 
@@ -85,7 +106,7 @@ class MarkerReader:
     def nearest_in_range(self, observations: CarObservations) -> int | None:
         """
         :param observations: This step's observations.
-        :return: The ID of the nearest mapped marker with a pose ahead of base_link within max_distance_m, or None
+        :return: The ID of the nearest marker with a pose ahead of base_link within max_distance_m, or None
             without one or without a fresh fiducial batch.
         """
         self.position = None
@@ -94,7 +115,7 @@ class MarkerReader:
             return None
         nearest_id, nearest_m = None, math.inf
         for detection in fiducials.detections:
-            if detection.id not in self.commands or detection.pose is None:
+            if detection.pose is None:
                 continue
             position = detection.pose.position
             distance_m = math.hypot(position.x, position.y)
@@ -118,7 +139,10 @@ class MarkerReader:
         sighting = memory.data.marker_sighting
         if sighting is None or sighting.steps != self.config.confirm_steps:
             return None
-        command = self.commands[sighting.marker_id]
+        command = self.commands.get(sighting.marker_id, MarkerCommand.STOP)
+        if command is MarkerCommand.STOP:
+            _LOGGER.info("Unsupported marker %d: stopping for the rest of the run", sighting.marker_id)
+            return command  # Stops also apply during a committed turn.
         intersection = memory.data.intersection
         if intersection is not None and intersection.phase in ("turn", "exit", "stopped"):
             return None  # A new sighting cannot change or rearm a committed manoeuvre.

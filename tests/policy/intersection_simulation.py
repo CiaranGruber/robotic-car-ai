@@ -237,7 +237,8 @@ def rollout(direction, profile="nominal", seed=23000, *, track=CrossIntersection
     policy, memory = make_policy(params, navigation), CarMemory()
     if params["action_policy"] != "mpc":
         raise ValueError("This diagnostic expects this branch's selected mpc action policy")
-    marker_id = params["markers"][{"left": "turn_left_id", "right": "turn_right_id", "straight": "straight_id"}[direction]]
+    marker_id = next(marker_id for marker_id, command in MarkerConfig(**params["markers"]).commands.items()
+                     if command.name == DIRECTIONS[direction])
     if profile == "unmapped_marker":
         marker_id = next(i for i in range(49, -1, -1) if i not in MarkerConfig(**params["markers"]).commands)
     rng = np.random.default_rng(seed)

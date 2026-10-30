@@ -247,8 +247,22 @@ def _obstacle_layer(policy: MovementPolicy) -> Layer:
     config = policy.obstacle_detection_config
     path = LaneArc(0.0, 0.0, 0.0, obstacles.path_curvature_per_m)
     along = _along(car_front_m, car_front_m + config.corridor_length_m)
-    corridor = ([_lane_point(path, s_m, -config.corridor_half_width_m) for s_m in along]
-                + [_lane_point(path, s_m, config.corridor_half_width_m) for s_m in reversed(along)])
+    if policy.manoeuvre_path_m is None:
+        corridor = ([_lane_point(path, s_m, -config.corridor_half_width_m) for s_m in along]
+                    + [_lane_point(path, s_m, config.corridor_half_width_m) for s_m in reversed(along)])
+    else:
+        right, left, distance = [], [], 0.
+        points = policy.manoeuvre_path_m
+        half_width = config.corridor_half_width_m + policy.turner.preview_chord_margin_m
+        for (ax, ay), (bx, by) in zip(points, points[1:]):
+            dx, dy = bx - ax, by - ay
+            length = math.hypot(dx, dy)
+            distance += length
+            if length > 1e-9 and distance >= car_front_m:
+                nx, ny = -dy / length * half_width, dx / length * half_width
+                right.append((bx - nx, by - ny))
+                left.append((bx + nx, by + ny))
+        corridor = right + list(reversed(left))
     point = obstacles.in_path_point
     return Layer(lines=[Line(corridor, COLOURS["corridor"], closed=True)],
                  spheres=[] if point is None else [Sphere(point.x, point.y, 0.1, COLOURS["obstacle"])])
@@ -358,21 +372,26 @@ def _intersection_lines(policy: MovementPolicy) -> list[Line]:
         lines.append(Line([approach(s_m, 0.0) for s_m in _along(-config.hold_line_m, turn.lane_width_m)], colour))
         return lines
     side = 1.0 if turn.command is MarkerCommand.TURN_LEFT else -1.0
-    radius = config.left_turn_radius_m if side > 0.0 else config.right_turn_radius_m
+    radius = policy.turner.radius_m(turn)
+    if not math.isfinite(radius) or (turn.phase is TurnPhase.APPROACH and not policy.turner.feasible):
+        return lines
     if turn.phase is TurnPhase.ARC:
         centre = (turn.arc_centre_x_m, turn.arc_centre_y_m)
+        first = math.atan2(pose.y_m - centre[1], pose.x_m - centre[0])
     elif policy.turner.arc_start_m is not None:
-        # The arc as planned from the car's offset now
+        # The admitted circle is tangent to the current heading, including an unfinished sideways preparation.
         dx, dy = pose.x_m - turn.entry_x_m, pose.y_m - turn.entry_y_m
-        across = -sin_a * dx + cos_a * dy + side * radius
-        start = policy.turner.arc_start_m
+        error = pose.heading_rad - turn.heading_rad
+        across = -sin_a * dx + cos_a * dy + side * radius * math.cos(error)
+        start = policy.turner.arc_start_m - side * radius * math.sin(error)
         centre = (turn.entry_x_m + start * cos_a - across * sin_a, turn.entry_y_m + start * sin_a + across * cos_a)
+        first = pose.heading_rad - side * math.pi / 2.0
     else:
         return lines
-    first = turn.heading_rad - side * math.pi / 2.0
+    sweep = (side * (turn.heading_rad - first)) % (2.0 * math.pi)
     lines.append(Line([local(centre[0] + radius * math.cos(first + side * angle),
                              centre[1] + radius * math.sin(first + side * angle))
-                       for angle in _along(0.0, math.pi / 2.0)], colour))
+                       for angle in _along(0.0, sweep)], colour))
     return lines
 
 

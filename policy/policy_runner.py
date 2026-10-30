@@ -4,7 +4,8 @@ import dataclasses
 import math
 
 from policy.action_policy.avoidance import AvoidanceConfig, LaneAvoidance
-from policy.action_policy.intersection import IntersectionConfig, IntersectionTurner
+from policy.action_policy.intersection import (IntersectionConfig, IntersectionTurner,
+                                               PREVIEW_MAX_STEPS, PREVIEW_STEP_M)
 from policy.action_policy.lane_path import LanePath
 from policy.action_policy.intersection_navigator import IntersectionNavigator, IntersectionNavigatorConfig
 from policy.action_policy.mpc import MpcConfig
@@ -20,7 +21,7 @@ from policy.lane_detection.selection import SelectedIntersectionLane
 from policy.local_map.local_map import LocalMap, LocalMapConfig
 from policy.markers.commands import MarkerCommand
 from policy.markers.markers import MarkerConfig, MarkerReader
-from policy.memory import CarMemory, CarPose, IntersectionTurn
+from policy.memory import CarMemory, CarPose, IntersectionTurn, MpcStop, TurnPhase
 from policy.obstacle_detection.obstacle_detection import (ObstacleDetectionConfig, detect_lane_obstacles,
                                                           detect_obstacles, nearest_in_band)
 from policy.obstacle_detection.obstacles import LaneObstacle, ObstacleDetection
@@ -124,10 +125,16 @@ class MovementPolicy:
         self.intersection_command: MarkerCommand | None = None
         """What to do at the next intersection after the latest step (Memory.intersection_command), or None."""
         self.turner = IntersectionTurner(intersection_config, self.action_policy, avoidance_config.car_width_m,
-                                         obstacle_detection_config.car_front_m)
+                                         obstacle_detection_config.car_front_m, control_config)
+        if (intersection_config.enabled and intersection_config.move_aside
+                and obstacle_detection_config.car_front_m + obstacle_detection_config.corridor_length_m
+                > PREVIEW_MAX_STEPS * PREVIEW_STEP_M):
+            raise ValueError("Intersection preparation obstacle preview cannot exceed 6.4 m including car_front_m")
         self.manoeuvre: tuple[float, float] | None = None
         """The (speed in m/s, curvature in 1/m) the intersection manoeuvre drove in the latest step, or None while
         lane following drove."""
+        self.manoeuvre_path_m: list[tuple[float, float]] | None = None
+        """This step's bounded preparation preview in base_link, or None when using a constant-curvature corridor."""
         self.intersection_turn: IntersectionTurn | None = None
         """The intersection manoeuvre after the latest step (Memory.intersection_turn), or None, for drawing."""
         self.pose: CarPose | None = None
@@ -158,17 +165,23 @@ class MovementPolicy:
         :param memory: The memory stored by the car
         :return: The actions for the car to take given the observations
         """
-        if self.action_policy_name == "open_space":
-            return self._open_space_step(observations)
+        self.manoeuvre_path_m = None
         # Forget the previous run before the avoidance and the obstacle check ask the MPC for its line, so a new run
         # starts at mpc.lane_side rather than where the previous run left off
         if observations.policy.is_first_policy_step:
+            self.action_policy.memory = memory
             self.action_policy.reset()
             memory.start_marker_run()
             self.lane_detector.config = self.initial_lane_detection_config
         # Follow the nearest command marker: keep to its side of the lane until another side marker, or remember the
         # next intersection's turn
         self.marker_command = self.markers.step(observations, memory)
+        if self.marker_command is MarkerCommand.STOP and memory.data.mpc_stop is None:
+            memory.stop_mpc(MpcStop.MARKER)
+        if memory.data.mpc_stop is MpcStop.MARKER:
+            return self._marker_stop(observations, memory)
+        if self.action_policy_name == "open_space":
+            return self._open_space_step(observations)
         if self.marker_command is not None and self.marker_command.lane_side is not None:
             self.action_policy.lane_side = self.marker_command.lane_side
         self.intersection_command = memory.data.intersection_command
@@ -238,14 +251,19 @@ class MovementPolicy:
         self.intersection_command = memory.data.intersection_command
         self.intersection_turn, self.pose = memory.data.intersection_turn, memory.data.pose
         if self.manoeuvre is not None:
-            # The lane is not followed, so look for obstacles along the manoeuvre's path (its arc while turning): a
-            # straight corridor would take the cones of the road turned into for obstacles
+            # Check the bounded pursuit command: the ideal arc can differ from what the car is actually steering.
+            if (self.manoeuvre[0] > 0. and self.intersection_turn is not None
+                    and self.intersection_turn.phase is TurnPhase.APPROACH and self.turner.config.move_aside
+                    and self.intersection_turn.command is not MarkerCommand.STRAIGHT):
+                config = self.obstacle_detection_config
+                self.manoeuvre_path_m = self.turner.preview_path(memory, config.car_front_m + config.corridor_length_m)
             self.obstacles = detect_obstacles(observations, self.obstacle_detection_config,
-                                              self.turner.path_curvature_per_m)
+                                              self.turner.path_curvature_per_m, path_points_m=self.manoeuvre_path_m,
+                                              path_error_m=self.turner.preview_chord_margin_m)
             self.lane_obstacles, self.lane_path, self.action_policy.avoidance_path = None, None, None
             self.obstacle_distance_m = None if self.obstacles is None else self.obstacles.in_path_distance_m
             instructions = self.action_policy.follow_manoeuvre(observations, self.obstacle_distance_m,
-                                                               *self.manoeuvre, memory)
+                                                               *self.manoeuvre, memory, reset_on_first_step=False)
         else:
             # Find the obstacles: inside the lane when there is one, otherwise in a straight corridor ahead of the car
             self.obstacles = detect_obstacles(observations, self.obstacle_detection_config)
@@ -259,12 +277,15 @@ class MovementPolicy:
                 self.lane_path if self.lane_path is not None and self.lane_path.segments else None)
             self.obstacle_distance_m = self._obstacle_distance_m(lanes)
             # Determine the policy to take based upon the car location; an obstacle in the car's way stops it
-            instructions = self.action_policy.run_policy(observations, lanes, self.obstacle_distance_m, memory)
+            # This run was reset before marker processing; resetting again would erase preparation
+            # when confirm_steps=1 accepts a turn on the first policy step.
+            instructions = self.action_policy.run_policy(observations, lanes, self.obstacle_distance_m, memory,
+                                                          reset_on_first_step=False)
         # The car actions to determine
         car_actions = self.car_controller.step(observations, instructions)
         # Hold the camera at zero pan: the camera's fixed transform to base_link assumes it, and any pan rotates every
         # detected cone position by the pan angle
-        car_actions.camera_pan_action = 0.0
+        car_actions.camera_pan_action = 0.3
         # Where the car is relative to the lane centre, to plot in Foxglove: debug1 is the lateral error in metres
         # (positive left of the centre) and debug2 the heading error in radians (positive pointing left of the lane).
         # Nothing is published on them when this step has no usable lane.
@@ -274,6 +295,30 @@ class MovementPolicy:
                 car_actions, debug1=lane_state.lateral_error_m, debug2=lane_state.heading_error_rad)
         # Return final car actions
         return car_actions
+
+    def _marker_stop(self, observations: CarObservations, memory: CarMemory) -> CarActions:
+        """Discard the old route and request braking while the unsupported-marker stop is latched."""
+        memory.consume_intersection_command()
+        memory.finish_turn()
+        memory.drop_mpc_plan()
+        state = memory.data.intersection
+        if state is not None:
+            memory.update_intersection(dataclasses.replace(
+                state, phase="stopped", route=(), stop_reason="unsupported marker"))
+        self.selected_lane = self.intersections.selected_lane = None
+        self.intersection_command = None
+        self.intersection_turn = self.manoeuvre = None
+        self.turner.path_curvature_per_m = 0.0
+        self.turner.arc_start_m = None
+        self.cones = self.lanes = self.obstacles = self.lane_obstacles = None
+        self.obstacle_distance_m = None
+        self.lane_path = None
+        self.avoidance.memory = memory
+        self.avoidance.reset()
+        self.action_policy.avoidance_path = None
+        self.action_policy.lane_state = None
+        actions = self.car_controller.step(observations, [self.action_policy._command(0., 0., brake=True)])
+        return dataclasses.replace(actions, camera_pan_action=None)
 
     def _obstacle_distance_m(self, lanes: LaneDetection | None) -> float | None:
         """Finds how far ahead the nearest obstacle in the car's way is, from this step's obstacles.
