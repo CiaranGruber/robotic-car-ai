@@ -45,6 +45,7 @@ from foxglove.messages import (Color, CubePrimitive, LinePrimitive, LinePrimitiv
 
 from policy import visualisation
 from policy.action_policy.avoidance import AvoidanceConfig
+from policy.action_policy.steering_test import SteeringTestConfig
 from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig
 from policy.cone_filter.cone_filter import ConeFilterConfig
@@ -73,7 +74,7 @@ FRAME_ID = "base_link"
 CONFIG_TYPES = {
     "mpc": MpcConfig, "open_space": OpenSpaceConfig, "cone_filter": ConeFilterConfig, "control": ControlConfig,
     "lane_detection": LaneDetectionConfig, "obstacle_detection": ObstacleDetectionConfig,
-    "avoidance": AvoidanceConfig, "local_map": LocalMapConfig,
+    "avoidance": AvoidanceConfig, "local_map": LocalMapConfig, "steering_test": SteeringTestConfig,
 }
 """The MovementPolicy settings, by their prefix in config/ai4r_policy.yaml, as policy_node reads them."""
 
@@ -148,7 +149,7 @@ def build_policy(settings: dict[str, Any]) -> MovementPolicy:
         configs["mpc"], configs["cone_filter"], configs["control"], configs["open_space"],
         settings.get("action_policy", "mpc"), lane_detection_config=configs["lane_detection"],
         obstacle_detection_config=configs["obstacle_detection"], avoidance_config=configs["avoidance"],
-        local_map_config=configs["local_map"])
+        local_map_config=configs["local_map"], steering_test_config=configs["steering_test"])
 
 
 def read_data_log(observations_path: Path) -> list[RecordedStep]:

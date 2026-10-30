@@ -9,6 +9,7 @@ from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig, OpenSpacePolicy
 from policy.action_policy.policy import MpcPolicy
 from policy.action_policy.reference import rotate_cones
+from policy.action_policy.steering_test import SteeringTest, SteeringTestConfig
 from policy.cone_filter.cone_filter import ConeFilterConfig, filter_cones, remove_implausible_cones
 from policy.control.control import CarController, ControlConfig
 from policy.input_output import CarActions, CarObservations, ConeBatch
@@ -20,7 +21,7 @@ from policy.obstacle_detection.obstacle_detection import (ObstacleDetectionConfi
                                                           detect_obstacles, nearest_in_band)
 from policy.obstacle_detection.obstacles import LaneObstacle, ObstacleDetection
 
-ACTION_POLICIES = ("mpc", "open_space")
+ACTION_POLICIES = ("mpc", "open_space", "steering_test")
 """Valid names for the action_policy parameter in config/ai4r_policy.yaml."""
 
 
@@ -35,7 +36,8 @@ class MovementPolicy:
                  lane_detection_config: LaneDetectionConfig = LaneDetectionConfig(),
                  obstacle_detection_config: ObstacleDetectionConfig = ObstacleDetectionConfig(),
                  avoidance_config: AvoidanceConfig = AvoidanceConfig(),
-                 local_map_config: LocalMapConfig = LocalMapConfig()):
+                 local_map_config: LocalMapConfig = LocalMapConfig(),
+                 steering_test_config: SteeringTestConfig = SteeringTestConfig()):
         """
         :param mpc_config: The MPC settings, from the mpc parameters in config/ai4r_policy.yaml.
         :param cone_filter_config: The cone filter settings, from the cone_filter parameters in
@@ -44,8 +46,9 @@ class MovementPolicy:
         :param control_config: The control settings, from the control parameters in config/ai4r_policy.yaml.
         :param open_space_config: The open-space settings, from the open_space parameters in config/ai4r_policy.yaml.
         :param action_policy: Which policy chooses the instructions, from the action_policy parameter:
-            "mpc" follows the cone lane, and "open_space" drives into the open space between the cones while the
-            operator holds the RC drive forwards. A ValueError is raised for any other name.
+            "mpc" follows the cone lane, "open_space" drives into the open space between the cones while the
+            operator holds the RC drive forwards, and "steering_test" holds a list of raw steering actions to measure
+            the steering (policy/action_policy/steering_test.py). A ValueError is raised for any other name.
         :param lane_detection_config: The lane detection settings, from the lane_detection parameters in
             config/ai4r_policy.yaml.
         :param obstacle_detection_config: The obstacle detection settings, from the obstacle_detection parameters in
@@ -59,6 +62,8 @@ class MovementPolicy:
             max_ramp_curvature_per_m or max_return_curvature_per_m is sharper than the MPC's curvature limits.
         :param local_map_config: The settings for remembering the cones around the car, from the local_map parameters
             in config/ai4r_policy.yaml.
+        :param steering_test_config: The steering test settings, from the steering_test parameters in
+            config/ai4r_policy.yaml.
         """
         if action_policy not in ACTION_POLICIES:
             raise ValueError(f"action_policy must be one of {ACTION_POLICIES}, not {action_policy!r}")
@@ -101,6 +106,7 @@ class MovementPolicy:
                                        stopping_m if mpc_config.obstacle_stop_enabled else 0.0)
         self.open_space_policy = OpenSpacePolicy(open_space_config, control_config.positive_steering_turns_left)
         self.car_controller = CarController(control_config)
+        self.steering_test = SteeringTest(steering_test_config, control_config)
         self.cones: ConeBatch | None = None
         """The cones the latest step used, after the cone filter and the camera yaw correction, or None without fresh
         cones. The remembered cones lane detection also used are self.local_map.recalled."""
@@ -127,6 +133,8 @@ class MovementPolicy:
         """
         if self.action_policy_name == "open_space":
             return self._open_space_step(observations)
+        if self.action_policy_name == "steering_test":
+            return self.steering_test.step(observations)
         # Forget the previous run before the avoidance and the obstacle check ask the MPC for its line, so a new run
         # starts at mpc.lane_side rather than where the previous run left off
         if observations.policy.is_first_policy_step:

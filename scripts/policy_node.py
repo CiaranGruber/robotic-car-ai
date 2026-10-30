@@ -67,6 +67,7 @@ from dream_interfaces.msg import (ConeDetection, ConeDetections, DriveAndSteer,
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from policy.action_policy.avoidance import AvoidanceConfig
+from policy.action_policy.steering_test import SteeringTestConfig
 from policy.action_policy.mpc import MpcConfig
 from policy.action_policy.open_space import OpenSpaceConfig
 from policy.cone_filter.cone_filter import ConeFilterConfig
@@ -292,7 +293,7 @@ class PolicyNode(Node):
         # floating-point number; 0 is an integer, which is a different ROS type.
 
         # Movement policy settings: see action_policy, mpc, open_space, cone_filter,
-        # control, lane_detection, obstacle_detection, avoidance and local_map in
+        # control, lane_detection, obstacle_detection, avoidance, local_map and steering_test in
         # ai4r_policy.yaml. MovementPolicy (policy/policy_runner.py) checks
         # action_policy and how the settings fit together. MpcConfig
         # (policy/action_policy/mpc.py), OpenSpaceConfig
@@ -309,7 +310,7 @@ class PolicyNode(Node):
                 ("mpc", MpcConfig), ("open_space", OpenSpaceConfig), ("cone_filter", ConeFilterConfig),
                 ("control", ControlConfig), ("lane_detection", LaneDetectionConfig),
                 ("obstacle_detection", ObstacleDetectionConfig), ("avoidance", AvoidanceConfig),
-                ("local_map", LocalMapConfig)):
+                ("local_map", LocalMapConfig), ("steering_test", SteeringTestConfig)):
             defaults = asdict(config_type())
             for name, default in defaults.items():
                 self.declare_parameter(f"{prefix}.{name}", default, ParameterDescriptor(read_only=True))
@@ -319,7 +320,7 @@ class PolicyNode(Node):
             settings["mpc"], settings["cone_filter"], settings["control"], settings["open_space"],
             self.get_parameter("action_policy").value, lane_detection_config=settings["lane_detection"],
             obstacle_detection_config=settings["obstacle_detection"], avoidance_config=settings["avoidance"],
-            local_map_config=settings["local_map"])
+            local_map_config=settings["local_map"], steering_test_config=settings["steering_test"])
         # Every parameter value this node runs with, saved beside each drive data log
         # (<stem>_config.json). Settings are startup-only, so reading them once is enough.
         self.parameter_values = {

@@ -4,9 +4,10 @@
 Usage:  python tools/sysid_analyze.py sysid_run/sysid_run_0.mcap [more.mcap ...]
 
 For every hold segment (debug1 >= 0) it prints the commanded and applied drive,
-steering, the steady-state wheel speed (mean of the last 3 s), time to first
-movement, time to 63 % of steady state, and the mean path curvature from
-debug2. It then fits v_ss = K * (drive - u0) over segments that moved.
+the commanded steering and the steering the vehicle interface reports applying,
+the steady-state wheel speed (mean of the last 3 s), time to first movement,
+time to 63 % of steady state, and the mean path curvature from debug2. It then
+fits v_ss = K * (drive - u0) over segments that moved.
 Only uncompressed MCAP (the rosbag2 default here) is supported.
 """
 import collections
@@ -100,6 +101,7 @@ def analyse(path):
             "cmd": mean([d for _, d, _ in inside(command)]),
             "applied": mean([d for t, d, _ in inside(applied) if t > start + 0.3]),
             "steer": mean([s for _, _, s in inside(command)]),
+            "steer_applied": mean([s for t, _, s in inside(applied) if t > start + 0.3]),
             "v_ss": v_ss, "moved": moved, "t63": t63,
             "kappa": mean([k for t, k in inside(curvature) if t >= end - 3.0]),
         })
@@ -124,10 +126,11 @@ def main(paths):
         rows = analyse(path)
         all_rows += rows
         print(f"\n{path}")
-        print(" seg  hold  cmd    applied steer  v_ss   moved  t63    kappa")
+        print(" seg  hold  cmd    applied steer  steer_applied  v_ss   moved  t63    kappa")
         for r in rows:
             print(f" {r['seg']:3d} {r['hold']:5.1f}  {r['cmd']:.3f}  {r['applied']:.3f}  "
-                  f"{r['steer']:+.2f}  {r['v_ss']:.3f}  {r['moved']:5.2f}  {r['t63']:5.2f}  "
+                  f"{r['steer']:+.2f}  {r['steer_applied']:+.3f}         {r['v_ss']:.3f}  "
+                  f"{r['moved']:5.2f}  {r['t63']:5.2f}  "
                   f"{r['kappa']:+.3f}")
     result = fit(all_rows)
     if result:

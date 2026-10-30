@@ -155,6 +155,9 @@
     #               ONLY while the operator holds the RC drive forwards. Releasing
     #               it stops the car; RC steering picks the preferred side. Use the
     #               open-space exercise settings above.
+    #   steering_test: hold the raw steering actions in steering_test below in
+    #               turn, to measure the steering; see that section for the
+    #               trigger and sensor settings it needs.
     action_policy: mpc
 
     # Logging settings (policy/data_logging/data_logging.py).
@@ -724,3 +727,31 @@
       # Remembered cones not seen for this long are forgotten, seconds,
       # positive double.
       cone_keep_s: 4.0
+
+    # STEERING TEST, used when action_policy is steering_test
+    # (SteeringTestConfig in policy/action_policy/steering_test.py, which checks
+    # them). It holds each raw steering action in turn for hold_s, bypassing
+    # control's steering map, so they are what the vehicle interface scales
+    # into its steering_min/max_normalized interval (traxxas_vehicle_interface
+    # .yaml) and adds the trim to. debug1 is the index of the action held (-1
+    # before, after and once stopped) and debug2 the curvature from the IMU yaw
+    # rate over the wheel speed, 1/m + left; tools/sysid_analyze.py prints both
+    # per action. The test needs no cones: for it set
+    #   policy_update_mode: timer
+    #   required_sensors: [wheel_speed, imu_angular_velocity]
+    # and put them back afterwards.
+    steering_test:
+      # Raw steering actions, comma separated, each in [-1, 1]. Car 20:
+      # negative turns LEFT. Left saturation check: "-0.5,-0.75,-1.0".
+      steering_actions: "-0.5,-0.75,-1.0"
+      # Seconds each action is held, positive double; at least 5 on the ground
+      # (the curvature is the mean of the last 3 s).
+      hold_s: 6.0
+      # Speed, m/s, double >= 0. 0.0 = stand test: the drive stays at zero and
+      # only the steering moves. On the ground 0.5 drives 3 m per action:
+      # circles of about 2-4 m across, so clear about 6 x 6 m.
+      speed_m_per_s: 0.0
+      # Stops the test after this many metres driven (wheel speed), positive
+      # double, and above this wheel speed, m/s, positive double.
+      max_distance_m: 15.0
+      max_speed_m_per_s: 1.0
