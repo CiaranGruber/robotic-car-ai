@@ -516,9 +516,14 @@
       # interface steering trim at -0.18 on car 20; the trim resets to 0.0 when
       # the main board restarts. Positive steering turns RIGHT on car 20, so
       # both slopes are negative (action per 1/m, same sign, non-zero).
-      steering_centre_action: 0.02
-      steering_left_action_per_curvature: -1.587
-      steering_right_action_per_curvature: -1.043
+      # Measured with the vehicle interface's steering interval at -0.5 / 0.5
+      # (0.02, -1.587, -1.043); scaled by 0.5 / 0.8 = 0.625 for the -0.8 / 0.8
+      # interval (traxxas_vehicle_interface.yaml), so each curvature turns the
+      # servo as far as before. UNMEASURED at -0.8 / 0.8: re-measure with
+      # action_policy steering_test.
+      steering_centre_action: 0.0125
+      steering_left_action_per_curvature: -0.992
+      steering_right_action_per_curvature: -0.652
       # Steering action magnitude limit, double in (0, 1]. Car 20's left turn
       # saturates beyond -0.75 (radius about 2.1 m); right reaches about 1.1 m
       # at 1.0.
