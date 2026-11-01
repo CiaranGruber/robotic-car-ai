@@ -101,6 +101,11 @@ class ObstacleDetectionConfig:
     marker_clearance_m: float = 0.15
     """Returns this close in metres to an ArUco marker seen in this run are the marker's stand, not obstacles. Must be
     finite and at least 0; 0.0 keeps every return. An object this close to a marker is not detected."""
+    turn_cone_clearance_m: float = 0.12
+    """While the intersection manoeuvre drives, returns this close in metres to a cone the camera sees or the local map
+    recalls are that cone, not obstacles. Must be finite and at least 0; 0.0 keeps every return. In the marker
+    simulation the corner and far-row cones in the turn's corridor stopped most turns with a few centimetres of cone
+    misplacement. An object this close to a cone is not detected while turning."""
 
     def __post_init__(self):
         for name, lowest in (("beam_count", 2), ("min_points", 1)):
@@ -110,7 +115,8 @@ class ObstacleDetectionConfig:
         if not (math.isfinite(self.field_of_view_deg) and 0.0 < self.field_of_view_deg <= 360.0):
             raise ValueError(f"obstacle_detection.field_of_view_deg must be within (0, 360], "
                              f"not {self.field_of_view_deg}")
-        for name in ("min_range_m", "car_front_m", "lane_edge_margin_m", "marker_clearance_m"):
+        for name in ("min_range_m", "car_front_m", "lane_edge_margin_m", "marker_clearance_m",
+                     "turn_cone_clearance_m"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value >= 0.0):
                 raise ValueError(f"obstacle_detection.{name} must be finite and at least 0, not {value}")

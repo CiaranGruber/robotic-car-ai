@@ -80,3 +80,21 @@ def test_invalid_avoidance_confirmation_cannot_start(changes):
 def test_negative_marker_clearance_cannot_start():
     with pytest.raises(ValueError, match="marker_clearance_m"):
         ObstacleDetectionConfig(marker_clearance_m=-0.1)
+
+
+def test_cone_returns_are_left_out_while_turning_but_other_objects_kept():
+    policy, _ = policy_and_memory()
+    observations = replace(straight_lane(), lidar_cartesian=lidar([(1.04, 0.8), BOX]))
+    policy.cones = observations.cones
+    kept = policy._without_cone_returns(observations, [])
+    assert kept_points(kept) == [BOX]
+
+
+def test_recalled_cones_count_and_zero_clearance_keeps_every_return():
+    policy, _ = policy_and_memory()
+    cone = straight_lane().cones[0]
+    observations = replace(straight_lane(), cones=None, lidar_cartesian=lidar([(cone.pos.x, cone.pos.y), BOX]))
+    policy.cones = None
+    assert kept_points(policy._without_cone_returns(observations, [cone])) == [BOX]
+    policy.obstacle_detection_config = replace(policy.obstacle_detection_config, turn_cone_clearance_m=0.0)
+    assert len(kept_points(policy._without_cone_returns(observations, [cone]))) == 2

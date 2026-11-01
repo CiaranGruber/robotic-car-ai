@@ -264,7 +264,9 @@ class MovementPolicy:
                     and self.intersection_turn.command is not MarkerCommand.STRAIGHT):
                 config = self.obstacle_detection_config
                 self.manoeuvre_path_m = self.turner.preview_path(memory, config.car_front_m + config.corridor_length_m)
-            self.obstacles = detect_obstacles(observations, self.obstacle_detection_config,
+            # The turn's corridor crosses the corner and far-row cones: their returns are not obstacles
+            self.obstacles = detect_obstacles(self._without_cone_returns(observations, recalled),
+                                              self.obstacle_detection_config,
                                               self.turner.path_curvature_per_m, path_points_m=self.manoeuvre_path_m,
                                               path_error_m=self.turner.preview_chord_margin_m)
             self.lane_obstacles, self.lane_path, self.action_policy.avoidance_path = None, None, None
@@ -333,6 +335,25 @@ class MovementPolicy:
             return observations
         kept = [point for point in scan.points
                 if all(math.hypot(point.pos.x - x, point.pos.y - y) > clearance_m for x, y in here)]
+        if len(kept) == len(scan.points):
+            return observations
+        return dataclasses.replace(observations, lidar_cartesian=LidarCartesian(kept, scan.sensor_age, scan.frame_id))
+
+    def _without_cone_returns(self, observations: CarObservations, recalled: list) -> CarObservations:
+        """Leaves out the lidar returns within obstacle_detection.turn_cone_clearance_m of this step's cones (self.cones,
+        in base_link) or the cones the local map recalled.
+
+        :param observations: This step's observations.
+        :param recalled: The remembered cones in base_link (LocalMap.step).
+        :return: The observations, with those lidar returns removed.
+        """
+        clearance_m = self.obstacle_detection_config.turn_cone_clearance_m
+        scan = observations.lidar_cartesian
+        cones = [(cone.pos.x, cone.pos.y) for cone in list(self.cones or []) + list(recalled or [])]
+        if clearance_m <= 0.0 or scan is None or not cones:
+            return observations
+        kept = [point for point in scan.points
+                if all(math.hypot(point.pos.x - x, point.pos.y - y) > clearance_m for x, y in cones)]
         if len(kept) == len(scan.points):
             return observations
         return dataclasses.replace(observations, lidar_cartesian=LidarCartesian(kept, scan.sensor_age, scan.frame_id))

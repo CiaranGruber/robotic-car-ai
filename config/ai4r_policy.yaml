@@ -623,6 +623,11 @@
       # 27 Oct the stands beside the lane made the car plan lines around
       # obstacles that were not there.
       marker_clearance_m: 0.15
+      # While the intersection manoeuvre drives, lidar returns this close to
+      # a cone the camera sees or the local map recalls are that cone, not an
+      # obstacle, metres, double >= 0; 0.0 keeps every return. Without it, 3 cm
+      # of cone misplacement stopped most simulated turns for "obstacles".
+      turn_cone_clearance_m: 0.12
 
     # DRIVING AROUND OBSTACLES IN THE LANE (AvoidanceConfig in
     # policy/action_policy/avoidance.py, which checks them; invalid values stop
