@@ -77,6 +77,10 @@ MARKER_SIZE_M = 0.081
 """Printed marker size in metres, as config/aruco_detector.yaml sets it for the markers used on 2026-10-21."""
 MARKER_MIN_RANGE_M = 0.3
 """Nearest a marker is detected, in metres ahead of the camera."""
+MARKER_STAND_M = 0.04
+"""Width in metres of the square post each marker stands on, which the lidar hits when --marker-stands is given."""
+MARKER_STANDS = False
+"""Whether the lidar sees the markers' stands (--marker-stands). Off by default, as before 2026-11-02."""
 MARKER_NOISE_M = 0.03
 """Standard deviation of each marker position coordinate, in metres. UNMEASURED: like the cones'."""
 MARKER_MISS_PROBABILITY = 0.1
@@ -377,6 +381,10 @@ def run_case(case: MarkerCase, settings: dict, seed: int = 0, car=CAR21) -> Mark
     dead_steps = round(car.speed_dead_time_s / cl.SIM_STEP_S)
     steps_per_policy = round(POLICY_PERIOD_S / cl.SIM_STEP_S)
     camera_queue, marker_queue, lidar_queue = [], [], []
+    half_stand = MARKER_STAND_M / 2.0
+    stands = [np.array([(m.x_m - half_stand, m.y_m - half_stand), (m.x_m + half_stand, m.y_m - half_stand),
+                        (m.x_m + half_stand, m.y_m + half_stand), (m.x_m - half_stand, m.y_m + half_stand)])
+              for m in world.markers] if MARKER_STANDS else []
     requested = [(recorder.command, False)] * (dead_steps + 1)
     brake_time_constant = max(DEFAULT_BRAKE_S - car.speed_dead_time_s, cl.SIM_STEP_S)
     command = recorder.command
@@ -391,7 +399,7 @@ def run_case(case: MarkerCase, settings: dict, seed: int = 0, car=CAR21) -> Mark
             pose = (x, y, heading)
             camera_queue.append(cl.detections(list(world.cones), pose, car, rng))
             marker_queue.append(marker_detections(world.markers, pose, car, rng))
-            lidar_queue.append(lidar_points(pose, cone_xy, [], rng))
+            lidar_queue.append(lidar_points(pose, cone_xy, stands, rng))
             batch = camera_queue.pop(0) if len(camera_queue) > camera_delay else None
             fiducials = marker_queue.pop(0) if len(marker_queue) > camera_delay else None
             scan = lidar_queue.pop(0) if len(lidar_queue) > lidar_delay else None
@@ -591,10 +599,14 @@ def main(argv: list[str] | None = None):
     parser.add_argument("--set", action="append", default=[], metavar="NAME=VALUE", type=_setting,
                         help="override a policy setting, e.g. intersection.right_turn_radius_m=1.3")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT / "marker_simulation.png", help="figure to save")
+    parser.add_argument("--marker-stands", action="store_true",
+                        help="the lidar also hits a MARKER_STAND_M post under each marker")
     parser.add_argument("--export", type=Path, metavar="FOLDER",
                         help="also save each run as <case>_s<seed>_scenario.json for scripts/mcap_export.py")
     parser.add_argument("--viewer", type=Path, metavar="FILE", help="also save every run for the web viewer")
     args = parser.parse_args(argv)
+    global MARKER_STANDS
+    MARKER_STANDS = args.marker_stands
     settings = {**read_settings(DEFAULT_SETTINGS_PATH), **dict(args.set)}
     results = {case.name: [run_case(case, settings, seed) for seed in range(args.seeds)]
                for case in CASES if not args.cases or case.name in args.cases}

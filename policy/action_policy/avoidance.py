@@ -157,10 +157,27 @@ class AvoidanceConfig:
     """Cost per m^2 of difference from the line planned at the previous step, per metre along the lane. Must be finite
     and at least 0. It keeps the line steady from step to step, so the car keeps the side it passes an obstacle on
     while that side stays clear."""
+    confirm_steps: int = 3
+    """Policy steps, out of the last confirm_window_steps, that must see an object in the lane before a line is planned
+    around it. Integer from 1 to confirm_window_steps; 1 plans at the first sighting. The obstacle stop does not wait."""
+    confirm_window_steps: int = 5
+    """Policy steps over which confirm_steps are counted. Integer of at least 1."""
+    hold_at_intersections: bool = True
+    """Whether a new line around an obstacle may not be started while a turn or straight-on command waits for the next
+    intersection or its manoeuvre drives. A line already planned is kept; the obstacle stop still applies."""
 
     def __post_init__(self):
         if not isinstance(self.enabled, bool):
             raise ValueError(f"avoidance.enabled must be true or false, not {self.enabled}")
+        if not isinstance(self.hold_at_intersections, bool):
+            raise ValueError(f"avoidance.hold_at_intersections must be true or false, not {self.hold_at_intersections}")
+        for name in ("confirm_window_steps", "confirm_steps"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"avoidance.{name} must be an integer of at least 1, not {value}")
+        if self.confirm_steps > self.confirm_window_steps:
+            raise ValueError(f"avoidance.confirm_steps ({self.confirm_steps}) must not exceed confirm_window_steps "
+                             f"({self.confirm_window_steps})")
         for name in ("car_width_m", "max_ramp_curvature_per_m", "max_return_curvature_per_m"):
             value = getattr(self, name)
             if not (math.isfinite(value) and value > 0.0):

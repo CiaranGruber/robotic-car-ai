@@ -14,7 +14,7 @@ from policy.action_policy.policy import MpcPolicy
 from policy.action_policy.reference import rotate_cones
 from policy.cone_filter.cone_filter import ConeFilterConfig, filter_cones, remove_implausible_cones
 from policy.control.control import CarController, ControlConfig
-from policy.input_output import CarActions, CarObservations, ConeBatch
+from policy.input_output import CarActions, CarObservations, ConeBatch, LidarCartesian
 from policy.lane_detection.lane_detection import LaneDetectionConfig, LaneDetector, detect_lanes
 from policy.lane_detection.lanes import LaneDetection
 from policy.lane_detection.selection import SelectedIntersectionLane
@@ -157,6 +157,10 @@ class MovementPolicy:
         self.obstacle_distance_m: float | None = None
         """Distance in metres from the car's front to the nearest obstacle in its way in the latest step, math.inf when
         its way is clear, or None without fresh lidar points."""
+        self.marker_positions: list[tuple[float, float]] = []
+        """Map-frame (x, y) of the markers seen this run, whose stands the lidar must not take for obstacles."""
+        self.lane_obstacle_steps: list[bool] = []
+        """Whether each of the last avoidance.confirm_window_steps policy steps saw an object in the lane."""
 
     def step(self, observations: CarObservations, memory: CarMemory) -> CarActions:
         """Runs the movement policy for the car using the observations provided to determine the actions to take
@@ -173,9 +177,12 @@ class MovementPolicy:
             self.action_policy.reset()
             memory.start_marker_run()
             self.lane_detector.config = self.initial_lane_detection_config
+            self.marker_positions, self.lane_obstacle_steps = [], []
         # Follow the nearest command marker: keep to its side of the lane until another side marker, or remember the
         # next intersection's turn
         self.marker_command = self.markers.step(observations, memory)
+        # The lidar sees the markers' stands: leave their returns out of obstacle detection
+        observations = self._without_marker_stands(observations, memory)
         if self.marker_command is MarkerCommand.STOP and memory.data.mpc_stop is None:
             memory.stop_mpc(MpcStop.MARKER)
         if memory.data.mpc_stop is MpcStop.MARKER:
@@ -272,7 +279,8 @@ class MovementPolicy:
             # length. The MPC follows it over its horizon, and the obstacle check follows it at each obstacle.
             usual_m = (self.action_policy.usual_offset_m(lanes.lane_width_m, lanes.path_curvature_per_m)
                        if lanes is not None and lanes.has_lane else None)
-            self.lane_path = self.avoidance.step(observations, lanes, self.lane_obstacles, usual_m, memory)
+            self.lane_path = self.avoidance.step(observations, lanes, self._confirmed_lane_obstacles(memory), usual_m,
+                                                 memory)
             self.action_policy.avoidance_path = (
                 self.lane_path if self.lane_path is not None and self.lane_path.segments else None)
             self.obstacle_distance_m = self._obstacle_distance_m(lanes)
@@ -295,6 +303,62 @@ class MovementPolicy:
                 car_actions, debug1=lane_state.lateral_error_m, debug2=lane_state.heading_error_rad)
         # Return final car actions
         return car_actions
+
+    def _without_marker_stands(self, observations: CarObservations, memory: CarMemory) -> CarObservations:
+        """Leaves out the lidar returns within obstacle_detection.marker_clearance_m of a marker seen this run.
+
+        Markers seen this step are used where the detector put them; markers seen before are kept in the map frame
+        (Memory.pose), so a stand beside the car is still left out once its marker is out of the camera's view.
+
+        :param observations: This step's observations.
+        :param memory: The car memory.
+        :return: The observations, with those lidar returns removed.
+        """
+        clearance_m = self.obstacle_detection_config.marker_clearance_m
+        pose = memory.data.pose
+        here = []
+        fiducials = observations.fiducials
+        if fiducials is not None:
+            here = [(d.pose.position.x, d.pose.position.y) for d in fiducials.detections if d.pose is not None]
+        if pose is not None:
+            cos_h, sin_h = math.cos(pose.heading_rad), math.sin(pose.heading_rad)
+            for x, y in here:
+                world = (pose.x_m + cos_h * x - sin_h * y, pose.y_m + sin_h * x + cos_h * y)
+                if all(math.dist(world, known) > clearance_m for known in self.marker_positions):
+                    self.marker_positions.append(world)
+            here = here + [(cos_h * (x - pose.x_m) + sin_h * (y - pose.y_m),
+                            -sin_h * (x - pose.x_m) + cos_h * (y - pose.y_m)) for x, y in self.marker_positions]
+        scan = observations.lidar_cartesian
+        if clearance_m <= 0.0 or not here or scan is None:
+            return observations
+        kept = [point for point in scan.points
+                if all(math.hypot(point.pos.x - x, point.pos.y - y) > clearance_m for x, y in here)]
+        if len(kept) == len(scan.points):
+            return observations
+        return dataclasses.replace(observations, lidar_cartesian=LidarCartesian(kept, scan.sensor_age, scan.frame_id))
+
+    def _confirmed_lane_obstacles(self, memory: CarMemory) -> list[LaneObstacle] | None:
+        """The objects in the lane that avoidance may plan a line around this step.
+
+        An object must have been seen in avoidance.confirm_steps of the last confirm_window_steps steps, so a single
+        stray return does not swerve the car. With avoidance.hold_at_intersections, no new line is started while a turn
+        or straight-on command is armed or driving. The obstacle stop uses every object, confirmed or not.
+
+        :param memory: The car memory.
+        :return: This step's lane obstacles, or an empty list while they are not confirmed or held.
+        """
+        config = self.avoidance.config
+        self.lane_obstacle_steps.append(bool(self.lane_obstacles))
+        del self.lane_obstacle_steps[:-config.confirm_window_steps]
+        if self.lane_obstacles is None:
+            return None
+        planned = self.action_policy.avoidance_path is not None
+        armed = memory.data.intersection_command is not None or memory.data.intersection_turn is not None
+        if config.hold_at_intersections and armed and not planned:
+            return []
+        if sum(self.lane_obstacle_steps) < config.confirm_steps and not planned:
+            return []
+        return self.lane_obstacles
 
     def _marker_stop(self, observations: CarObservations, memory: CarMemory) -> CarActions:
         """Discard the old route and request braking while the unsupported-marker stop is latched."""

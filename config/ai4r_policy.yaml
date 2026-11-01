@@ -618,6 +618,11 @@
       # Neighbouring returns (in scan order) closer than this belong to one
       # object in the lane, metres, positive double.
       cluster_gap_m: 0.15
+      # Lidar returns this close to an ArUco marker seen in this run are its
+      # stand, not obstacles, metres, double >= 0; 0.0 keeps every return. On
+      # 27 Oct the stands beside the lane made the car plan lines around
+      # obstacles that were not there.
+      marker_clearance_m: 0.15
 
     # DRIVING AROUND OBSTACLES IN THE LANE (AvoidanceConfig in
     # policy/action_policy/avoidance.py, which checks them; invalid values stop
@@ -711,6 +716,16 @@
       smoothness_weight: 1.0
       clearance_weight: 5.0
       change_weight: 1.0
+      # A line is only planned around an object in the lane once it has been
+      # seen in confirm_steps of the last confirm_window_steps policy steps,
+      # integers, 1 <= confirm_steps <= confirm_window_steps; 1 plans at the
+      # first sighting. The obstacle stop never waits.
+      confirm_steps: 3
+      confirm_window_steps: 5
+      # true or false: start no new line around an obstacle while a turn or
+      # straight-on command waits for the next intersection or its manoeuvre
+      # drives. A line already planned is kept; the obstacle stop still applies.
+      hold_at_intersections: true
 
     # REMEMBERING THE CONES AROUND THE CAR (LocalMapConfig in
     # policy/local_map/local_map.py, which checks them; invalid values stop the
