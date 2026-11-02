@@ -138,6 +138,22 @@ def test_finite_incoming_corridor_keeps_command_pending_and_ends_before_the_mout
     assert max(p[0] for p in nav.selected_lane.points) <= 1.5+1e-8
 
 
+@pytest.mark.parametrize("x, phase, speed", [(-3.2, "approach", .4), (-2.1, "turn", .5)])
+def test_straight_cruising_speed_requires_positive_exit_admission(x, phase, speed):
+    nav, mpc = navigator()
+    _, state, obs = sensed_t("left", x)
+    state = replace(state, poses=(replace(state.poses[-1], time_s=.9, x=x-.04),),
+                    frame_distance_m=3., centre_u=0., frame_left_colour="BLUE",
+                    command=MarkerCommand.STRAIGHT, command_seen_s=.9, last_nonempty_s=.9)
+    memory = CarMemory()
+    memory.update_intersection(state)
+    commands = nav.step(obs, None, memory, mpc)
+    assert commands[0].speed_m_per_s == pytest.approx(speed)
+    assert memory.data.intersection.phase == phase
+    assert bool(memory.data.intersection.route) == (phase == "turn")
+    assert not commands[0].brake
+
+
 @pytest.mark.parametrize("block", ("stopping_envelope", "obstacle", "missing_row"))
 def test_temporary_approach_keeps_stopping_and_raw_lidar_checks(block):
     nav, mpc = navigator()

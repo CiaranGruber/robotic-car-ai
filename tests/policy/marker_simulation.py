@@ -15,6 +15,8 @@ and car 20's measured 0.92 1/m right, and the camera pan held at zero. Added her
   camera's delay) and missed MARKER_MISS_PROBABILITY of the time;
 - the IMU's relative heading with HEADING_NOISE_RAD of noise, as the car's bno08x gives it;
 - the lidar of obstacle_simulation.py, hitting the cones, so the obstacle stop runs through the turns.
+Active braking uses that harness's unmeasured DEFAULT_BRAKE_S response during the controller's bounded negative-drive
+pulse; otherwise the car coasts. Configured policy curvature limits still bound the provisional plant limits.
 It is a kinematic model without tyre slip; the intersection layouts and the car 21 limits are assumptions, not
 measurements of the lab, so a pass here does not establish that the car can make the turn.
 
@@ -43,7 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import curved_lanes as cl  # noqa: E402
 from obstacle_simulation import (  # noqa: E402
-    LIDAR_AGE_S, CONE_RADIUS_M, _CommandRecorder, _setting, body_polygon, cone_gaps, lidar_points,
+    LIDAR_AGE_S, CONE_RADIUS_M, DEFAULT_BRAKE_S, _CommandRecorder, _setting, body_polygon, cone_gaps, lidar_points,
 )
 from policy.input_output import (  # noqa: E402
     CarActions, CarObservations, CarOrientation, ConeBatch, ConeColour, FiducialBatch, FiducialDetection,
@@ -252,6 +254,11 @@ def _cases() -> tuple[MarkerCase, ...]:
         MarkerCase("lanes_1m", "1 m road: keep left, right, then centre markers", lane_change_world(1.0, lanes, 9.0),
                    "lanes", checks),
     ] if all(command in _marker_ids() for command, _, _ in lanes) else []
+    # The current configured left limit is .48/m, rather than CAR21's historical
+    # provisional 1/m. Include roomier completion cases without changing that limit.
+    for name, exits in (("cross", ("LEFT", "RIGHT", "STRAIGHT")), ("t", ("LEFT", "RIGHT"))):
+        cases.append(MarkerCase(f"{name}_left_1.5m", "1.5 m roads: calibrated left turn",
+                                intersection_world(1.5, "TURN_LEFT", exits=exits), "left"))
     for width in (1.0, 0.8):
         label = f"{width:g}m"
         for command, goal in (("TURN_LEFT", "left"), ("TURN_RIGHT", "right"), ("STRAIGHT", "straight")):
@@ -370,7 +377,8 @@ def run_case(case: MarkerCase, settings: dict, seed: int = 0, car=CAR21) -> Mark
     dead_steps = round(car.speed_dead_time_s / cl.SIM_STEP_S)
     steps_per_policy = round(POLICY_PERIOD_S / cl.SIM_STEP_S)
     camera_queue, marker_queue, lidar_queue = [], [], []
-    requested = [recorder.command] * (dead_steps + 1)
+    requested = [(recorder.command, False)] * (dead_steps + 1)
+    brake_time_constant = max(DEFAULT_BRAKE_S - car.speed_dead_time_s, cl.SIM_STEP_S)
     command = recorder.command
     log = {"x": [], "y": [], "heading": []}
     steps, trace, touched = [], [], set()
@@ -412,11 +420,12 @@ def run_case(case: MarkerCase, settings: dict, seed: int = 0, car=CAR21) -> Mark
                           "manoeuvre": policy.manoeuvre is not None,
                           "marker": None if policy.marker_command is None else policy.marker_command.name,
                           "arc_start_m": policy.turner.arc_start_m})
-        # The car: speed after a dead time and a lag, curvature clipped to the steering limits plus the trim and lagged
-        # by the servo, as in curved_lanes.run_curve
-        requested.append(command)
-        applied = requested.pop(0)
-        speed = max(0.0, speed + (applied.speed_m_per_s - speed) * cl.SIM_STEP_S / (car.speed_time_constant_s or 0.3))
+        # Use the obstacle harness's unmeasured brake response, only while the actual
+        # controller requests negative effort. Its one-shot brake timeout still applies.
+        requested.append((command, actions.drive_action < 0.))
+        applied, braking = requested.pop(0)
+        time_constant = brake_time_constant if braking else (car.speed_time_constant_s or 0.3)
+        speed = max(0.0, speed + (applied.speed_m_per_s - speed) * cl.SIM_STEP_S / time_constant)
         target = (min(max(command.curvature_per_m, -car.max_right_curvature_per_m), car.max_left_curvature_per_m)
                   + car.straight_curvature_per_m)
         driven_curvature += (target - driven_curvature) * cl.SIM_STEP_S / cl.STEERING_TIME_CONSTANT_S

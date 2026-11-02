@@ -233,9 +233,10 @@ class MpcPolicy:
             state = reference_from_cones(corrected, lane_width_m)
         self.lane_state = state
         run_duration_s = self.config.run_duration_s
-        if (self.stopped_for_lane_loss or self.stopped_for_solver_failure or self.stopped_for_obstacle
+        if (self.memory.data.mpc_stop is not None
                 or 0.0 < run_duration_s <= observations.policy.policy_elapsed_s):
-            return [self._command(0.0, 0.0, brake=self.stopped_for_obstacle)]
+            return [self._command(0.0, 0.0, brake=self.memory.data.mpc_stop in
+                                  (MpcStop.OBSTACLE, MpcStop.INTERSECTION))]
         measured_speed = observations.car.wheel_speed
         if measured_speed is not None and (not math.isfinite(measured_speed) or measured_speed < 0.0):
             raise ValueError("MPC wheel speed must be finite and nonnegative")
@@ -293,7 +294,8 @@ class MpcPolicy:
 
         :param observations: The observations at this step.
         :param obstacle_distance_m: As in run_policy.
-        :param speed_m_per_s: The manoeuvre's speed in m/s; 0.0 stops the car for the rest of the run.
+        :param speed_m_per_s: The manoeuvre's speed in m/s; 0.0 latches an intersection stop and asks to brake.
+            The low-level controller bounds the brake pulse and prevents a second pulse after neutral.
         :param curvature_per_m: The manoeuvre's curvature in 1/m, positive turning left.
         :param memory: As in run_policy.
         :param reset_on_first_step: As in run_policy; MovementPolicy resets before applying the marker command.
@@ -303,16 +305,19 @@ class MpcPolicy:
             self.memory = memory
         if observations.policy.is_first_policy_step and reset_on_first_step:
             self.reset()
-        if self.stopped_for_lane_loss or self.stopped_for_solver_failure or self.stopped_for_obstacle:
-            return [self._command(0.0, 0.0, brake=self.stopped_for_obstacle)]
+        if self.memory.data.mpc_stop is not None:
+            return [self._command(0.0, 0.0, brake=self.memory.data.mpc_stop in
+                                  (MpcStop.OBSTACLE, MpcStop.INTERSECTION))]
         if self._obstacle_within_stopping_distance(observations, obstacle_distance_m):
             self.memory.stop_mpc(MpcStop.OBSTACLE)
             _LOGGER.info("Obstacle %.2f m ahead of the car's front in a manoeuvre: stopping for the rest of the run",
                          obstacle_distance_m)
             return [self._command(0.0, 0.0, brake=True)]
         if speed_m_per_s <= 0.0:
-            self.memory.stop_mpc(MpcStop.LANE_LOSS)
-            return [self._command(0.0, 0.0)]
+            # A rejected turn or exhausted exit search needs an immediate braking stop;
+            # it has no remaining validated path on which to spend a coasting distance.
+            self.memory.stop_mpc(MpcStop.INTERSECTION)
+            return [self._command(0.0, 0.0, brake=True)]
         self.memory.drop_mpc_plan()
         self.lane_lost_s = 0.0
         self.farthest_cone_ahead_m = None

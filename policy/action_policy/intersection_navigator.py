@@ -340,7 +340,11 @@ class IntersectionNavigator:
         margin = self.mpc_config.obstacle_stop_margin_m
         if remaining <= now.speed*reaction+margin:
             return self._stop(memory, state, "incoming corridor stopping envelope reached before exit support")
-        speed = min(self.config.turn_speed_m_per_s, max(0., (remaining-margin)/reaction))
+        # Reserve the measured-speed emergency envelope first, then budget the rest
+        # for coasting down to the approach target. The low-speed drive is feed-forward:
+        # a smaller target cannot instantly remove the car's existing momentum.
+        coast = max(reaction, self.mpc_config.stop_distance_per_speed_s)
+        speed = min(self.config.turn_speed_m_per_s, max(0., (remaining-margin-now.speed*reaction)/coast))
         if speed < .05:
             return self._stop(memory, state, "incoming corridor ends before exit support")
         c, s = math.cos(state.frame_heading), math.sin(state.frame_heading)
@@ -499,7 +503,9 @@ class IntersectionNavigator:
                 return self._stop(memory, state, "crossing observed without a confirmed direction")
             if state.command_seen_s is None or now.time_s-state.command_seen_s > self.config.command_max_age_s:
                 return self._stop(memory, state, "intersection direction expired")
-            end = (centre-state.width_m/2-self.obstacle_config.car_front_m-self.mpc_config.obstacle_stop_margin_m
+            # This is the last body-centre position before the mouth. _approach applies
+            # the stopping margin to this endpoint; subtracting it here charges it twice.
+            end = (centre-state.width_m/2-self.obstacle_config.car_front_m
                    if state.approach_end_u is None else state.approach_end_u)
             state = replace(state, centre_u=centre, approach_end_u=end, available_exits=available, closed_exits=closed)
             if state.command in closed:
@@ -568,4 +574,9 @@ class IntersectionNavigator:
         memory.plan_mpc(solution.curvatures_per_m, prediction_speed*self.mpc_config.step_s)
         self.selected_lane = replace(selected, mpc_curvatures_per_m=tuple(float(k) for k in solution.curvatures_per_m),
                                      prediction_step_m=prediction_speed*self.mpc_config.step_s)
-        return [mpc._command(self.config.turn_speed_m_per_s, k)]
+        # A confirmed straight route has no turn to slow for. Use the normal road
+        # speed so a wide junction's camera blind span does not grow unnecessarily;
+        # the same swept lidar check and finite evidence lifetimes still apply.
+        speed = (self.mpc_config.target_speed_m_per_s if state.command is MarkerCommand.STRAIGHT
+                 else self.config.turn_speed_m_per_s)
+        return [mpc._command(speed, k)]
