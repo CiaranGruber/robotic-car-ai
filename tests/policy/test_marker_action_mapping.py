@@ -155,11 +155,13 @@ def test_confirmed_turn_immediately_prepares_outside_at_turn_speed_and_keeps_tar
 
 
 @pytest.mark.parametrize("command, side, radius", [
-    (MarkerCommand.TURN_LEFT, 1., 1. / .48), (MarkerCommand.TURN_RIGHT, -1., 1.2),
+    (MarkerCommand.TURN_LEFT, 1., None), (MarkerCommand.TURN_RIGHT, -1., 1.2),
 ])
 def test_actual_turn_command_drives_obstacle_corridor_and_real_obstacles_still_latch(command, side, radius):
     settings, _ = configured()
     policy, memory = build_policy(settings), CarMemory()
+    # The left radius follows the configured left reach (1 / mpc.max_curvature_per_m when that is wider)
+    radius = radius or policy.turner.radius_m(IntersectionTurn(command, TurnPhase.ARC, 0., 0., 0., 1.2, "CENTRE"))
     memory.start_map(None)
     # Offset away from the arc, requiring a pursuit correction above the nominal curvature.
     memory.move_car(CarPose(0., -side * .3, 0.), None)
