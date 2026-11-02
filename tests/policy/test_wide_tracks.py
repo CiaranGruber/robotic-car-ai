@@ -54,8 +54,6 @@ def test_mpc_keeps_to_the_asked_side_of_a_clean_wide_track(seed):
     assert scores["side_error_median_m"] < 0.07 and scores["scored_m"] > 1.0
 
 
-@pytest.mark.xfail(strict=True, reason="lane detection reports a lane about 0.4 m wide, curving at about 1 1/m, "
-                                       "from one swapped-colour cone, and the car near the left edge touches a cone")
 def test_one_swapped_cone_does_not_send_the_car_into_the_cones():
     """W26: keep left in a 1.35 m lane with one cone seen in the other colour. Centred, the car stops safely."""
     result, _ = wt.run_track(wt.wide_track(26))

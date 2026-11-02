@@ -324,7 +324,7 @@ class MpcController:
 
     def solve(self, state: PathTrackingState, previous_curvature_per_m: float, delay_s: float,
               speed_m_per_s: float | None = None, *, lateral_offset_m: float = 0.0,
-              line: LanePath | None = None) -> MpcSolution:
+              line: LanePath | None = None, reference_curvatures: np.ndarray | None = None) -> MpcSolution:
         """Chooses the curvatures that best follow the path from the car's state.
 
         :param state: Where the car was relative to the path when the observation was taken.
@@ -338,6 +338,8 @@ class MpcController:
         :param line: A planned line across the path to follow instead of lateral_offset_m, in lane coordinates from
             where the observation was taken. At each predicted step the car is steered towards the line's offset and
             heading there, and along its curvature, so it starts each move across the path in time.
+        :param reference_curvatures: Optional finite horizon of curvatures of a geometric route, in 1/m.
+            Its first point starts at the current route projection; callers must transport delayed observations.
         :return: The planned curvatures and whether they can be driven.
         """
         start = time.perf_counter()
@@ -383,6 +385,10 @@ class MpcController:
             state.heading_error_rad + delay_distance * turn,
         ])
         path_curvatures = np.full(steps, path_curvature)
+        if reference_curvatures is not None:
+            path_curvatures = np.asarray(reference_curvatures, dtype=float)
+            if path_curvatures.shape != (steps,) or not np.all(np.isfinite(path_curvatures)):
+                raise ValueError("MPC route curvature horizon must be finite and match horizon_steps")
         previous = np.zeros(steps)
         previous[0] = previous_curvature_per_m
         targets = np.concatenate([

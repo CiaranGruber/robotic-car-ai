@@ -239,15 +239,22 @@
       # centre line, + left, finite double. Default 0.0, the centre.
       lane_offset_m: 0.0
       # Smallest distance from the followed line to either lane edge, metres,
-      # positive double. Default 0.40: 0.30-0.35 touched the outer cones in
-      # simulation with 3 degrees of camera yaw. An 0.8 m lane is then driven
-      # along its centre; 1.2 m gives 0.2 m of offset, 1.6 m gives 0.4 m.
-      edge_clearance_m: 0.40
+      # positive double. 0.28 for the marker lane changes in lab-width lanes:
+      # 0.12 m of offset in an 0.8 m lane and 0.22 m in a 1 m lane, so a keep
+      # left or right is visible. In the marker simulation (straight 0.8 and
+      # 1 m roads, keep left, right, centre; tests/policy/marker_simulation.py)
+      # no cone was touched and the body stayed 0.125 m inside the lane. The
+      # code default 0.40 (no offset at all in an 0.8 m lane) came from wide
+      # curved lanes, where 0.30-0.35 touched the outer cones with 3 degrees of
+      # camera yaw: keep side markers on straights.
+      edge_clearance_m: 0.28
       # Fastest sideways movement of the followed line, metres per metre
       # driven, positive double, when the side changes or the lane widens.
-      # Default 0.2: crossing a 1.2 m lane takes about 2.5 m; 0.5 and an
-      # instant switch ran into the cones in simulation.
-      offset_change_per_m: 0.2
+      # 0.3: a 1 m lane is crossed (0.44 m) in about 1.5 m, so the change is
+      # seen within a marker's spacing; 0.2 had not finished crossing 1.4 m
+      # after the marker (marker simulation). 0.5 and an instant switch ran
+      # into the cones in the wide-lane simulation.
+      offset_change_per_m: 0.3
       # How far left of the car's forwards direction the camera points, degrees,
       # finite double. The cones are rotated back by this much before the lane is
       # fitted. Default 0.0. The recordings showed 6-10 degrees, but with the
@@ -468,6 +475,10 @@
       # Cones farther than this from their fitted edge are left out and the
       # edges refitted, metres, positive double.
       outlier_distance_m: 0.15
+      # Separate supported crossing arms before fitting the incoming lane,
+      # boolean. Coherent circular rows keep the usual arc fit. Does not choose
+      # an exit; ArUco route selection is handled by the intersection navigator.
+      associate_branches: true
 
     # LOW-LEVEL CONTROL SETTINGS (ControlConfig in policy/control/control.py,
     # which checks them; invalid values stop the node from starting). They turn
@@ -486,7 +497,7 @@
       # Car 20: 0.48 (fit 0.475). Car 22 fits gave 0.17-0.32 (car 22: 0.25).
       # Car 20 on 26 Oct: 0.25 still reached 0.87 m/s for a 0.5 target, so 0.15
       # is an estimate until the breakaway is measured again.
-      speed_ff_offset: 0.15
+      speed_ff_offset: 0.48
       # Speed map slope, m/s per unit drive, positive double. Car 20: 9.18.
       # Car 22 fits gave 7.65-24.7 (car 22: 12.0).
       speed_ff_gain: 9.18
@@ -570,6 +581,8 @@
       # a lane), metres, positive double. It must hold the MPC's obstacle
       # stopping distance (mpc.obstacle_stop_margin_m). Longer sees obstacles
       # sooner, but a heading error brings cones into the straight corridor.
+      # With intersection preparation enabled, this plus car_front_m must be
+      # <= 6.4 m, keeping its geometric preview within 128 steps of at most 5 cm.
       corridor_length_m: 1.5
       # How far along the lane, ahead of the car's front, obstacles in the lane
       # are searched for, metres, positive double; about as far as the camera
@@ -724,3 +737,145 @@
       # Remembered cones not seen for this long are forgotten, seconds,
       # positive double.
       cone_keep_s: 4.0
+
+    # MARKER COMMAND SETTINGS (MarkerConfig in policy/markers/markers.py,
+    # which checks them; invalid values stop the node from starting). ArUco
+    # markers from the aruco_detector (config/aruco_detector.yaml: dictionary
+    # DICT_4X4_50, so IDs 0-49) give the car commands. A marker counts when
+    # its pose is ahead of the car within max_distance_m; only the nearest
+    # such marker is followed, once it has been the nearest in confirm_steps
+    # policy steps in a row. IDs 1-4 turn LEFT, 5-6 turn RIGHT and 7-8 go
+    # STRAIGHT at the next intersection. Every other confirmed in-range ID
+    # stops the run, even during a turn; an explicit new run is required.
+    # A confirmed direction survives marker disappearance. The optional
+    # intersection manoeuvre below uses the marker to place the junction and
+    # stops if no outgoing lane is found within its bounded exit search.
+    markers:
+      # Legacy single-ID assignments, integers, -1 to disable. They remain for
+      # old recorded configurations; the current mapping uses the groups below.
+      keep_left_id: -1
+      keep_right_id: -1
+      keep_centre_id: -1
+      turn_left_id: -1
+      turn_right_id: -1
+      straight_id: -1
+      # Integer arrays; no ID may appear twice or belong to two commands.
+      # Use [-1] to disable a group (avoids ambiguous ROS empty-array types).
+      turn_left_ids: [1, 2, 3, 4]
+      turn_right_ids: [5, 6]
+      straight_ids: [7, 8]
+      # Farthest a marker may be from base_link to count, metres, positive
+      # double. Markers without a pose never count. 2.0 so a turn marker is
+      # confirmed before the cross road's cones come into view (about 2.5 m)
+      # and bend the fitted lane; an 8 cm marker is still about 40 px wide.
+      max_distance_m: 2.0
+      # Policy steps in a row that must see the same marker in range, integer
+      # >= 1, on top of the aruco_detector's min_consecutive_frames.
+      confirm_steps: 2
+
+    # INTERSECTION SETTINGS (IntersectionConfig in
+    # policy/action_policy/intersection.py, which checks them; invalid values
+    # stop the node from starting). A TURN_LEFT, TURN_RIGHT or STRAIGHT marker
+    # stands beside where the approach lane's cone rows end. The policy places
+    # the intersection from the marker and the car's dead-reckoned pose, keeps
+    # following the lane (only the approach road's cones), then near the entry
+    # holds the approach direction, turns along a planned arc round the inside
+    # corner (or drives straight across), and hands back to lane following once
+    # it sees the exit lane. The obstacle stop keeps working. Simulation only so
+    # far (tests/policy/marker_simulation.py, docs/marker-commands.md).
+    intersection:
+      # true or false: whether turn markers start the manoeuvre. false only
+      # remembers the command, and the car stops where the approach lane ends.
+      enabled: true
+      # true or false: aim at the outside approach line immediately after a
+      # turn marker confirms, using bounded pursuit at turn_speed_m_per_s.
+      # Keep aside_clearance_m from its edge, including when cones disappear.
+      # From the middle of a lab-width lane the car cannot clear both
+      # the inside corner and the far side of the road it turns into.
+      move_aside: true
+      # Distance from the outside lane edge to the line followed before a turn,
+      # metres, positive double.
+      aside_clearance_m: 0.25
+      # How far past the marker the approach rows end, metres, finite double.
+      # Place the marker about 1 m before the intersection, like a road sign:
+      # beside the last cones it is confirmed too late, when the cross road's
+      # cones already confuse lane detection (simulation).
+      marker_to_entry_m: 1.0
+      # Preferred minimum arc radius, metres, positive double. Planning enlarges
+      # it to respect mpc.max_curvature_per_m / max_right_curvature_per_m and
+      # the control steering map's action range. With the current limits the
+      # left arc is 2.08 m; the right remains 1.2 m. An arc that cannot fit
+      # between the corner and far cone row stops the run rather than driving it.
+      left_turn_radius_m: 1.1
+      right_turn_radius_m: 1.2
+      # Width of the road turned into, metres, double >= 0. 0.0: the same as
+      # the approach lane's measured width.
+      cross_lane_width_m: 0.0
+      # Gap kept between the car's body and a cone's edge at the inside corner
+      # and the exit's far row when planning where the arc starts, metres,
+      # double >= 0. 0.03: in 0.8 m roads 59/60 simulated turns kept clear of
+      # the cones against 53/60 at 0.05, which starts the arc too late for the
+      # car's front corner to clear the far row; 1 m roads pass either way.
+      corner_clearance_m: 0.03
+      # Speed near the entry, through the turn and on the exit, m/s, positive
+      # double.
+      turn_speed_m_per_s: 0.3
+      # From this far before the entry the car holds the approach direction
+      # instead of following the lane, metres, double >= 0.
+      hold_line_m: 0.8
+      # Pure pursuit lookahead on the approach line, the arc and the exit line,
+      # metres, positive double.
+      lookahead_m: 0.5
+      # Degrees the car must have turned before lane following may take over in
+      # the exit lane, double in [0, 90].
+      handover_heading_deg: 60.0
+      # How far along the exit the car looks for the exit lane before stopping
+      # for the rest of the run, metres, positive double.
+      exit_search_m: 1.5
+
+    # EXPERIMENTAL INTERSECTION NAVIGATOR SETTINGS (IntersectionNavigatorConfig
+    # in policy/action_policy/intersection_navigator.py). A separate, sensed
+    # equal-width perpendicular cross/T navigator. It cannot be enabled together
+    # with intersection.enabled above; both act on the same marker. Default false;
+    # locally simulated only. Enable only with measured steering/motion/frames.
+    # Keep the existing trigger. When enabled, required_sensors must include
+    # cone_detections, wheel_speed, imu_angular_velocity and lidar_cartesian.
+    # Set cone_empty_timeout_s >= camera_empty_hold_s too: the independent
+    # empty-camera watchdog must admit the intended bounded blind interval.
+    # Incoming width/frame come from cones; current lidar must support the
+    # selected exit's boundaries. A sign alone never starts a turn. No camera
+    # pan, learned weights, vehicle enable or hardware-limit changes are used.
+    # A committed ArUco direction selects the lane centre path shown in the
+    # Foxglove lane layer and used by MPC. Measured edges stay separate in
+    # lane/observed. Ordinary straight/curved lane fitting continues until
+    # junction admission and resumes after fresh outgoing-boundary confirmation.
+    # Equal-width perpendicular T junctions are also supported: current lidar
+    # must corroborate the selected exit's boundaries. Closing cone rows block
+    # that direction; missing returns leave it unknown. A side turn needs its
+    # near wall plus separated far-wall returns; straight needs two continued
+    # rows beyond the crossing. Unknown exits stop at the admission deadline.
+    # Geometry/exit flags are retained with the original finite route evidence;
+    # predicted paths do not make an unseen exit available.
+    # While waiting for exit evidence, a fresh incoming cone frame plus paired
+    # current lidar rows can support a slower straight approach. Its endpoint
+    # is fixed before the road mouth; the configured stopping margin/time and
+    # sensor/actuation/step allowance bound approach commands. This neither
+    # consumes the marker nor commits an exit; all stop latches remain active.
+    intersection_navigator:
+      enabled: false
+      # Planned radius, metres, finite > 0 and at least both physical minimum
+      # turning radii. 2.5 m respects the current .48/.92 per-metre limits.
+      turning_radius_m: 2.5
+      # Turning target speed, m/s, finite > 0 and <= mpc.target_speed_m_per_s.
+      # .4 retains wheel-speed feedback with the shipped control settings.
+      turn_speed_m_per_s: 0.4
+      # Maximum wheel/gyro/lidar age and step interval, seconds, finite > 0.
+      sensor_timeout_s: 0.3
+      # Maximum complete cone invisibility through a retained turn, seconds > 0.
+      camera_empty_hold_s: 4.0
+      # Pending marker command expiry from acquisition, seconds > 0.
+      command_max_age_s: 12.0
+      # Committed route lifetime from original support, seconds/metres > 0.
+      # Predictions and surviving single rows do not renew either anchor.
+      route_max_age_s: 24.0
+      route_max_distance_m: 10.0

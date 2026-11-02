@@ -4,6 +4,8 @@ from enum import Enum
 from typing import Any, Self
 
 from policy.input_output import ConeColour
+from policy.markers.commands import MarkerCommand, MarkerSighting
+from policy.intersection_state import IntersectionMemory
 from policy.obstacle_detection.obstacles import LaneObstacle
 from policy.serialisation import Serialisable
 
@@ -16,6 +18,10 @@ class MpcStop(Serialisable, Enum):
     """The lane was lost for lane_loss_timeout_s, its cone rows ended, or the plan followed without it ran out."""
     SOLVER_FAILURE = 2
     """An MPC solve did not converge."""
+    INTERSECTION = 3
+    """Intersection admission, motion, route lifetime or swept-clearance validation failed."""
+    MARKER = 4
+    """A confirmed unsupported marker stopped this run; only an explicit new run clears it."""
 
     def serialise(self) -> str:
         """
@@ -32,6 +38,63 @@ class MpcStop(Serialisable, Enum):
         if isinstance(data, str):
             return cls[data]
         return cls(data)
+
+
+class TurnPhase(Serialisable, Enum):
+    """Where the car is in an intersection manoeuvre (policy/action_policy/intersection.py)."""
+    APPROACH = 0
+    """Driving to the intersection: lane following, then the remembered approach line near the entry."""
+    ARC = 1
+    """Turning along the planned arc."""
+    EXIT = 2
+    """Driving along the exit line until lane following finds the exit lane."""
+
+    def serialise(self) -> str:
+        """
+        :return: The enum member name.
+        """
+        return self.name
+
+    @classmethod
+    def deserialise(cls, data: Any) -> Self:
+        """
+        :param data: Enum member name, or the underlying integer value.
+        :return: The matching phase.
+        """
+        if isinstance(data, str):
+            return cls[data]
+        return cls(data)
+
+
+@dataclass(frozen=True)
+class IntersectionTurn(Serialisable):
+    """An intersection manoeuvre asked for by a marker, in the run's map frame (CarPose's), metres and radians."""
+
+    command: MarkerCommand
+    """TURN_LEFT, TURN_RIGHT or STRAIGHT."""
+    phase: TurnPhase
+    """Where the car is in the manoeuvre."""
+    entry_x_m: float
+    """The intersection's entry, where the approach lane's cone rows end, on the approach centre line: x."""
+    entry_y_m: float
+    """The entry: y."""
+    heading_rad: float
+    """Direction of the approach lane."""
+    lane_width_m: float
+    """Width of the approach lane."""
+    lane_side_before: str = "CENTRE"
+    """The MPC's lane side when the manoeuvre started, given back when it finishes."""
+    arc_centre_x_m: float | None = None
+    """Centre of the arc being turned along: x, or None before the arc."""
+    arc_centre_y_m: float | None = None
+    """Centre of the arc: y, or None before the arc."""
+    exit_x_m: float | None = None
+    """A point on the line followed after the arc (or across the intersection when going straight): x, or None
+    before the exit phase."""
+    exit_y_m: float | None = None
+    """That point: y, or None before the exit phase."""
+    exit_heading_rad: float | None = None
+    """Direction of the exit line, or None before the exit phase."""
 
 
 @dataclass(frozen=True)
@@ -106,12 +169,27 @@ class Memory(Serialisable):
     """Obstacles that came close to the car's front, which LaneAvoidance keeps planning past once the lidar no longer
     sees them ahead. They are in lane coordinates, with distances from where the car's front is now, moved back by the
     distance driven (negative once beside or behind it)."""
+    marker_sighting: MarkerSighting | None = None
+    """The command marker seen in range in the latest policy step and how many steps in a row saw it, or None when the
+    latest step saw none."""
+    intersection_command: MarkerCommand | None = None
+    """What to do at the next intersection, from the latest TURN_LEFT, TURN_RIGHT or STRAIGHT marker in this run, or
+    None before one or once the manoeuvre has finished."""
+    intersection_command_seen_s: float | None = None
+    """When the marker giving intersection_command was seen, in policy elapsed seconds, or None. Only the
+    experimental intersection navigator (policy/action_policy/intersection_navigator.py) uses it."""
+    intersection_turn: IntersectionTurn | None = None
+    """The intersection manoeuvre under way, or None."""
+    intersection: IntersectionMemory | None = None
+    """The experimental intersection navigator's state, or None while it is off or idle."""
 
     @classmethod
     def deserialise(cls, data: Any) -> Self:
-        """Load memory, including recordings made before the MPC's state or the local map were kept in it."""
+        """Load memory, including recordings made before MPC, map, marker or intersection state was kept in it."""
         return super().deserialise({"mpc_stop": None, "mpc_plan": None, "pose": None, "imu_heading_rad": None,
-                                    "cones": [], "lane_obstacles": [], **data})
+                                    "cones": [], "lane_obstacles": [], "marker_sighting": None,
+                                    "intersection_command": None, "intersection_command_seen_s": None,
+                                    "intersection_turn": None, "intersection": None, **data})
 
 
 class CarMemory:
@@ -143,6 +221,53 @@ class CarMemory:
     def start_mpc_run(self):
         """Forgets the MPC's stop and plan of the previous run. The MPC does this on the first step of a run."""
         self.__internal = replace(self.__internal, mpc_stop=None, mpc_plan=None)
+
+    def start_marker_run(self):
+        """Forgets the previous run's marker sighting, intersection command and manoeuvre. Done on the first step of a
+        run."""
+        self.__internal = replace(self.__internal, marker_sighting=None, intersection_command=None,
+                                  intersection_command_seen_s=None, intersection_turn=None, intersection=None)
+
+    def see_marker(self, marker_id: int | None):
+        """Records which command marker this step saw in range: one more step in a row for the same marker, the first
+        step for a different one.
+
+        :param marker_id: The marker's ID, or None when this step saw none.
+        """
+        sighting = self.__internal.marker_sighting
+        if marker_id is None:
+            sighting = None
+        elif sighting is not None and sighting.marker_id == marker_id:
+            sighting = replace(sighting, steps=sighting.steps + 1)
+        else:
+            sighting = MarkerSighting(marker_id, 1)
+        self.__internal = replace(self.__internal, marker_sighting=sighting)
+
+    def command_intersection(self, command: MarkerCommand, seen_s: float | None = None):
+        """Records what to do at the next intersection.
+
+        :param command: TURN_LEFT, TURN_RIGHT or STRAIGHT.
+        """
+        self.__internal = replace(self.__internal, intersection_command=command, intersection_command_seen_s=seen_s)
+
+    def consume_intersection_command(self):
+        """Consume a queued command once; the committed choice lives in intersection memory."""
+        self.__internal = replace(self.__internal, intersection_command=None, intersection_command_seen_s=None)
+
+    def update_intersection(self, state: IntersectionMemory):
+        """Replace the navigator's bounded serialisable state."""
+        self.__internal = replace(self.__internal, intersection=state)
+
+    def plan_turn(self, turn: IntersectionTurn):
+        """Records the intersection manoeuvre under way, when it starts or moves on.
+
+        :param turn: The manoeuvre.
+        """
+        self.__internal = replace(self.__internal, intersection_turn=turn)
+
+    def finish_turn(self):
+        """Forgets the finished (or abandoned) intersection manoeuvre and the command it carried out."""
+        self.__internal = replace(self.__internal, intersection_turn=None, intersection_command=None)
 
     def stop_mpc(self, reason: MpcStop):
         """Records that the MPC stopped the car for the rest of the run.

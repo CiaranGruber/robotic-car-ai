@@ -14,6 +14,8 @@ from policy.action_policy.policy import MpcPolicy
 from policy.data_logging.data_logging import log_memory, start_data_log, validate_parameters
 from policy.input_output import CarObservations, ConeColour, ObservedCarState, PolicyState, SensorAge, WheelSpeed
 from policy.lane_detection.lanes import LaneArc, LaneDetection, LaneStatus
+from policy.intersection_state import IntersectionMemory
+from policy.markers.commands import MarkerCommand
 from policy.memory import CarMemory, CarPose, MpcPlan, MpcStop, RememberedCone
 from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
 from policy.obstacle_detection.obstacles import LaneObstacle
@@ -40,12 +42,14 @@ def test_memory_logged_before_the_mpc_kept_its_state_still_loads():
     assert (old.pose, old.imu_heading_rad, old.cones, old.lane_obstacles) == (None, None, (), ())
 
 
-def test_memory_with_the_map_and_remembered_obstacles_survives_serialising():
+def test_memory_with_map_obstacles_and_intersection_survives_serialising():
     memory = CarMemory()
     memory.start_map(0.3)
     memory.move_car(CarPose(1.0, -0.2, 0.1), 0.4)
     memory.remember_cones([RememberedCone(1.5, 0.5, ConeColour.BLUE, 4, 2.0, 0.9)])
     memory.remember_lane_obstacles([LaneObstacle(-0.2, 0.0, -0.3, -0.1, 12)])
+    memory.command_intersection(MarkerCommand.TURN_RIGHT, 2.0)
+    memory.update_intersection(IntersectionMemory(command=MarkerCommand.TURN_RIGHT))
 
     data = json.loads(json.dumps(memory.data.serialise()))
 

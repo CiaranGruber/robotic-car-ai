@@ -13,7 +13,7 @@ from policy.action_policy.mpc import MpcConfig  # noqa: E402
 from policy.cone_filter.cone_filter import ConeFilterConfig  # noqa: E402
 from policy.control.actions import DriveCommand, MoveCameraTo  # noqa: E402
 from policy.control.control import (CarController, ControlConfig, SpeedController,  # noqa: E402
-                                    steering_for_curvature)
+                                    curvature_bounds, steering_for_curvature)
 from policy.input_output import (  # noqa: E402
     CarActions, CarObservations, ConeBatch, ObservedCarState, PolicyState, SensorAge, WheelSpeed)
 from policy.memory import CarMemory  # noqa: E402
@@ -21,6 +21,27 @@ from policy.policy_runner import MovementPolicy  # noqa: E402
 from tests.policy.test_mpc import lane_cones  # noqa: E402
 
 CONFIG = ControlConfig()
+
+
+@pytest.mark.parametrize("sign", [-1.0, 1.0])
+def test_curvature_bounds_respect_asymmetric_slopes_trim_and_reduced_action_range(sign):
+    config = ControlConfig(steering_centre_action=.1, max_steering_action=.7,
+                           steering_left_action_per_curvature=sign * 1.5,
+                           steering_right_action_per_curvature=sign * .8)
+    right, left = curvature_bounds(config)
+    assert right < 0.0 < left
+    assert steering_for_curvature(left, config) == pytest.approx(sign * .7)
+    assert steering_for_curvature(right, config) == pytest.approx(-sign * .7)
+    # A command halfway to either bound remains proportional, without clipping.
+    for curvature in (right / 2.0, left / 2.0):
+        slope = (config.steering_left_action_per_curvature if curvature > 0.0
+                 else config.steering_right_action_per_curvature)
+        assert steering_for_curvature(curvature, config) == pytest.approx(.1 + slope * curvature)
+
+
+def test_turn_planning_rejects_a_steering_centre_outside_the_action_range():
+    with pytest.raises(ValueError, match="steering_centre_action"):
+        curvature_bounds(ControlConfig(steering_centre_action=.8, max_steering_action=.6))
 
 
 def observations(wheel_speed, dt=0.02, first=False, cones=None):

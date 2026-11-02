@@ -27,6 +27,7 @@
         "/memory/obstacles": {"visible": true},
         "/plan/avoidance": {"visible": true},
         "/plan/mpc": {"visible": true},
+        "/plan/intersection": {"visible": true},
         "/fiducials": {"visible": true},
         "/car": {"visible": true}
       },
