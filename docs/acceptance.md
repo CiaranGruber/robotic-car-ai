@@ -13,6 +13,52 @@ not actual sensor/vehicle response.
 Keep revision, command, result and limitations here; retain detailed logs in
 CI artifacts or merge requests rather than a tracked evidence directory.
 
+## PR #35 policy-test repairs, 2026-11-02
+
+Local candidate `codex/fix-intersection-ci`, based on merged `dev` revision
+`4ea8f342ff9a74676f0accd3cb09a1b9ead75c91`, addresses the eleven failures in
+[the PR run](https://github.com/CiaranGruber/robotic-car-ai/actions/runs/41379572786).
+The camera command is zero again, matching the fixed camera transform. Stage 1
+assertions compare numeric coordinates approximately and cone colours exactly,
+so pytest 9.2 does not reject mixed nested comparisons.
+
+The experimental navigator reserves its current-speed emergency stopping
+envelope before budgeting approach speed against the existing coasting setting.
+Its endpoint is the last body-centre position before the junction mouth; the
+stopping margin is applied once. Positive exit evidence admits normal road speed
+for straight travel, while left/right retain the slower turn speed. Raw lidar,
+stopping guards, evidence admission and expiry checks remain in force. Previously
+failing straight cross/T and .4 m-spaced left/right cases now complete handoff.
+
+Default marker-turn preparation is limited by the weaker steering direction so
+an outward shift does not demand tighter recovery than the car can command.
+Rejected turns and exhausted exit searches latch `INTERSECTION` and request the
+existing bounded brake pulse, including after the turn object disappears. Normal
+lane following honours that latch; only an explicit new run clears it. The marker
+simulator now uses its provisional brake response only while actual controller
+output is negative, retaining the brake timeout and one-shot restriction.
+
+The old 1 m-left completion expectation relied on the earlier provisional 1/m
+left capability. With the current .48/m limit, the delayed-confirmation 1 m
+cross/T approaches instead stop without contact or body departure in seeds 0–2;
+each test requires a recognised left command. Separate 1.5 m cross/T cases
+complete the requested left exit in the same three seeds. A 1 m turn is not
+universally geometrically impossible: its ideal aligned start is marginal, and
+these runs do not establish reliable completion there. Analytic arc admission
+still checks the inside corner and far row, rather than proving the complete
+outside-row body sweep from an outward heading. The active lidar guard and these
+sampled simulations do not establish comprehensive swept-body or physical safety.
+
+Final macOS/Python 3.12 validation used pytest **9.2.0** in a temporary environment
+with the existing project dependencies: `pytest.main(['-q', 'tests/policy/'])`
+completed with **837 passed, 5 skipped, 1 xfailed, 6 subtests passed in 32.34 s**.
+No scenario filter or new expected failure was added. The skips remain the two
+disabled legacy keep-side cases and three optional RL cases; the existing
+expected failure is the wet-floor dynamics case. `git diff --check` passed.
+The required CONTRIBUTING fast command was attempted, but the pinned
+`.verification/dependencies/dream_interfaces` checkout is absent. No ROS build,
+new GitHub CI run, car upload, service change or physical driving was performed.
+
 ## Left-turn preparation, tangent admission and exit search, 2026-10-30
 
 Following the detector-size correction, the owner reported another unsuccessful

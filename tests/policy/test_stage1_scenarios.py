@@ -103,8 +103,9 @@ def test_missed_and_wrong_colour_cones_are_applied_to_the_right_cones():
     case = s1.Stage1Case("d", "tuning", "", disturbances=s1.Disturbances(
         missed_cones=((ConeColour.YELLOW, 2),), wrong_colour_cones=((ConeColour.BLUE, 3),)))
     result = [(d.pos.x, d.pos.y, d.colour) for d in s1.disturbed_detections(batch, pose, case)]
-    assert result == pytest.approx([(1.5, 0.5, ConeColour.YELLOW), (1.0, -0.5, ConeColour.BLUE),
-                                    (1.52, -0.49, ConeColour.YELLOW)])
+    assert np.array([(x, y) for x, y, _ in result]) == pytest.approx(
+        np.array([(1.5, 0.5), (1.0, -0.5), (1.52, -0.49)]))
+    assert [colour for _, _, colour in result] == [ConeColour.YELLOW, ConeColour.BLUE, ConeColour.YELLOW]
 
 
 def test_extra_objects_are_detected_only_inside_the_camera_view():
@@ -113,7 +114,8 @@ def test_extra_objects_are_detected_only_inside_the_camera_view():
         detector_range_m=3.0))
     result = [(d.pos.x, d.pos.y, d.colour) for d in s1.disturbed_detections(detector_batch([]), (0.0, 0.0, 0.0), case)]
     # The second is outside the 80 degree view and the third is beyond the 3 m range
-    assert result == pytest.approx([(2.0, 0.8, ConeColour.YELLOW)])
+    assert np.array([(x, y) for x, y, _ in result]) == pytest.approx(np.array([(2.0, 0.8)]))
+    assert [colour for _, _, colour in result] == [ConeColour.YELLOW]
 
 
 def test_camera_blackout_empties_every_batch_from_its_distance():

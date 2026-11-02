@@ -285,7 +285,7 @@ class MovementPolicy:
         car_actions = self.car_controller.step(observations, instructions)
         # Hold the camera at zero pan: the camera's fixed transform to base_link assumes it, and any pan rotates every
         # detected cone position by the pan angle
-        car_actions.camera_pan_action = 0.3
+        car_actions.camera_pan_action = 0.0
         # Where the car is relative to the lane centre, to plot in Foxglove: debug1 is the lateral error in metres
         # (positive left of the centre) and debug2 the heading error in radians (positive pointing left of the lane).
         # Nothing is published on them when this step has no usable lane.

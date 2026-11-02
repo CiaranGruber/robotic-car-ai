@@ -426,7 +426,13 @@ class IntersectionTurner:
             target = along_m + config.lookahead_m
             target_x = turn.entry_x_m + target * cos_a - offset_m * sin_a
             target_y = turn.entry_y_m + target * sin_a + offset_m * cos_a
-            return config.turn_speed_m_per_s, _pursuit_curvature(pose, target_x, target_y)
+            curvature = _pursuit_curvature(pose, target_x, target_y)
+            if preparing:
+                # Moving out also needs room to straighten again. An asymmetric steering
+                # map must not swing out more tightly than it can recover towards the turn.
+                preparation_limit = min(self.max_left_curvature_per_m, self.max_right_curvature_per_m)
+                curvature = min(max(curvature, -preparation_limit), preparation_limit)
+            return config.turn_speed_m_per_s, curvature
         if turn.phase is TurnPhase.ARC:
             return self._arc_step(turn, pose, lanes, memory, good_lane)
         return self._exit_step(turn, pose, lanes, memory, good_lane)

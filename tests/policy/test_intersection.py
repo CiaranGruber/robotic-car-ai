@@ -298,18 +298,39 @@ def test_preparation_and_tangent_turn_reach_exit_with_missing_cones_in_nominal_f
 SETTINGS = ms.read_settings(ms.DEFAULT_SETTINGS_PATH)
 
 
-@pytest.mark.parametrize("name", ["cross_left_1m", "cross_right_1m", "cross_straight_1m", "t_left_1m", "t_right_1m",
+@pytest.mark.parametrize("name", ["cross_left_1.5m", "cross_right_1m", "cross_straight_1m", "t_left_1.5m", "t_right_1m",
                                   "cross_straight_0.8m", "lanes_0.8m", "lanes_1m"])
 def test_the_simulated_car_follows_the_markers(name):
-    """With config/ai4r_policy.yaml and car 21's provisional limits, the car leaves each intersection by the road its
-    marker asks for, and keeps to each side a lane marker asks for, without touching a cone or leaving the road.
+    """Current configured limits complete roomier left turns and the existing right/straight cases without contact.
 
-    Turns in 0.8 m roads are at the edge of what those limits allow and pass in most runs, not all
-    (docs/marker-commands.md), so they are not checked here."""
+    The provisional plant cannot override the policy's .48/m left limit. Narrow
+    delayed-confirmation left approaches are checked separately for safe stopping.
+    """
     if name.startswith("lanes_") and not any(case.name == name for case in ms.CASES):
         pytest.skip("Legacy keep-side commands are disabled by the current direction-only mapping")
     case = next(case for case in ms.CASES if case.name == name)
     result = ms.run_case(case, SETTINGS, seed=0)
+    assert result.outcome == "passed", result.metrics
+
+
+@pytest.mark.parametrize("name", ["cross_left_1m", "t_left_1m"])
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_marginal_left_approach_stops_without_contact_at_current_steering_limit(name, seed):
+    case = next(case for case in ms.CASES if case.name == name)
+    result = ms.run_case(case, SETTINGS, seed=seed)
+    assert any(t["marker"] == "TURN_LEFT" for t in result.trace)
+    assert result.outcome == "stopped", result.metrics
+    assert result.metrics["cones_touched"] == 0.
+    assert result.metrics["max_outside_m"] <= 0.
+    assert result.trace[-1]["curvature"] == 0.
+    assert result.trace[-1]["speed"] < .03
+
+
+@pytest.mark.parametrize("name", ["cross_left_1.5m", "t_left_1.5m"])
+@pytest.mark.parametrize("seed", [1, 2])
+def test_roomier_left_approach_completes_with_sensor_noise(name, seed):
+    case = next(case for case in ms.CASES if case.name == name)
+    result = ms.run_case(case, SETTINGS, seed=seed)
     assert result.outcome == "passed", result.metrics
 
 

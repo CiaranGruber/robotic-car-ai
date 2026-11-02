@@ -189,13 +189,22 @@ def test_actual_turn_command_drives_obstacle_corridor_and_real_obstacles_still_l
 def test_an_infeasible_left_arc_latches_no_path_stop_until_an_explicit_new_run():
     settings, _ = configured()
     policy, memory = build_policy(settings), CarMemory()
-    memory.start_map(None)
+    assert policy.step(straight_lane(first=True), memory).drive_action > 0.
     memory.plan_turn(IntersectionTurn(MarkerCommand.TURN_LEFT, TurnPhase.APPROACH, 0., 0., 0., .8))
     obs = replace(straight_lane(), cones=None, lidar_cartesian=lidar([]))
-    assert policy.step(obs, memory).drive_action <= 0.
-    assert memory.data.mpc_stop is MpcStop.LANE_LOSS
-    assert policy.step(straight_lane(), memory).drive_action <= 0.
-    assert memory.data.mpc_stop is MpcStop.LANE_LOSS
+    assert policy.step(obs, memory).drive_action < 0.
+    assert memory.data.mpc_stop is MpcStop.INTERSECTION
+    # Both MPC entry points must retain the same brake request after the turn
+    # object disappears, even when fresh cones form a usable lane again.
+    memory.finish_turn()
+    command = policy.action_policy.run_policy(straight_lane(), policy.lanes, memory=memory,
+                                               reset_on_first_step=False)[0]
+    assert command.speed_m_per_s == 0. and command.brake
+    assert policy.step(straight_lane(), memory).drive_action < 0.
+    for _ in range(15):
+        actions = policy.step(straight_lane(), memory)
+    assert actions.drive_action == 0.
+    assert memory.data.mpc_stop is MpcStop.INTERSECTION
     assert policy.step(straight_lane(first=True), memory).drive_action > 0.
     assert memory.data.mpc_stop is None
 
