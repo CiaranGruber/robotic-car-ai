@@ -37,7 +37,11 @@
     # Unannotated, calibrated RGB for ArUco: explicit opt-in, independent of
     # cones and debug images. Enable this before starting the ArUco detector.
     # Dimensions are startup-only; the rate can be changed live (0 pauses it).
-    publish_rgb_image: true
+    # false (2026-10-12): with OpenCV 5.0 in the car's DREAM venv (installed
+    # with ultralytics), cv_bridge cannot convert the image (KeyError 16) and
+    # the cone detector exits about 13 s after starting. Enable it again once
+    # the venv has OpenCV 4 (opencv-python<5).
+    publish_rgb_image: false
     rgb_image_width_px: 1280
     rgb_image_height_px: 720
     rgb_image_publish_frequency_hz: 10.0
