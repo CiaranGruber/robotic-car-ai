@@ -208,9 +208,12 @@
       step_s: 0.1
       # Largest curvature (1 / turning radius) to the left, and to the right
       # unless max_right_curvature_per_m is set, 1/m, positive double. Default
-      # 0.48: car 20's measured left limit (2.1 m radius). Re-measure for
-      # another car.
-      max_curvature_per_m: 0.48
+      # 0.48: car 20's measured left limit (2.1 m radius) with the steering
+      # interval at -0.5 / 0.5. 0.91 (1.1 m) assumes the -0.8 / 0.8 interval
+      # gives car 20 about the right turn's reach to the left: UNMEASURED,
+      # set it to the steering_test result. At 0.48 the 2.08 m left arc does
+      # not fit a 0.8-1 m crossing (marker simulation: every left case fails).
+      max_curvature_per_m: 0.91
       # Largest curvature to the right, 1/m, double >= 0.0; 0.0 uses
       # max_curvature_per_m. Default 0.92: car 20's measured right limit, which
       # lets the MPC plan the 1.25-1.5 m radius right curves car 20 can drive.
@@ -829,8 +832,10 @@
       # instead of following the lane, metres, double >= 0.
       hold_line_m: 0.8
       # Pure pursuit lookahead on the approach line, the arc and the exit line,
-      # metres, positive double.
-      lookahead_m: 0.5
+      # metres, positive double. 0.8: with 0.91 1/m to the left, 0.5 swings the
+      # car too sharply while moving aside before a right turn (marker
+      # simulation: 33/48 cases at 0.5, 43/48 at 0.8).
+      lookahead_m: 0.8
       # Degrees the car must have turned before lane following may take over in
       # the exit lane, double in [0, 90].
       handover_heading_deg: 60.0
