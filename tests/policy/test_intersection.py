@@ -298,7 +298,7 @@ def test_preparation_and_tangent_turn_reach_exit_with_missing_cones_in_nominal_f
 SETTINGS = ms.read_settings(ms.DEFAULT_SETTINGS_PATH)
 
 
-@pytest.mark.parametrize("name", ["cross_left_1.5m", "cross_right_1m", "cross_straight_1m", "t_left_1.5m", "t_right_1m",
+@pytest.mark.parametrize("name", ["cross_left_1m", "cross_right_1m", "cross_straight_1m", "t_left_1.5m", "t_right_1m",
                                   "cross_straight_0.8m", "lanes_0.8m", "lanes_1m"])
 def test_the_simulated_car_follows_the_markers(name):
     """Current configured limits complete roomier left turns and the existing right/straight cases without contact.
@@ -317,7 +317,8 @@ def test_the_simulated_car_follows_the_markers(name):
 @pytest.mark.parametrize("seed", [0, 1, 2])
 def test_marginal_left_approach_stops_without_contact_at_current_steering_limit(name, seed):
     case = next(case for case in ms.CASES if case.name == name)
-    result = ms.run_case(case, SETTINGS, seed=seed)
+    # At car 20's -0.5 / 0.5 steering reach (0.48/m left) the narrow left approach must stop without contact
+    result = ms.run_case(case, {**SETTINGS, "mpc.max_curvature_per_m": .48}, seed=seed)
     assert any(t["marker"] == "TURN_LEFT" for t in result.trace)
     assert result.outcome == "stopped", result.metrics
     assert result.metrics["cones_touched"] == 0.
