@@ -266,6 +266,19 @@ def lane_changes(lane_repo: Path):
         axis.legend(fontsize=7, frameon=False, loc="upper right", ncol=3, bbox_to_anchor=(1.0, 1.0))
     save(figure, "04_lane_change_sim.png")
 
+    # Slide version: 1 m road, one seed
+    case = cases["lanes_1m"]
+    figure, axis = plt.subplots(figsize=(4.4, 2.3))
+    draw_world(axis, case.world)
+    run = ms.run_case(case, settings, 0)
+    axis.plot(run.x, run.y, "-", color=GOOD, lw=2.2)
+    axis.set_aspect("auto")
+    axis.set_ylim(-0.85, 0.95)
+    for x, text in ((1, "KEEP\nLEFT"), (4, "KEEP\nRIGHT"), (7, "KEEP\nCENTRE")):
+        axis.text(x + 0.55, 0.58 if x != 4 else -0.8, text, fontsize=7, va="bottom")
+    axis.set_title("1 m lane: +-0.22 m shift, 3 markers, simulation", fontsize=9)
+    save(figure, "slide_lane_change.png")
+
 
 def simulated(sim_repo: Path):
     ms, settings, cases = load_simulation(sim_repo)
@@ -294,6 +307,24 @@ def simulated(sim_repo: Path):
     figure.text(0.5, -0.02, "green = left by the commanded road without touching a cone; red = failed "
                 "(stopped, touched cones or left the road); 5 noise seeds per panel", ha="center", fontsize=9)
     save(figure, "05_turn_sim.png")
+
+    # Slide version: the 30 Oct failure next to the fix, left turn in a 1 m crossing
+    figure, axes = plt.subplots(1, 2, figsize=(4.6, 2.5))
+    for axis, (name, config, car, title) in zip(axes, panels[:2]):
+        case = cases[name]
+        draw_world(axis, case.world)
+        passed = 0
+        for seed in range(5):
+            run = ms.run_case(case, config, seed, car=car)
+            passed += run.ok
+            axis.plot(run.x, run.y, "-", color=GOOD if run.ok else BAD, lw=1.8)
+        axis.set_title(f"{title}\n{passed}/5 left turns", fontsize=8)
+        axis.set_xlim(-3, 2.5)
+        axis.set_ylim(-2, 3)
+        axis.set_xlabel("x (m)", fontsize=8)
+        axis.set_ylabel("")
+        axis.tick_params(labelsize=7)
+    save(figure, "slide_left_turn.png")
 
     # Turn geometry, right turn in 0.8 m roads after moving aside
     width, radius, half, front, margin = 0.8, 1.2, 0.125, 0.30, 0.03
@@ -340,6 +371,37 @@ def simulated(sim_repo: Path):
     save(figure, "08_turn_geometry.png")
 
 
+def slide_figures():
+    """Small figures for the one presentation slide."""
+    figure, axis = plt.subplots(figsize=(4.4, 2.3))
+    names = ["settings first\ndriven on car 20", "tuned to car 20\n(my settings)"]
+    bars = axis.bar(names, [12, 84], color=[BAD, GOOD], width=0.55)
+    label_bars(axis, bars)
+    axis.set_ylim(0, 100)
+    axis.set_ylabel("curved lanes kept\n(of 84, simulation)", fontsize=8)
+    axis.tick_params(labelsize=8)
+    axis.set_title("Lane following on 1.5-3 m curves", fontsize=9)
+    save(figure, "slide_mpc.png")
+
+    figure, axis = plt.subplots(figsize=(4.4, 2.3))
+    axis.axis("off")
+    rows = [("ID 1-4", "TURN_LEFT", "arc left at next junction"), ("ID 5-6", "TURN_RIGHT", "move aside, arc right"),
+            ("ID 7-8", "STRAIGHT", "hold line across"), ("side IDs", "KEEP_LEFT / RIGHT /\nCENTRE", "MPC lane side"),
+            ("other", "STOP", "safety")]
+    table = axis.table(cellText=[list(r) for r in rows], colLabels=["marker", "command", "action"], loc="center",
+                       cellLoc="left", colWidths=[0.22, 0.38, 0.42])
+    table.auto_set_font_size(False)
+    table.set_fontsize(8)
+    table.scale(1, 1.35)
+    for (row, _), cell in table.get_celld().items():
+        cell.set_edgecolor("#bbbbbb")
+        if row == 0:
+            cell.set_text_props(weight="bold", color="white")
+            cell.set_facecolor(ACCENT)
+    axis.set_title("Nearest marker <= 2 m, seen 2 steps in a row", fontsize=9)
+    save(figure, "slide_aruco.png")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--sim-repo", type=Path, help="checkout to run the turn simulation from (740c575)")
@@ -352,6 +414,7 @@ def main():
     if args.only_turns:
         return simulated(args.only_turns)
     system_diagram()
+    slide_figures()
     mpc_tuning()
     lane_side_room()
     root_cause_bars()

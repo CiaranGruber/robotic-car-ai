@@ -10,10 +10,20 @@
 | Built on teammates' work | Ciaran: repo, CI and the upload script. Peiyu: MPC framework, Foxglove export. Linna: lane and obstacle detection, local map. Chris: steering calibration and the ±0.8 interval. Yuhao: system ID, grouped marker IDs, left-turn preparation |
 | Figures | `toby/figures/`, made by `python3 docs/logbook/toby/make_figures.py` (see its docstring for the two checkouts it simulates) |
 
-**One-line summary:** I made the car follow ArUco marker commands. A marker can ask it to keep left, right or centre,
-or to turn left, turn right or go straight at the next intersection. I also built the closed-loop simulation that
-tuned these behaviours, reproduced the car's left-turn failure and found what the car's setup must match. Detection
-and commands worked on real cars. A full intersection turn wasn't shown on a car before access ended on 2 Nov.
+**Summary: four pieces of work, in order** (the same as my slide):
+1. **MPC lane following.** With the MPC sub-team, I helped build the first lane follower and wrote the Card 2 test
+   cases it was tuned on. Then I tuned it to car 20's measured steering (Sections 2.1, 3.1 and 4.1).
+2. **Lane shifting from left to right.** The MPC keeps to the left, centre or right of the lane and can shift
+   mid-run. On car 20 on 20 Oct, it kept to the left lane (Sections 2.1, 3.2 and 4.2).
+3. **Mapping policy actions to ArUco markers.** Markers choose keep left, right or centre, or turn left, turn right
+   or go straight at the intersection the marker stands at. This includes the intersection manoeuvre (Sections 2.2,
+   2.3 and 3.3).
+4. **Fine-tuning and testing on the real robot.** I tuned and tested lane shifting, sharper 90° turns and their
+   interaction with obstacle detection over four car sessions. Simulation was used to explain each car result
+   (Sections 3.4, 3.5 and 4.3–4.5).
+
+Lane shifting and marker commands worked on real cars. A full intersection turn wasn't shown on a car before access
+ended on 2 Nov, so the turn results are simulation only.
 
 ## Timeline
 
@@ -21,7 +31,7 @@ and commands worked on real cars. A full intersection turn wasn't shown on a car
 | --- | --- | --- |
 | 1 (5–6 Oct) | Card 2 test cases T1–T11, unseen cases U1–U3, a dream-gym closed-loop harness with disturbances, and printable floor layouts | `1f7f1eb`, `eef5589`, PR #6 and #10, `docs/stage1-test-cases.md` |
 | 2 (12 Oct) | Tuned the MPC to car 20: separate left and right limits, a smoother steering weight, measured simulation parameters from Ciaran's real recordings, a curved-lane simulator | `03239b1`, PR #15, `docs/mpc-lab-calibration.md` |
-| 3 (19–23 Oct) | MPC lane side (LEFT/CENTRE/RIGHT). First ArUco test on car 21 (no detections). Marker commands | `d78289e`, `81b2105`, `docs/mpc-lane-side.md` |
+| 3 (16–23 Oct) | MPC lane side (LEFT/CENTRE/RIGHT); car 20 kept left on 20 Oct. First ArUco test on car 21. Marker commands mapped to policy actions | `d78289e`, `81b2105`, `docs/mpc-lane-side.md` |
 | 4 (26–30 Oct) | Lane-change retune, `IntersectionTurner`, full-policy marker simulation, `car_management.sh --aruco`. Car 13 test | `3ab7ac9`, PR #35, `logs/car13/policy.log` |
 | 5 (1–2 Nov) | Reproduced "left fails, right works", a robustness matrix of about 10,000 simulated runs, phantom-obstacle fixes, a car 14 session | `fix/left-turn-steering-and-obstacles`, `logs/sim-2026-11-02/RESULTS.md` |
 
@@ -177,7 +187,7 @@ the far row. After moving 0.15 m to the outside (a hook turn), one does.*
   - Chris's ±0.8 steering interval, with the left limit set to 0.91 1/m.
   - Lookahead 0.8 m. The stronger steering made the move-aside before a right turn swing too sharply, which in turn
     made right turns clip cones.
-  - Phantom-obstacle filters (Section 4.3).
+  - Phantom-obstacle filters (Section 4.4).
 - **Result:** 57% → 99% of nominal cases, and left turns 0/40 → 39/40 on the pushed branch.
 
 ### 3.5 What must the car's setup match? (2 Nov)
@@ -221,7 +231,19 @@ the far row. After moving 0.15 m to the outside (a hook turn), one does.*
   at 0.
 - **Limit:** we don't know which car Ciaran recorded with, and all the recordings are straight.
 
-### 4.2 Is each link of the marker chain working? (21 Oct car 21, 27 Oct car 13, 2 Nov car 14)
+### 4.2 Lane shifting on the car (20 Oct car 20, 21 Oct car 21)
+
+- **Question:** does the car actually hold the side that `mpc.lane_side` asks for?
+- **Method:** I changed only `lane_side` in the yaml on car 20 (CENTRE → LEFT, then
+  `dream runtime restart ai4r_policy`) and kept the same track and speed.
+- **Result (20 Oct, by eye, no log recorded):** the car kept to the left side of the lane.
+- **21 Oct, car 21, with markers:** the shift was hard to see. The analysis in Section 3.2 showed why: the 0.40 m
+  clearance left 0 cm of room in an 0.8 m lane and 10 cm in a 1 m lane. I retuned it to 0.28 m at 0.3 per metre. The
+  logs that day also showed that no marker batches reached the policy (Section 4.3), so I added `--aruco`.
+- **Limit:** the result was judged by eye, without a measured offset. The next test should log the offset in
+  Foxglove and compare it with the simulated ±0.12 m (0.8 m lane) or ±0.22 m (1 m lane).
+
+### 4.3 Is each link of the marker chain working? (21 Oct car 21, 27 Oct car 13, 2 Nov car 14)
 
 The symptom "the car doesn't turn" has several independent causes, so I tested each link from the bottom up and
 controlled one variable at a time:
@@ -233,7 +255,7 @@ controlled one variable at a time:
 | Command | `dream runtime logs ai4r_policy` | 27 Oct, car 13: "Marker 14: KEEP_RIGHT, lane side RIGHT", 6 times | Commands work on a real car |
 | Manoeuvre | Foxglove `/plan/intersection` and the turn logs | 2 Nov: the wrong branch was uploaded first, and then no `--aruco`. Time ran out | Not shown on a car |
 
-### 4.3 Phantom obstacles (27 Oct, car 13)
+### 4.4 Phantom obstacles: turns combined with obstacle detection (27 Oct, car 13)
 
 ![Car 13 phantom avoidance](toby/figures/09_car13_phantom_avoidance.png)
 
@@ -248,7 +270,7 @@ controlled one variable at a time:
 - **Result:** 29% → 4% of runs, and the obstacle simulation with real boxes still passes 12 of 12. Not yet tested on
   a car.
 
-### 4.4 The experiments still needed (method ready, not run)
+### 4.5 The experiments still needed (method ready, not run)
 
 | Question | Method | Controlled | Decision it feeds |
 | --- | --- | --- | --- |
