@@ -5,16 +5,406 @@ This file is responsible for taking in the observations and detected lanes and c
 control module
 """
 
-from policy.control.actions import Instruction
+import logging
+import math
+
+from policy.action_policy.lane_path import LanePath
+from policy.action_policy.mpc import MpcConfig, MpcController, PathTrackingState, inside_offset_limit_m
+from policy.action_policy.reference import reference_from_cones, rotate_cones
+from policy.control.actions import DriveCommand, Instruction
 from policy.input_output import CarObservations
 from policy.lane_detection.lanes import LaneDetection
+from policy.memory import CarMemory, MpcPlan, MpcStop
+
+_LOGGER = logging.getLogger(__name__)
 
 
-def run_policy(observations: CarObservations, lanes: LaneDetection) -> list[Instruction]:
-    """Chooses the instructions for the car to follow from the observations and detected lanes
+class MpcPolicy:
+    """Chooses where to drive and how fast with model predictive control (MPC).
 
-    :param observations: The observations taken by the car at the current policy step
-    :param lanes: The lanes detected by the lane detection module
-    :return: The instructions for the control module to convert into car actions
+    It keeps state between policy steps, so create one when the node starts and reuse it for every step. Its stop and
+    plan are kept in the CarMemory passed to run_policy (Memory.mpc_stop and Memory.mpc_plan), so the memory log shows
+    them; the other state is kept here.
     """
-    pass
+
+    def __init__(self, config: MpcConfig):
+        """
+        :param config: The MPC settings.
+        """
+        self.config = config
+        self.controller = MpcController(config)
+        self.memory = CarMemory()
+        """The car memory holding the MPC's stop and plan: the one passed to the latest run_policy, or the MPC's own
+        for callers that pass none, such as the simulation harnesses."""
+        self.avoidance_path: LanePath | None = None
+        """The line to follow past obstacles in the lane, or None to follow the usual line (usual_offset_m). Set before
+        each step to the line LaneAvoidance plans; the MPC follows it over its whole horizon. That line is already kept
+        clear of the cones, so it is followed as it is."""
+        self.reset()
+
+    def reset(self):
+        """Forgets the previous run. This is done on the first step after entering the publishing-policy state."""
+        self.memory.start_mpc_run()
+        self.lane_side = self.config.lane_side
+        """Which part of the lane to drive along: "CENTRE", "LEFT" or "RIGHT" (mpc.lane_side). Each run starts at
+        mpc.lane_side; a manoeuvre such as the hook turn may change it between steps."""
+        self.lane_offset_m = self.config.lane_offset_m
+        """Where in the lane to drive while lane_side is "CENTRE", in metres from the centre line, positive to the
+        left. Each run starts at mpc.lane_offset_m; a manoeuvre may change it between steps. It is kept
+        edge_clearance_m from both lane edges (usual_offset_m)."""
+        self.edge_clearance_m = self.config.edge_clearance_m
+        """Smallest distance in metres from the followed line to either lane edge while the line is off the centre.
+        Each run starts at mpc.edge_clearance_m; a manoeuvre may change it between steps, as the intersection turn
+        does to move to the outside of a narrow lane before turning."""
+        self.previous_curvature_per_m = 0.0
+        """Curvature requested at the previous step in 1/m."""
+        self.previous_speed_m_per_s = 0.0
+        """Speed requested at the previous step in m/s."""
+        self.farthest_cone_ahead_m = None
+        """Distance in metres from the car to the farthest cone seen at the latest usable lane, less the distance
+        driven since (estimated with _conservative_speed). None before the first usable lane in this run."""
+        self.lane_state = None
+        """Where the car was relative to the lane centre in this step's observation, or None when this step had no
+        usable lane. It is found even while stopped, so the lane estimate can be checked with the car held still."""
+        self.lane_lost_s = 0.0
+        """Seconds since the last usable lane; 0.0 while the lane is usable."""
+        self.solve_count = 0
+        """Number of times the MPC problem was solved in this run."""
+        self.fallback_count = 0
+        """Number of failed solves in this run. The fallback is a latched zero command, not continued driving."""
+        self.lane_lost_step_count = 0
+        """Number of steps in this run driven along the plan because the lane was lost."""
+        self.obstacle_steps = 0
+        """Consecutive steps up to now that saw an obstacle in the car's way within the stopping distance."""
+        self.last_solve_time_s = 0.0
+        """Calculation time of the latest solve in seconds."""
+        self.side_offset_m = None
+        """The line followed away from obstacles, in metres left of the lane centre, as moved towards
+        target_offset_m by the latest usable lane, at most mpc.offset_change_per_m per metre driven. None before the
+        first usable lane in this run, which starts it at the target."""
+
+    @property
+    def stopped_for_obstacle(self) -> bool:
+        """True once obstacle_confirm_steps consecutive steps saw an obstacle within the stopping distance. The car then
+        stays stopped for the rest of the run, even if the obstacle goes."""
+        return self.memory.data.mpc_stop is MpcStop.OBSTACLE
+
+    @property
+    def stopped_for_lane_loss(self) -> bool:
+        """True once the lane was lost for lane_loss_timeout_s, its cone rows ended or the plan ran out. The car then
+        stays stopped for the rest of the run."""
+        return self.memory.data.mpc_stop is MpcStop.LANE_LOSS
+
+    @property
+    def stopped_for_solver_failure(self) -> bool:
+        """True after a failed solve; only the first step of a new explicitly started run resets it."""
+        return self.memory.data.mpc_stop is MpcStop.SOLVER_FAILURE
+
+    @property
+    def _plan(self) -> MpcPlan | None:
+        """The plan of the latest converged solve in this run, or None."""
+        return self.memory.data.mpc_plan
+
+    @property
+    def plan_curvatures_per_m(self) -> tuple[float, ...] | None:
+        """Curvatures in 1/m planned by the latest converged solve, followed while the lane is lost. None before the
+        first one in this run, and after a failed one."""
+        return None if self._plan is None else self._plan.curvatures_per_m
+
+    @property
+    def plan_step_distance_m(self) -> float:
+        """Spacing of the plan's steps in metres, using the speed of its solve. 0.0 without a reusable moving plan."""
+        return 0.0 if self._plan is None else self._plan.step_distance_m
+
+    @property
+    def distance_since_plan_m(self) -> float:
+        """Estimated distance in metres driven since the plan (MpcPlan.distance_driven_m), or 0.0 without one."""
+        return 0.0 if self._plan is None else self._plan.distance_driven_m
+
+    def followed_offset_m(self, lane_width_m: float, path_curvature_per_m: float = 0.0) -> float:
+        """The offset from the lane centre actually followed beside the car: avoidance_path's while passing obstacles,
+        otherwise usual_offset_m.
+
+        :param lane_width_m: Width of the lane in metres.
+        :param path_curvature_per_m: Curvature of the lane's centre line in 1/m.
+        :return: The offset in metres, positive to the left.
+        """
+        if self.avoidance_path is not None:
+            return self.avoidance_path.offset_at(0.0)
+        return self.usual_offset_m(lane_width_m, path_curvature_per_m)
+
+    def offset_limits_m(self, lane_width_m: float, path_curvature_per_m: float = 0.0) -> tuple[float, float]:
+        """The range of lines the car may follow across a lane: at least edge_clearance_m from both edges, and on a
+        curve at most halfway to its turning centre (inside_offset_limit_m).
+
+        :param lane_width_m: Width of the lane in metres.
+        :param path_curvature_per_m: Curvature of the lane's centre line in 1/m.
+        :return: The lowest and highest offset in metres left of the lane centre; both 0.0 when the lane is too narrow
+            to move over at all.
+        """
+        room = max(0.0, lane_width_m / 2.0 - self.edge_clearance_m)
+        lowest, highest = -room, room
+        if path_curvature_per_m > 0.0:
+            highest = min(highest, inside_offset_limit_m(path_curvature_per_m))
+        elif path_curvature_per_m < 0.0:
+            lowest = max(lowest, -inside_offset_limit_m(path_curvature_per_m))
+        return lowest, highest
+
+    def target_offset_m(self, lane_width_m: float, path_curvature_per_m: float = 0.0) -> float:
+        """The line lane_side and lane_offset_m ask for: as far over as offset_limits_m allows on the "LEFT" or
+        "RIGHT" side, or lane_offset_m within those limits for "CENTRE".
+
+        :param lane_width_m: Width of the lane in metres.
+        :param path_curvature_per_m: Curvature of the lane's centre line in 1/m.
+        :return: The offset in metres left of the lane centre.
+        """
+        lowest, highest = self.offset_limits_m(lane_width_m, path_curvature_per_m)
+        if self.lane_side == "LEFT":
+            return highest
+        if self.lane_side == "RIGHT":
+            return lowest
+        return min(max(self.lane_offset_m, lowest), highest)
+
+    def usual_offset_m(self, lane_width_m: float, path_curvature_per_m: float = 0.0) -> float:
+        """The offset from the lane centre followed away from obstacles: side_offset_m, the line moving gradually
+        towards target_offset_m, kept within offset_limits_m for this lane.
+
+        Before the first usable lane of the run it is the target. It is moved on in run_policy, so a caller before
+        run_policy in a step (the obstacle avoidance) gets the line one step behind, a few millimetres at most.
+
+        :param lane_width_m: Width of the lane in metres.
+        :param path_curvature_per_m: Curvature of the lane's centre line in 1/m.
+        :return: The offset in metres, positive to the left.
+        """
+        lowest, highest = self.offset_limits_m(lane_width_m, path_curvature_per_m)
+        if self.side_offset_m is None:
+            return self.target_offset_m(lane_width_m, path_curvature_per_m)
+        return min(max(self.side_offset_m, lowest), highest)
+
+    def _move_side_offset(self, lane_width_m: float, path_curvature_per_m: float, distance_m: float):
+        """Moves side_offset_m towards target_offset_m by at most offset_change_per_m * distance_m, then into the
+        lane's limits.
+
+        :param lane_width_m: Width of this step's lane in metres.
+        :param path_curvature_per_m: Curvature of this step's lane centre line in 1/m.
+        :param distance_m: Distance driven since the previous step in metres.
+        """
+        target = self.target_offset_m(lane_width_m, path_curvature_per_m)
+        if self.side_offset_m is None:
+            self.side_offset_m = target
+            return
+        step = self.config.offset_change_per_m * distance_m
+        moved = min(max(target, self.side_offset_m - step), self.side_offset_m + step)
+        lowest, highest = self.offset_limits_m(lane_width_m, path_curvature_per_m)
+        self.side_offset_m = min(max(moved, lowest), highest)
+
+    def run_policy(self, observations: CarObservations, lanes: LaneDetection | None,
+                   obstacle_distance_m: float | None = None, memory: CarMemory | None = None, *,
+                   reset_on_first_step: bool = True) -> list[Instruction]:
+        """Chooses the instructions for the car to follow from the observations and detected lanes
+
+        :param observations: The observations taken by the car at the current policy step
+        :param lanes: The lanes detected by the lane detection module, followed when given. When None (no cone
+            data, or a caller without lane detection such as the Stage 1 simulation harness), the reference path is
+            built from the cones with reference_from_cones instead.
+        :param obstacle_distance_m: Distance in metres from the car's front to the nearest obstacle in its way,
+            math.inf when its way is clear, or None when it is unknown (no fresh lidar) or not checked. Once
+            obstacle_confirm_steps consecutive steps give one within the stopping distance (see
+            mpc.obstacle_stop_margin_m), the car stops for the rest of the run.
+        :param memory: The car memory to keep the MPC's stop and plan in, the same one for every step (MovementPolicy
+            passes the node's). None keeps using the latest one given, or the MPC's own.
+        :param reset_on_first_step: False when the caller already reset this run before applying marker preparation.
+        :return: The instructions for the control module to convert into car actions
+        """
+        if memory is not None:
+            self.memory = memory
+        if observations.policy.is_first_policy_step and reset_on_first_step:
+            self.reset()
+        cones = observations.cones
+        lane_width_m = self.config.lane_width_m
+        if lanes is not None:
+            # The lane detector has already fitted the (possibly curved) lane to cones corrected for the camera yaw
+            state = (PathTrackingState(lanes.lateral_error_m, lanes.heading_error_rad, lanes.path_curvature_per_m)
+                     if lanes.has_lane else None)
+            if lanes.has_lane:
+                lane_width_m = lanes.lane_width_m
+        else:
+            corrected = None if cones is None else rotate_cones(cones, math.radians(self.config.camera_yaw_offset_deg))
+            state = reference_from_cones(corrected, lane_width_m)
+        self.lane_state = state
+        run_duration_s = self.config.run_duration_s
+        if (self.memory.data.mpc_stop is not None
+                or 0.0 < run_duration_s <= observations.policy.policy_elapsed_s):
+            return [self._command(0.0, 0.0, brake=self.memory.data.mpc_stop in
+                                  (MpcStop.OBSTACLE, MpcStop.INTERSECTION))]
+        measured_speed = observations.car.wheel_speed
+        if measured_speed is not None and (not math.isfinite(measured_speed) or measured_speed < 0.0):
+            raise ValueError("MPC wheel speed must be finite and nonnegative")
+        if not math.isfinite(observations.policy.dt) or observations.policy.dt < 0.0:
+            raise ValueError("MPC policy dt must be finite and nonnegative")
+        step_distance_m = 0.0
+        if not observations.policy.is_first_policy_step:
+            travelled_speed = self.previous_speed_m_per_s if measured_speed is None else measured_speed
+            step_distance_m = travelled_speed * observations.policy.dt
+            self.memory.drive_along_mpc_plan(step_distance_m)
+            if self.farthest_cone_ahead_m is not None:
+                self.farthest_cone_ahead_m -= self._conservative_speed(observations) * observations.policy.dt
+        if self._obstacle_within_stopping_distance(observations, obstacle_distance_m):
+            # Brake to a stop before the obstacle (coasting without control.brake_action), and stay stopped for the
+            # rest of the run
+            self.memory.stop_mpc(MpcStop.OBSTACLE)
+            _LOGGER.info("Obstacle %.2f m ahead of the car's front: stopping for the rest of the run",
+                         obstacle_distance_m)
+            return [self._command(0.0, 0.0, brake=True)]
+        if cones is None or state is None:
+            # No lane or a doubtful lane
+            return [self._command_without_lane(observations)]
+        self.lane_lost_s = 0.0
+        # The cones were seen sensor_age ago, so the car has driven on since
+        self.farthest_cone_ahead_m = (max(cone.pos.x for cone in cones)
+                                      - self._conservative_speed(observations) * cones.sensor_age)
+        prediction_speed = self.config.target_speed_m_per_s if measured_speed is None else float(measured_speed)
+        self._move_side_offset(lane_width_m, state.path_curvature_per_m, step_distance_m)
+        offset = self.followed_offset_m(lane_width_m, state.path_curvature_per_m)
+        solution = self.controller.solve(state, self.previous_curvature_per_m, cones.sensor_age,
+                                         speed_m_per_s=prediction_speed, lateral_offset_m=offset,
+                                         line=self.avoidance_path)
+        self.solve_count += 1
+        self.last_solve_time_s = solution.solve_time_s
+        if solution.converged:
+            curvature = float(solution.curvatures_per_m[0])
+            self.memory.plan_mpc(solution.curvatures_per_m, prediction_speed * self.config.step_s)
+        else:
+            # Never continue at target speed on an unvalidated optimisation result.
+            self.fallback_count += 1
+            self.memory.stop_mpc(MpcStop.SOLVER_FAILURE)
+            self.memory.drop_mpc_plan()
+            return [self._command(0.0, 0.0)]
+        return [self._command(self.config.target_speed_m_per_s, curvature)]
+
+    def follow_manoeuvre(self, observations: CarObservations, obstacle_distance_m: float | None, speed_m_per_s: float,
+                         curvature_per_m: float, memory: CarMemory | None = None, *,
+                         reset_on_first_step: bool = True) -> list[Instruction]:
+        """Drives a manoeuvre's command instead of following the lane, such as the intersection turn
+        (policy/action_policy/intersection.py), keeping the run's stops: a stop already latched holds, and an obstacle
+        in the car's way within the stopping distance stops the car for the rest of the run, as in run_policy.
+
+        The plan of the latest solve is dropped and the lane counts as usable, so lane following starts afresh from the
+        next lane rather than following an old plan or stopping where the approach lane's cones ended.
+
+        :param observations: The observations at this step.
+        :param obstacle_distance_m: As in run_policy.
+        :param speed_m_per_s: The manoeuvre's speed in m/s; 0.0 latches an intersection stop and asks to brake.
+            The low-level controller bounds the brake pulse and prevents a second pulse after neutral.
+        :param curvature_per_m: The manoeuvre's curvature in 1/m, positive turning left.
+        :param memory: As in run_policy.
+        :param reset_on_first_step: As in run_policy; MovementPolicy resets before applying the marker command.
+        :return: The instructions for the control module.
+        """
+        if memory is not None:
+            self.memory = memory
+        if observations.policy.is_first_policy_step and reset_on_first_step:
+            self.reset()
+        if self.memory.data.mpc_stop is not None:
+            return [self._command(0.0, 0.0, brake=self.memory.data.mpc_stop in
+                                  (MpcStop.OBSTACLE, MpcStop.INTERSECTION))]
+        if self._obstacle_within_stopping_distance(observations, obstacle_distance_m):
+            self.memory.stop_mpc(MpcStop.OBSTACLE)
+            _LOGGER.info("Obstacle %.2f m ahead of the car's front in a manoeuvre: stopping for the rest of the run",
+                         obstacle_distance_m)
+            return [self._command(0.0, 0.0, brake=True)]
+        if speed_m_per_s <= 0.0:
+            # A rejected turn or exhausted exit search needs an immediate braking stop;
+            # it has no remaining validated path on which to spend a coasting distance.
+            self.memory.stop_mpc(MpcStop.INTERSECTION)
+            return [self._command(0.0, 0.0, brake=True)]
+        self.memory.drop_mpc_plan()
+        self.lane_lost_s = 0.0
+        self.farthest_cone_ahead_m = None
+        return [self._command(speed_m_per_s, curvature_per_m)]
+
+    def _command_without_lane(self, observations: CarObservations) -> DriveCommand:
+        """Chooses the command when the lane is missing or doubtful (the Task A7 rule).
+
+        Before the first usable lane of the run, the car waits stopped. After it, the car follows the latest plan:
+        - If the farthest cone last seen is within lane_end_distance_m, the cone rows have ended. The car keeps its
+          speed and requests the stop stop_distance_per_speed_s * speed before lane_end_stop_past_m past that cone,
+          so it rolls to a stop there.
+        - Otherwise the lane was lost unexpectedly. The car drives at lane_loss_speed_fraction of the target speed for
+          up to lane_loss_timeout_s, in case the lane comes back.
+        Either way it stops early if the plan's remaining distance runs out, and then stops for the rest of the run.
+        A plan solved at zero speed cannot be followed while moving.
+
+        :param observations: The observations at this step.
+        :return: The command for this step.
+        """
+        config = self.config
+        if self.solve_count == 0:
+            # No usable lane yet in this run
+            return self._command(0.0, 0.0)
+        self.lane_lost_s += observations.policy.dt
+        lane_ended = (self.farthest_cone_ahead_m is not None
+                      and self.farthest_cone_ahead_m <= config.lane_end_distance_m)
+        if lane_ended:
+            to_go_m = self.farthest_cone_ahead_m + config.lane_end_stop_past_m
+            stop = to_go_m <= config.stop_distance_per_speed_s * self._conservative_speed(observations)
+            speed = config.target_speed_m_per_s
+        else:
+            stop = self.lane_lost_s >= config.lane_loss_timeout_s
+            speed = config.lane_loss_speed_fraction * config.target_speed_m_per_s
+        if (stop or self.plan_curvatures_per_m is None or self.plan_step_distance_m <= 0.0
+                or self.distance_since_plan_m >= len(self.plan_curvatures_per_m) * self.plan_step_distance_m):
+            self.memory.stop_mpc(MpcStop.LANE_LOSS)
+            return self._command(0.0, 0.0)
+        self.lane_lost_step_count += 1
+        # No extrapolation beyond the horizon by repeating the last curvature.
+        step = int(self.distance_since_plan_m / self.plan_step_distance_m)
+        return self._command(speed, float(self.plan_curvatures_per_m[step]))
+
+    def _obstacle_within_stopping_distance(self, observations: CarObservations,
+                                           obstacle_distance_m: float | None) -> bool:
+        """Counts the consecutive steps that see an obstacle in the car's way within the stopping distance.
+
+        The stopping distance is how far the car travels after a braking stop request
+        (obstacle_stop_distance_per_speed_s), plus how far it drove since the lidar scan, plus obstacle_stop_margin_m.
+        It uses the larger of the target speed and the car's speed (_conservative_speed), so a car about to start does
+        not drive towards a near obstacle either.
+
+        :param observations: The observations at this step.
+        :param obstacle_distance_m: As in run_policy.
+        :return: True once obstacle_confirm_steps consecutive steps have seen one.
+        """
+        config = self.config
+        if not config.obstacle_stop_enabled or obstacle_distance_m is None:
+            self.obstacle_steps = 0
+            return False
+        if math.isnan(obstacle_distance_m):
+            raise ValueError("MPC obstacle distance must not be NaN")
+        speed = max(config.target_speed_m_per_s, self._conservative_speed(observations))
+        lidar = observations.lidar_cartesian
+        lidar_age_s = 0.0 if lidar is None else float(lidar.sensor_age)
+        stopping_m = (config.obstacle_stop_distance_per_speed_s + lidar_age_s) * speed + config.obstacle_stop_margin_m
+        self.obstacle_steps = self.obstacle_steps + 1 if obstacle_distance_m <= stopping_m else 0
+        return self.obstacle_steps >= config.obstacle_confirm_steps
+
+    def _conservative_speed(self, observations: CarObservations) -> float:
+        """
+        :param observations: The observations at this step.
+        :return: The car's speed in m/s for the lane-end distance: the larger of the measured wheel speed and the
+            speed requested at the previous step. A missing or stuck wheel speed then overestimates the distance
+            driven and the roll-out, so the car stops early rather than late.
+        """
+        wheel_speed = observations.car.wheel_speed
+        return max(self.previous_speed_m_per_s, 0.0 if wheel_speed is None else float(wheel_speed))
+
+    def _command(self, speed_m_per_s: float, curvature_per_m: float, brake: bool = False) -> DriveCommand:
+        """Remembers the command for the next step.
+
+        :param speed_m_per_s: Requested speed in m/s.
+        :param curvature_per_m: Requested curvature in 1/m.
+        :param brake: Whether a stop brakes instead of coasting.
+        :return: The drive command.
+        """
+        self.previous_speed_m_per_s = speed_m_per_s
+        self.previous_curvature_per_m = curvature_per_m
+        return DriveCommand(speed_m_per_s, curvature_per_m, brake)

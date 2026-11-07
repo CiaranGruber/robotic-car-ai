@@ -1,0 +1,133 @@
+{
+  "configById": {
+    "3D!live": {
+      "cameraState": {
+        "perspective": false,
+        "distance": 7,
+        "phi": 0,
+        "thetaOffset": 90,
+        "targetOffset": [1.5, 0, 0],
+        "target": [0, 0, 0],
+        "targetOrientation": [0, 0, 0, 1],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "followMode": "follow-pose",
+      "followTf": "base_link",
+      "scene": {"transforms": {"showLabel": false}},
+      "transforms": {},
+      "topics": {
+        "/car/policy_visualisation/markers": {"visible": true},
+        "/car/scan": {"visible": true, "pointSize": 3, "pointShape": "circle", "colorMode": "flat", "flatColor": "#9a9a9aff"}
+      },
+      "layers": {
+        "grid": {
+          "visible": true,
+          "frameLocked": true,
+          "label": "Grid",
+          "instanceId": "grid",
+          "layerId": "foxglove.Grid",
+          "frameId": "base_link",
+          "size": 10,
+          "divisions": 20,
+          "lineWidth": 1,
+          "color": "#248eff40",
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0]
+        }
+      },
+      "publish": {
+        "type": "point",
+        "poseTopic": "/move_base_simple/goal",
+        "pointTopic": "/clicked_point",
+        "poseEstimateTopic": "/initialpose",
+        "poseEstimateXDeviation": 0.5,
+        "poseEstimateYDeviation": 0.5,
+        "poseEstimateThetaDeviation": 0.26179939
+      },
+      "imageMode": {}
+    },
+    "Plot!actions": {
+      "title": "Actions",
+      "paths": [
+        {"value": "/car/drive_and_steer_set_point_normalized.steer", "enabled": true, "timestampMethod": "receiveTime", "label": "steer (policy)"},
+        {"value": "/car/drive_and_steer_set_point_normalized.drive", "enabled": true, "timestampMethod": "receiveTime", "label": "drive (policy)"},
+        {"value": "/car/drive_and_steer_applied_normalized.steer", "enabled": true, "timestampMethod": "receiveTime", "label": "steer (applied)"},
+        {"value": "/car/drive_and_steer_applied_normalized.drive", "enabled": true, "timestampMethod": "receiveTime", "label": "drive (applied)"}
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "followingViewWidth": 20,
+      "sidebarDimension": 240
+    },
+    "Plot!lane": {
+      "title": "Lane (debug1, debug2)",
+      "paths": [
+        {"value": "/car/debug1.data", "enabled": true, "timestampMethod": "receiveTime", "label": "lateral error (m, + left)"},
+        {"value": "/car/debug2.data", "enabled": true, "timestampMethod": "receiveTime", "label": "heading error (rad, + left)"}
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "followingViewWidth": 20,
+      "sidebarDimension": 240
+    },
+    "Plot!speed": {
+      "title": "Wheel speed",
+      "paths": [
+        {"value": "/car/wheel_speed_m_per_sec.data", "enabled": true, "timestampMethod": "receiveTime", "label": "wheel speed (m/s)"}
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "followingViewWidth": 20,
+      "sidebarDimension": 240
+    },
+    "RawMessages!state": {
+      "topicPath": "/car/policy_fsm_state_string",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": "all"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {"speed": 1},
+  "layout": {
+    "direction": "row",
+    "first": "3D!live",
+    "second": {
+      "direction": "column",
+      "first": {
+        "direction": "column",
+        "first": "Plot!actions",
+        "second": "Plot!lane",
+        "splitPercentage": 50
+      },
+      "second": {
+        "direction": "column",
+        "first": "Plot!speed",
+        "second": "RawMessages!state",
+        "splitPercentage": 60
+      },
+      "splitPercentage": 60
+    },
+    "splitPercentage": 60
+  }
+}

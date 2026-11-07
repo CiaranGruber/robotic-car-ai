@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "car_scenario_data_schema.json",
+  "title": "Car scenario",
+  "description": "A named car scenario whose test_data steps pair one logged observation with the action from the same policy step.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "test_data"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Display name of the scenario."
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional description of the scenario."
+    },
+    "test_data": {
+      "type": "array",
+      "description": "Ordered policy steps. Each item pairs one logged observation with its action.",
+      "items": {
+        "$ref": "#/$defs/scenario_step"
+      }
+    }
+  },
+  "$defs": {
+    "scenario_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observations", "actions"],
+      "properties": {
+        "observations": {
+          "type": "object",
+          "description": "One logged CarObservations record."
+        },
+        "actions": {
+          "type": "object",
+          "description": "The logged CarActions record from the same step."
+        }
+      }
+    }
+  }
+}

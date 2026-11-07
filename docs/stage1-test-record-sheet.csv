@@ -1,0 +1,2 @@
+date,case,design,environment,run,speed_m_per_s,cones_touched,stayed_in_lane,stop_past_last_cone_m,pass_fail,video,notes
+2026-10-05,T1,MPC (shipped MpcConfig defaults),simulation dry run,1,1.0,0,yes,-0.50,fail,docs/figures/stage1_T1.png,Stopped 0.5 m before the last cone pair: lane lost when the last cones leave the camera view (Task A7)

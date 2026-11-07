@@ -41,9 +41,9 @@ The nominal operator sequence for running this policy on the actual car is:
      respective button in Foxglove).
   4. Stop your policy code by requesting policy state 2, which publishes zeros.
 """
-
+import logging
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import math
 from numbers import Real
 import time
@@ -57,13 +57,37 @@ from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from rclpy.time import Time
 from rcl_interfaces.msg import ParameterDescriptor, SetParametersResult
+from builtin_interfaces.msg import Duration
+from geometry_msgs.msg import Point
 from sensor_msgs.msg import Imu, LaserScan
-from std_msgs.msg import Float32, Int8, String, UInt16
-from dream_interfaces.msg import ConeDetection, ConeDetections, DriveAndSteer
+from std_msgs.msg import ColorRGBA, Float32, Header, Int8, String, UInt16
+from visualization_msgs.msg import Marker, MarkerArray
+from dream_interfaces.msg import (ConeDetection, ConeDetections, DriveAndSteer,
+                                  FiducialDetections)
 from tf2_ros import Buffer, TransformException, TransformListener
 
+from policy.action_policy.avoidance import AvoidanceConfig
+from policy.action_policy.intersection import IntersectionConfig
+from policy.action_policy.intersection_navigator import IntersectionNavigatorConfig
+from policy.action_policy.mpc import MpcConfig
+from policy.action_policy.open_space import OpenSpaceConfig
+from policy.cone_filter.cone_filter import ConeFilterConfig
+from policy.control.control import ControlConfig
+from policy.data_logging.data_logging import (
+    DEFAULT_LOG_FOLDER,
+    DEFAULT_LOG_LEVEL_NAME,
+    setup_logging,
+    start_data_log,
+    validate_parameters, log_memory,
+)
 from policy.input_output import ConeColour, convert_observations, convert_actions
-from policy.policy_runner import run_movement_policy
+from policy.lane_detection.lane_detection import LaneDetectionConfig
+from policy.local_map.local_map import LocalMapConfig
+from policy.markers.markers import MarkerConfig
+from policy.memory import CarMemory
+from policy.obstacle_detection.obstacle_detection import ObstacleDetectionConfig
+from policy.policy_runner import MovementPolicy
+from policy.visualisation import COLOURS, LINE_WIDTH_M, TEXT_HEIGHT_M, StepDrawer
 
 # These values and the request/status topics match the previous AI4R policy.
 FSM_STATE_NOT_PUBLISHING_ACTIONS = 1
@@ -71,9 +95,17 @@ FSM_STATE_PUBLISHING_ZERO_ACTIONS = 2
 FSM_STATE_PUBLISHING_POLICY_ACTION = 3
 STATE_NAMES = {1: "Not publishing any actions", 2: "Publishing zero actions",
                3: "Publishing policy actions"}
-SENSORS = ("cone_detections", "lidar", "wheel_speed", "imu_orientation",
-           "imu_angular_velocity", "imu_specific_force")
-STAMPED_SENSORS = tuple(name for name in SENSORS if name != "wheel_speed")
+SENSORS = ("cone_detections", "fiducial_detections", "lidar_scan", "lidar_cartesian", "wheel_speed", "imu_orientation",
+           "imu_angular_velocity", "imu_specific_force", "rc_drive_and_steer")
+STAMPED_SENSORS = tuple(name for name in SENSORS if name not in ("wheel_speed", "rc_drive_and_steer"))
+FIDUCIAL_DICTIONARY_SIZES = {
+    **{f"DICT_{bits}X{bits}_{count}": count
+       for bits in (4, 5, 6, 7) for count in (50, 100, 250, 1000)},
+    "DICT_ARUCO_ORIGINAL": 1024,
+}
+
+# Custom constants
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -128,11 +160,69 @@ def rotate_vector(q, vector):
     return rotated[:3]
 
 
+def transform_position(translation, rotation, position):
+    values = (position.x, position.y, position.z)
+    offsets = (translation.x, translation.y, translation.z)
+    if not all(finite_number(v) for v in values + offsets):
+        raise ValueError("pose position or TF translation contains a nonfinite value")
+    rotated = quaternion_product(
+        quaternion_product(rotation, (*values, 0.0)), quaternion_inverse(rotation))
+    result = tuple(rotated[i] + offsets[i] for i in range(3))
+    if not all(finite_number(v) for v in result):
+        raise ValueError("transformed pose position is not finite")
+    return result
+
+
 def roll_pitch_yaw(q):
     x, y, z, w = q
     return (math.atan2(2*(w*x + y*z), 1 - 2*(x*x + y*y)),
             math.asin(max(-1.0, min(1.0, 2*(w*y - z*x)))),
             math.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z)))
+
+
+def visualisation_markers(layers, frame_id, stamp, lifetime_s):
+    """Converts a policy/visualisation.py drawing into markers, one namespace per layer.
+
+    The first marker deletes the previous drawing, so a layer that is now empty disappears.
+    """
+    header = Header(frame_id=frame_id, stamp=stamp)
+    lifetime = Duration(sec=int(lifetime_s), nanosec=int(lifetime_s % 1.0 * 1e9))
+    markers = [Marker(header=header, action=Marker.DELETEALL)]
+
+    def rgba(colour):
+        return ColorRGBA(r=float(colour[0]), g=float(colour[1]), b=float(colour[2]), a=float(colour[3]))
+
+    def add(namespace, marker_type, colour):
+        marker = Marker(header=header, ns=namespace, id=len(markers), type=marker_type, action=Marker.ADD,
+                        lifetime=lifetime, color=rgba(colour))
+        marker.pose.orientation.w = 1.0
+        markers.append(marker)
+        return marker
+
+    for name, layer in layers.items():
+        for line in layer.lines:
+            marker = add(name, Marker.LINE_STRIP, line.colour)
+            marker.scale.x = LINE_WIDTH_M
+            points = line.points + line.points[:1] if line.closed else line.points
+            marker.points = [Point(x=float(x), y=float(y), z=0.0) for x, y in points]
+        for diameter in sorted({sphere.diameter_m for sphere in layer.spheres}):
+            spheres = [sphere for sphere in layer.spheres if sphere.diameter_m == diameter]
+            marker = add(name, Marker.SPHERE_LIST, COLOURS["text"])
+            marker.scale.x = marker.scale.y = marker.scale.z = float(diameter)
+            marker.points = [Point(x=float(sphere.x), y=float(sphere.y), z=0.0) for sphere in spheres]
+            marker.colors = [rgba(sphere.colour) for sphere in spheres]
+        for box in layer.boxes:
+            marker = add(name, Marker.CUBE, box.colour)
+            marker.pose.position.x, marker.pose.position.y, marker.pose.position.z = map(float, box.position)
+            (marker.pose.orientation.x, marker.pose.orientation.y, marker.pose.orientation.z,
+             marker.pose.orientation.w) = map(float, box.orientation)
+            marker.scale.x, marker.scale.y, marker.scale.z = map(float, box.size)
+        for text in layer.texts:
+            marker = add(name, Marker.TEXT_VIEW_FACING, COLOURS["text"])
+            marker.pose.position.x, marker.pose.position.y, marker.pose.position.z = map(float, text.position)
+            marker.scale.z = TEXT_HEIGHT_M
+            marker.text = text.text
+    return MarkerArray(markers=markers)
 
 
 def wrap_angle(angle):
@@ -154,6 +244,11 @@ class PolicyNode(Node):
             "status_period_s": 0.5,
             "timestamp_tolerance_s": 0.05,
             "policy_frame_id": "base_link",
+            "logging.is_data_logging": False,
+            "logging.logging_folder": DEFAULT_LOG_FOLDER,
+            "logging.log_level": DEFAULT_LOG_LEVEL_NAME,
+            "logging.log_to_file": False,
+            "visualisation.publish_rate_hz": 10.0,
         }
         defaults.update({f"sensor_timeout_s.{name}": 0.5 for name in SENSORS})
         for name, default in defaults.items():
@@ -175,10 +270,20 @@ class PolicyNode(Node):
         self.status_period_s = self.get_parameter("status_period_s").value
         self.timestamp_tolerance_s = self.get_parameter("timestamp_tolerance_s").value
         self.policy_frame_id = self.get_parameter("policy_frame_id").value
+        self.visualisation_rate_hz = self.get_parameter("visualisation.publish_rate_hz").value
+        self.logging_params = validate_parameters(
+            self.get_parameter("logging.is_data_logging").value,
+            self.get_parameter("logging.logging_folder").value,
+            self.get_parameter("logging.log_level").value,
+            self.get_parameter("logging.log_to_file").value,
+        )
         self.sensor_timeout_s = {
             name: self.get_parameter(f"sensor_timeout_s.{name}").value for name in SENSORS}
         self._validate_parameters()
         self.add_on_set_parameters_callback(self._reject_clock_change)
+        setup_logging(self.logging_params)
+
+        self.memory = CarMemory()
 
         # TO ADD A STUDENT PARAMETER, follow these THREE steps:
         # 1. Declare it here, for example:
@@ -188,6 +293,60 @@ class PolicyNode(Node):
         # self.speed_kp = self.get_parameter('speed_kp').value
         # YAML alone does not declare a parameter. A value such as 0.2 is a
         # floating-point number; 0 is an integer, which is a different ROS type.
+
+        # Movement policy settings: see action_policy, mpc, open_space, cone_filter,
+        # control, lane_detection, obstacle_detection, avoidance, local_map, markers, intersection and
+        # intersection_navigator in
+        # ai4r_policy.yaml. MovementPolicy (policy/policy_runner.py) checks
+        # action_policy and how the settings fit together. MpcConfig
+        # (policy/action_policy/mpc.py), OpenSpaceConfig
+        # (policy/action_policy/open_space.py), ConeFilterConfig
+        # (policy/cone_filter/cone_filter.py), ControlConfig
+        # (policy/control/control.py), LaneDetectionConfig
+        # (policy/lane_detection/lane_detection.py), ObstacleDetectionConfig
+        # (policy/obstacle_detection/obstacle_detection.py), AvoidanceConfig
+        # (policy/action_policy/avoidance.py), LocalMapConfig
+        # (policy/local_map/local_map.py), MarkerConfig
+        # (policy/markers/markers.py), IntersectionNavigatorConfig
+        # (policy/action_policy/intersection_navigator.py) and IntersectionConfig
+        # (policy/action_policy/intersection.py) hold their defaults and check them.
+        self.declare_parameter("action_policy", "mpc", ParameterDescriptor(read_only=True))
+        settings = {}
+        for prefix, config_type in (
+                ("mpc", MpcConfig), ("open_space", OpenSpaceConfig), ("cone_filter", ConeFilterConfig),
+                ("control", ControlConfig), ("lane_detection", LaneDetectionConfig),
+                ("obstacle_detection", ObstacleDetectionConfig), ("avoidance", AvoidanceConfig),
+                ("local_map", LocalMapConfig), ("markers", MarkerConfig), ("intersection", IntersectionConfig),
+                ("intersection_navigator", IntersectionNavigatorConfig)):
+            defaults = asdict(config_type())
+            for name, default in defaults.items():
+                self.declare_parameter(f"{prefix}.{name}", default, ParameterDescriptor(read_only=True))
+            settings[prefix] = config_type(**{
+                name: self.get_parameter(f"{prefix}.{name}").value for name in defaults})
+        self.movement_policy = MovementPolicy(
+            settings["mpc"], settings["cone_filter"], settings["control"], settings["open_space"],
+            self.get_parameter("action_policy").value, lane_detection_config=settings["lane_detection"],
+            obstacle_detection_config=settings["obstacle_detection"], avoidance_config=settings["avoidance"],
+            local_map_config=settings["local_map"], marker_config=settings["markers"],
+            intersection_config=settings["intersection"], navigator_config=settings["intersection_navigator"])
+        navigator = settings["intersection_navigator"]
+        if navigator.enabled and settings["intersection"].enabled:
+            raise ValueError("intersection.enabled and intersection_navigator.enabled cannot both be true: both act "
+                             "on the same marker command")
+        if navigator.enabled and not {"cone_detections", "wheel_speed", "imu_angular_velocity",
+                                      "lidar_cartesian"}.issubset(self.required_sensors):
+            raise ValueError("intersection_navigator.enabled requires cones, wheel speed, gyro and Cartesian lidar in "
+                             "required_sensors")
+        if navigator.enabled and self.cone_empty_timeout_s < navigator.camera_empty_hold_s:
+            raise ValueError("cone_empty_timeout_s must cover intersection_navigator.camera_empty_hold_s when it is "
+                             "enabled")
+        # Every parameter value this node runs with, saved beside each drive data log
+        # (<stem>_config.json). Settings are startup-only, so reading them once is enough.
+        self.parameter_values = {
+            parameter.name: (parameter.value
+                             if isinstance(parameter.value, (bool, int, float, str, type(None)))
+                             else list(parameter.value))
+            for parameter in self.get_parameters(sorted(self.get_parameters_by_prefix("")))}
 
         self.fsm_state = FSM_STATE_PUBLISHING_ZERO_ACTIONS
         self.state_reason = "Startup: waiting for an explicit policy request"
@@ -212,13 +371,23 @@ class PolicyNode(Node):
         self.heading_publisher = self.create_publisher(Float32, "imu_heading_angle", 10)
         self.debug1_publisher = self.create_publisher(Float32, "debug1", 10)
         self.debug2_publisher = self.create_publisher(Float32, "debug2", 10)
+        # The policy's own lane, obstacles and plans for Foxglove (policy/visualisation.py), drawn after
+        # the actions of a step are published.
+        self.visualisation_publisher = self.create_publisher(MarkerArray, "policy_visualisation/markers", 10)
+        self.step_drawer = StepDrawer()
+        self.visualised_step = None
+        self._last_visualisation_at = -math.inf
 
         self.create_subscription(ConeDetections, "cone_detections",
                                  self.cone_detection_callback, reliable_one)
+        self.create_subscription(FiducialDetections, "fiducial_detections",
+                                 self.fiducial_detection_callback, reliable_one)
         self.create_subscription(LaserScan, "scan", self.lidar_callback, sensor_one)
         self.create_subscription(Float32, "wheel_speed_m_per_sec",
                                  self.wheel_speed_callback, reliable_one)
         self.create_subscription(Imu, "imu/data", self.imu_callback, imu_qos)
+        self.create_subscription(DriveAndSteer, "rc_drive_and_steer_normalized",
+                                 self.rc_callback, reliable_one)
         self.create_subscription(UInt16, "policy_fsm_transition_request",
                                  self.fsm_transition_request_callback, 10)
 
@@ -245,16 +414,20 @@ class PolicyNode(Node):
             f"{list(self.required_sensors)}; namespace: {self.get_namespace()}")
 
     def _validate_parameters(self):
-        if self.policy_update_mode not in ("cone_detection", "lidar", "timer"):
-            raise ValueError("policy_update_mode must be cone_detection, lidar, or timer")
+        if self.policy_update_mode not in ("cone_detection", "fiducial_detection", "lidar", "timer"):
+            raise ValueError(
+                "policy_update_mode must be cone_detection, fiducial_detection, lidar, or timer")
         required = self.required_sensors
         if not isinstance(required, (list, tuple)) or not all(isinstance(s, str) for s in required):
             raise ValueError("required_sensors must be a list of sensor names")
         if len(set(required)) != len(required) or any(s not in SENSORS for s in required):
             raise ValueError(f"required_sensors must contain unique names from {SENSORS}")
-        trigger = {"cone_detection": "cone_detections", "lidar": "lidar"}.get(self.policy_update_mode)
+        trigger = {"cone_detection": "cone_detections",
+                   "fiducial_detection": "fiducial_detections"}.get(self.policy_update_mode)
         if trigger is not None and trigger not in required:
             raise ValueError(f"{self.policy_update_mode} mode requires {trigger} in required_sensors")
+        if self.policy_update_mode == "lidar" and not {"lidar_scan", "lidar_cartesian"}.intersection(required):
+            raise ValueError("lidar mode requires lidar_scan or lidar_cartesian in required_sensors")
         positive = {"policy_update_rate_hz": self.policy_update_rate_hz,
                     "cone_empty_timeout_s": self.cone_empty_timeout_s,
                     "supervision_rate_hz": self.supervision_rate_hz,
@@ -270,6 +443,9 @@ class PolicyNode(Node):
             raise ValueError("timestamp_tolerance_s must be finite and nonnegative")
         if not valid_frame(self.policy_frame_id):
             raise ValueError("policy_frame_id must be a nonempty frame without whitespace or leading /")
+        if (not finite_number(self.visualisation_rate_hz) or self.visualisation_rate_hz < 0.0
+                or self.visualisation_rate_hz > 1e9):
+            raise ValueError("visualisation.publish_rate_hz must be finite, nonnegative and at most 1e9")
         if self.get_parameter("use_sim_time").value:
             raise ValueError("use_sim_time=true is unsupported for this live-robot policy")
 
@@ -318,6 +494,8 @@ class PolicyNode(Node):
 
     def _fresh(self, name, monotonic_now, ros_now_ns):
         observation = self.observations[name]
+        if name == "lidar_cartesian" and not self._fresh("lidar_scan", monotonic_now, ros_now_ns):
+            return False  # Derived points cannot outlive their matching raw scan.
         return (observation is not None
                 and self._age(observation, monotonic_now, ros_now_ns) < self.sensor_timeout_s[name])
 
@@ -345,6 +523,10 @@ class PolicyNode(Node):
         if msg.header.frame_id != self.policy_frame_id:
             self._warn("cone_frame", f"Cone frame must be {self.policy_frame_id}; got {msg.header.frame_id!r}")
             return
+        latency = msg.acquisition_to_publish_latency_s
+        if not finite_number(latency) or latency < 0.0:
+            self._warn("cone_invalid", "Ignoring cone batch with invalid acquisition-to-publication latency")
+            return
         # The detector already rejects bad depth. Validate the public message
         # at this boundary too, so malformed data does not refresh its watchdog.
         cones = []
@@ -357,10 +539,123 @@ class PolicyNode(Node):
                 self._warn("cone_invalid", "Ignoring cone batch with invalid position, colour, or confidence")
                 return
             cones.append((*point, cone.color, confidence))
-        if self._store("cone_detections", cones, self._stamp_ns(msg.header), now, ros_now):
+        value = {"detections": cones, "acquisition_to_publish_latency_s": float(latency)}
+        if self._store("cone_detections", value, self._stamp_ns(msg.header), now, ros_now):
             if cones:
                 self.last_nonempty_cones = self.observations["cone_detections"]
             if self.policy_update_mode == "cone_detection":
+                self.run_policy_step()
+
+    def fiducial_detection_callback(self, msg):
+        now, ros_now = self._times()
+        source_frame = msg.header.frame_id
+        dictionary_name = msg.dictionary_name
+        if not valid_frame(source_frame):
+            self._warn("fiducial_frame", "Fiducial batch has no valid source frame")
+            return
+        if dictionary_name not in FIDUCIAL_DICTIONARY_SIZES:
+            self._warn("fiducial_dictionary", "Fiducial batch has an invalid dictionary name")
+            return
+        dictionary_size = FIDUCIAL_DICTIONARY_SIZES[dictionary_name]
+
+        # Validate the whole camera-frame batch before looking up one transform
+        # at its acquisition time. A malformed member rejects the whole batch;
+        # repeated IDs are retained because association belongs to the student.
+        validated = []
+        for detection in msg.detections:
+            marker_id = detection.id
+            marker_size = detection.marker_size_m
+            pose_valid = detection.pose_valid
+            corners = tuple((corner.u, corner.v) for corner in detection.corners)
+            error = detection.reprojection_error_px
+            if (not isinstance(marker_id, int) or isinstance(marker_id, bool)
+                    or not 0 <= marker_id < dictionary_size
+                    or not finite_number(marker_size) or marker_size <= 0.0
+                    or len(corners) != 4
+                    or not all(finite_number(value) for corner in corners for value in corner)
+                    or not isinstance(pose_valid, bool)
+                    or not isinstance(error, Real) or isinstance(error, bool)
+                    or math.isinf(error) or (math.isfinite(error) and error < 0.0)):
+                self._warn("fiducial_invalid", "Ignoring fiducial batch with invalid marker data")
+                return
+            position = detection.pose.position
+            orientation = detection.pose.orientation
+            if pose_valid:
+                try:
+                    camera_orientation = quaternion_xyzw(orientation)
+                except ValueError as exc:
+                    self._warn("fiducial_invalid", f"Ignoring fiducial batch with invalid pose: {exc}")
+                    return
+                supplied_norm = math.hypot(orientation.x, orientation.y, orientation.z, orientation.w)
+                if (not math.isclose(supplied_norm, 1.0, rel_tol=0.0, abs_tol=1e-3)
+                        or not all(finite_number(v) for v in
+                                   (position.x, position.y, position.z))
+                        or not math.isfinite(error)):
+                    self._warn("fiducial_invalid", "Ignoring fiducial batch with invalid valid-pose data")
+                    return
+            else:
+                camera_orientation = None
+                placeholder = (position.x, position.y, position.z,
+                               orientation.x, orientation.y, orientation.z, orientation.w)
+                if (not all(finite_number(v) for v in placeholder)
+                        or placeholder != (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)):
+                    self._warn("fiducial_invalid", "Ignoring invalid-pose marker without its placeholder pose")
+                    return
+            validated.append((marker_id, marker_size, corners, pose_valid,
+                              position, camera_orientation, float(error)))
+
+        stamp_ns = self._stamp_ns(msg.header)
+        try:
+            if source_frame == self.policy_frame_id:
+                translation = None
+                policy_from_camera = (0.0, 0.0, 0.0, 1.0)
+            else:
+                # Nonblocking and exactly one lookup per batch at acquisition.
+                transform = self.tf_buffer.lookup_transform(
+                    self.policy_frame_id, source_frame, Time.from_msg(msg.header.stamp))
+                translation = transform.transform.translation
+                policy_from_camera = quaternion_xyzw(transform.transform.rotation)
+                if not all(finite_number(v) for v in
+                           (translation.x, translation.y, translation.z)):
+                    raise ValueError("TF translation contains a nonfinite value")
+        except (TransformException, ValueError) as exc:
+            self._warn("fiducial_tf", f"Fiducial camera transform unavailable: {exc}")
+            return
+
+        records = []
+        for marker_id, marker_size, corners, pose_valid, position, camera_orientation, error in validated:
+            if pose_valid:
+                if translation is None:
+                    policy_position = (position.x, position.y, position.z)
+                else:
+                    try:
+                        policy_position = transform_position(
+                            translation, policy_from_camera, position)
+                    except ValueError as exc:
+                        # Finite inputs can still overflow during the transform.
+                        # Reject the whole batch without refreshing its watchdog.
+                        self._warn("fiducial_invalid",
+                                   f"Ignoring fiducial batch with invalid transformed pose: {exc}")
+                        return
+                policy_orientation = quaternion_product(policy_from_camera, camera_orientation)
+                policy_orientation = tuple(
+                    value / math.hypot(*policy_orientation) for value in policy_orientation)
+            else:
+                policy_position = None
+                policy_orientation = None
+            records.append({
+                "id": marker_id,
+                "marker_size_m": marker_size,
+                "corners": corners,
+                "pose_valid": pose_valid,
+                "position_xyz": policy_position,
+                "orientation_xyzw": policy_orientation,
+                "reprojection_error_px": error,
+            })
+        value = {"dictionary_name": dictionary_name, "source_frame_id": source_frame,
+                 "detections": records}
+        if self._store("fiducial_detections", value, stamp_ns, now, ros_now):
+            if self.policy_update_mode == "fiducial_detection":
                 self.run_policy_step()
 
     def lidar_callback(self, msg):
@@ -384,9 +679,50 @@ class PolicyNode(Node):
                 "angle_max": msg.angle_max, "angle_increment": msg.angle_increment,
                 "time_increment": msg.time_increment, "scan_time": msg.scan_time,
                 "range_min": msg.range_min, "range_max": msg.range_max}
-        if self._store("lidar", scan, self._stamp_ns(msg.header), now, ros_now):
-            if self.policy_update_mode == "lidar":
-                self.run_policy_step()
+        stamp_ns = self._stamp_ns(msg.header)
+        if not self._store("lidar_scan", scan, stamp_ns, now, ros_now):
+            return
+        # One executor thread: finish both representations before any policy
+        # step. A new accepted scan always invalidates the old Cartesian result;
+        # failed conversion must never pair old indices with new raw ranges.
+        self.observations["lidar_cartesian"] = None
+        try:
+            cartesian = self._convert_lidar_scan(scan, msg.header.stamp)
+            self._store("lidar_cartesian", cartesian, stamp_ns, now, ros_now)
+        except (TransformException, ValueError, OverflowError) as exc:
+            self._warn("lidar_cartesian", f"Lidar Cartesian conversion unavailable: {exc}")
+        if self.policy_update_mode == "lidar":
+            self.run_policy_step()
+
+    def _convert_lidar_scan(self, scan, stamp):
+        """Convert one scan with a single nonblocking acquisition-time TF lookup."""
+        offsets = (0.0, 0.0, 0.0)
+        x_axis, y_axis = (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)
+        if scan["frame_id"] != self.policy_frame_id:
+            transform = self.tf_buffer.lookup_transform(
+                self.policy_frame_id, scan["frame_id"], Time.from_msg(stamp))
+            translation = transform.transform.translation
+            x, y, z, w = quaternion_xyzw(transform.transform.rotation)
+            offsets = (translation.x, translation.y, translation.z)
+            if not all(finite_number(v) for v in offsets):
+                raise ValueError("TF translation contains a nonfinite value")
+            # The scan plane has z=0. Rotate its two basis vectors once, then
+            # reuse them for every ray instead of repeating quaternion work.
+            x_axis = (1 - 2*(y*y + z*z), 2*(x*y + w*z), 2*(x*z - w*y))
+            y_axis = (2*(x*y - w*z), 1 - 2*(x*x + z*z), 2*(y*z + w*x))
+        points, indices = [], []
+        for index, distance in enumerate(scan["ranges"]):
+            if not finite_number(distance) or not scan["range_min"] <= distance <= scan["range_max"]:
+                continue
+            angle = scan["angle_min"] + index * scan["angle_increment"]
+            local_x, local_y = distance * math.cos(angle), distance * math.sin(angle)
+            point = tuple(offsets[axis] + local_x*x_axis[axis] + local_y*y_axis[axis]
+                          for axis in range(3))
+            if not all(math.isfinite(v) for v in point):
+                raise ValueError("Cartesian lidar point is not finite")
+            points.append(point)
+            indices.append(index)
+        return {"points_xyz": points, "scan_indices": indices, "frame_id": self.policy_frame_id}
 
     def wheel_speed_callback(self, msg):
         now, ros_now = self._times()
@@ -394,6 +730,17 @@ class PolicyNode(Node):
             self._store("wheel_speed", msg.data, None, now, ros_now)
         else:
             self._warn("wheel_invalid", "Ignoring invalid unsigned wheel-speed measurement")
+
+    def rc_callback(self, msg):
+        now, ros_now = self._times()
+        # The vehicle interface only publishes the sticks while both RC channels
+        # are GOOD, so a missing sample means no usable RC, never centred sticks.
+        values = (msg.drive, msg.steer)
+        if (msg.units == DriveAndSteer.UNITS_NORMALIZED
+                and all(finite_number(v) and -1.0 <= v <= 1.0 for v in values)):
+            self._store("rc_drive_and_steer", values, None, now, ros_now)
+        else:
+            self._warn("rc_invalid", "Ignoring RC sticks that are not finite normalized values")
 
     def imu_callback(self, msg):
         now, ros_now = self._times()
@@ -416,7 +763,7 @@ class PolicyNode(Node):
         # A partial IMU message may contain gyro but no orientation. Covariance
         # [0] == -1 marks an ABSENT field; its numeric zeros are not measurements.
         fields = (("imu_orientation", msg.orientation_covariance, msg.orientation),
-                  ("imu_angular_velocity", msg.angular_velocity_covariance, msg.ang_velocity),
+                  ("imu_angular_velocity", msg.angular_velocity_covariance, msg.angular_velocity),
                   ("imu_specific_force", msg.linear_acceleration_covariance, msg.linear_acceleration))
         for name, covariance, measurement in fields:
             if covariance[0] == -1.0:
@@ -491,6 +838,23 @@ class PolicyNode(Node):
             self.debug1_publisher.publish(Float32(data=float(debug1)))
         if debug2 is not None:
             self.debug2_publisher.publish(Float32(data=float(debug2)))
+        self._publish_visualisation(now)
+
+    def _publish_visualisation(self, now):
+        # After the actions, so drawing never delays them, and at most visualisation.publish_rate_hz.
+        # A drawing failure is only reported: it never stops the policy.
+        step, self.visualised_step = self.visualised_step, None
+        if (step is None or self.visualisation_rate_hz <= 0.0
+                or now - self._last_visualisation_at < 1.0 / self.visualisation_rate_hz):
+            return
+        self._last_visualisation_at = now
+        try:
+            layers = self.step_drawer.draw(self.movement_policy, *step)
+            self.visualisation_publisher.publish(visualisation_markers(
+                layers, self.policy_frame_id, self.get_clock().now().to_msg(),
+                max(0.5, 2.0 / self.visualisation_rate_hz)))
+        except Exception:
+            self._warn("visualisation", "Policy visualisation failed:\n" + traceback.format_exc())
 
     def calculate_policy_actions(self, observations, sensor_age_s, sensor_stamp_ns,
                                  dt, policy_elapsed_s, is_first_policy_step):
@@ -498,7 +862,7 @@ class PolicyNode(Node):
         STUDENT STARTING POINT
 
         This function:
-        > Calculate one action from the most recent observations.
+        > Calculates one action from the most recent observations.
         > Is called repeatedly at the specified frequency (hence why it is important
           that you do NOT block this function with sleep or while loops or similar).
         > Is called only when this policy_node is in the publishing-policy state and
@@ -506,18 +870,44 @@ class PolicyNode(Node):
         > Does NOT need to publish ROS messages or manage the state machine itself
           (that is all taken care of in other functions).
         """
-        cone_data_available = observations["cone_detections"] is not None
-        cones = observations["cone_detections"] or []
+
+        # CONE DETECTOR OBSERVATIONS: EXTRACT INTO LOCAL VARIABLES
+        cone_batch = observations["cone_detections"]
+        cone_data_available = cone_batch is not None
+        cones = [] if cone_batch is None else cone_batch["detections"]
+        cone_acquisition_to_publish_latency_s = (None if cone_batch is None else
+                                                 cone_batch["acquisition_to_publish_latency_s"])
+        cone_measurement_age_s = sensor_age_s["cone_detections"]
         num_cones = len(cones)
         x_coords = [cone[0] for cone in cones]
         y_coords = [cone[1] for cone in cones]
         z_coords = [cone[2] for cone in cones]
         cone_colour = [cone[3] for cone in cones]
         cone_confidence = [cone[4] for cone in cones]
+
+        # FIDUCIAL MARKER OBSERVATIONS: EXTRACT INTO LOCAL VARIABLES
+        fiducial_data = observations["fiducial_detections"]
+        fiducials_available = fiducial_data is not None
+        fiducial_dictionary_name = (None if fiducial_data is None
+                                    else fiducial_data["dictionary_name"])
+        fiducial_source_frame_id = (None if fiducial_data is None
+                                    else fiducial_data["source_frame_id"])
+        fiducials = [] if fiducial_data is None else fiducial_data["detections"]
+
+        # WHEEL SPEED OBSERVATION: EXTRACT INTO LOCAL VARIABLE
         wheel_speed_in_meters_per_second = observations["wheel_speed"]
-        lidar = observations["lidar"]
-        lidar_ranges = [] if lidar is None else lidar["ranges"]
-        lidar_intensities = [] if lidar is None else lidar["intensities"]
+
+        # 2D LIDAR SCAN OBSERVATIONS: EXTRACT INTO LOCAL VARIABLES
+        lidar_scan = observations["lidar_scan"]
+        lidar_scan_available = lidar_scan is not None
+        lidar_ranges = [] if lidar_scan is None else lidar_scan["ranges"]
+        lidar_intensities = [] if lidar_scan is None else lidar_scan["intensities"]
+        lidar_cartesian = observations["lidar_cartesian"]
+        lidar_cartesian_available = lidar_cartesian is not None
+        lidar_points_xyz = [] if lidar_cartesian is None else lidar_cartesian["points_xyz"]
+        lidar_scan_indices = [] if lidar_cartesian is None else lidar_cartesian["scan_indices"]
+
+        # IMU OBSERVATIONS: EXTRACT INTO LOCAL VARIABLES
         orientation_xyzw = observations["imu_orientation"]
         roll_angle_in_radians = pitch_angle_in_radians = heading_angle_in_radians = None
         if orientation_xyzw is not None:
@@ -527,12 +917,20 @@ class PolicyNode(Node):
         angular_velocity_rad_per_sec = observations["imu_angular_velocity"]
         specific_force_m_per_sec_squared = observations["imu_specific_force"]
 
+        # RC STICK OBSERVATIONS: EXTRACT INTO LOCAL VARIABLES
+        rc_drive_and_steer = observations["rc_drive_and_steer"]
+        rc_available = rc_drive_and_steer is not None
+        rc_drive_normalized = None if rc_drive_and_steer is None else rc_drive_and_steer[0]
+        rc_steer_normalized = None if rc_drive_and_steer is None else rc_drive_and_steer[1]
+
         # ===============================
         # EXPLANATION OF THE OBSERVATIONS
         # ===============================
-        # OBSERVATIONS (all lengths/angles use metres/radians):
-        # - x_coords/y_coords/z_coords and cone_colour/confidence are parallel
-        #   lists.
+        # NOTE: All lengths use meters and all angles use radians
+        #
+        # CONE DETECTOR OBSERVATIONS:
+        # - LOCAL VARIABLE NAMES: x_coords/y_coords/z_coords and cone_colour/confidence
+        #   - These are all parallel lists.
         #   - Index i describes one cone.
         #   - In the normal base_link frame, +x is forwards, +y left, +z upwards
         #     from nominal ground directly below the vehicle CG.
@@ -545,46 +943,164 @@ class PolicyNode(Node):
         #   - If cone detections are configured to be optional for this policy_node
         #     and no fresh cone detection message is available, then num_cones is 0
         #     and cone_data_available is False.
+        # - LOCAL VARIABLE NAME: cone_acquisition_to_publish_latency_s
+        #   - This is the fixed time from camera acquisition (end-of-exposure for OAK-D)
+        #     to immediately before the detector called publish().
+        #   - Exposure duration is excluded: this is not exposure-start-to-publication
+        #     latency.
+        #   - It includes device/host processing and queues, excludes downstream transport,
+        #     and is None when no fresh cone batch is available.
+        # - LOCAL VARIABLE NAME: cone_measurement_age_s
+        #   - This is how old the acquisition is NOW, including transport and time spent
+        #     waiting for this policy step.
+        #   - It uses the same end-of-exposure reference for OAK-D.
+        #   - Use this for measurement age; DO NOT add the publication latency again.
+        #   - Age remains available for a stale batch, and is None before any batch.
+        #   - Empty batches have timing too; zero cones does not mean zero latency.
         #
-        # - Wheel speed is UNSIGNED.
-        #   - It does not tell you forward versus reverse.
-        #   - The vehicle's Traxxas node estimates wheel speed from sparse encoder
-        #     periods, so low speeds take longer to measure.
+        # WHEEL SPEED OBSERVATION
+        # - LOCAL VARIABLE NAME: wheel_speed_in_meters_per_second
+        #   - This is the wheel speed estimate based on the measurement of the
+        #     angular speed of the gearbox.
+        #   - The vehicle's Traxxas node performs the calculations to estimate wheel
+        #     speed from sparse encoder periods.
+        #   - Sparse encoder periods means that low speeds take longer to measure.
+        #   - Wheel speed is UNSIGNED, i.e., it does not tell you forward versus reverse.
         #   - The encoder_timeout_seconds for the vehicle's Traxxas node controls
-        #     when it concludes that no encoder ticks means wheel stopped.
-        #   - The sensor timeout in this policy_node instead detects missing
-        #     wheel speed telemetry.
+        #     when it concludes that no encoder ticks means "wheels are stopped".
+        #   - The sensor timeout here in this policy_node detects missing wheel speed
+        #     telemetry.
         #   - None is not a measured zero.
         #
-        # - lidar_ranges[i] is measured at angle_min + i * angle_increment in
-        #   lidar['frame_id'].
+        # FIDUCIAL MARKER OBSERVATIONS
+        # - LOCAL VARIABLE NAME: fiducials
+        #   - This is a list of marker dictionaries. Each dictionary has:
+        #     - id (int)
+        #     - marker_size_m (float)
+        #     - corners (four canonical-order (u,v) pixel pairs)
+        #     - pose_valid (bool)
+        #     - position_xyz (tuples in policy_frame_id; or None when pose_valid is false)
+        #     - orientation_xyzw (tuples in policy_frame_id; or None when pose_valid is false)
+        #     - reprojection_error_px (float; NaN means unavailable).
+        # - LOCAL VARIABLE NAME: fiducial_dictionary_name
+        #   - This scopes every marker ID in this batch.
+        # - LOCAL VARIABLE NAME: fiducial_source_frame_id
+        #   - This is the camera optical frame for corners; corners remain source-image pixels
+        #     after the poses are transformed.
+        # - ADDITIONAL NOTES:
+        #   - Repeated IDs remain separate records in their received order.
+        #   - An accepted empty batch gives fiducials == [] and fiducials_available True.
+        #     It is fresh data and can trigger a step; marker absence has no automatic
+        #     timeout or remembered pose.
+        #   - Optional missing/stale data gives fiducials_available False.
+        #
+        # 2D LIDAR SCAN OBSERVATIONS
+        # - LOCAL VARIABLE NAME: lidar_scan_available
+        #   - This is False when the raw scan is missing/stale.
+        # - LOCAL VARIABLE NAME: lidar_ranges[i]
+        #   - This is the distance measured at angle_min + i * angle_increment.
+        #   - It is measured in the frame: lidar_scan['frame_id'] (which is the
+        #     lidar's original frame).
         #   - The raw scan and its origin are unchanged by the base_link
         #     ground-origin convention.
-        #   - The lidar data is NOT rotated, it is in the frame of the lidar
-        #     device.
-        #   - Lidar also contains angle_min/max/increment, time_increment,
-        #     scan_time, range_min/max, and intensities.
+        #   - The lidar data is NOT rotated, it is in the frame of the lidar device.
+        # - LOCAL VARIABLE NAME: lidar_intensities[i]
+        #   - When supplied, this is matched to the i-th entry in lidar_ranges.
+        #   - The list is empty if the lidar supplies no intensities; check before indexing.
+        #   - This is the intensity of the ray when received back at the detector.
+        #   - Intensity is device-specific; it is not a calibrated accuracy estimate.
+        # - LOCAL VARIABLE NAME: lidar_scan
+        #   - This is the dictionary with all details of the lidar scan.
+        #   - Most relevant is that it contains:
+        #     - angle_min / angle_max / angle_increment
+        #     - time_increment
+        #     - scan_time
+        #     - range_min / range_max
         #   - You should retain only finite rays between range_min and range_max
         #     when your algorithm needs to detect real hits.
         #   - Infinity can mean no return; NaN is not a zero-distance obstacle.
+        # - LOCAL VARIABLE NAME: lidar_cartesian_available
+        #   - This is False when the conversion of the lidar scan ranges into
+        #     cartesian coordinates is missing/stale.
+        #   - Hence, this distinguishes unavailable conversion from a fresh scan
+        #     with no usable returns (True with an empty list).
+        # - LOCAL VARIABLE NAME: lidar_points_xyz
+        #   - This is a list of (x, y, z) tuples in metres in policy_frame_id,
+        #     which is normally body x forward, y left, z up.
+        #   - Only finite returns within the scan's inclusive range limits are
+        #     included. Every tuple is a usable point; there are no placeholders.
+        # - LOCAL VARIABLE NAME: lidar_scan_indices[j]
+        #   - This is matched to the length of lidar_points_xyz
+        #   - This is the original ray index for point j, hence the original range
+        #     can be extracted as: lidar_ranges[lidar_scan_indices[j]]
+        # - ADDITIONAL NOTES:
+        #   - Both forms are prepared once per accepted scan, before a policy
+        #     update. Conversion is always enabled, including for radial-only
+        #     policies. Use either representation or both in your code below.
+        #   - Edit config/lidar_mount.yaml to change the mounting pose, then run
+        #     dream runtime restart rplidar_c1. This affects Cartesian points;
+        #     the raw scan stays in its original lidar frame.
+        #   - Cartesian points always match the latest accepted raw scan. If
+        #     its transform/conversion fails, raw data remains available and the
+        #     old Cartesian result is discarded immediately.
+        #   - Require lidar_scan and/or lidar_cartesian in required_sensors to
+        #     stop driving when the data your policy uses is unavailable.
+        #     Cartesian data expires at either representation's timeout.
+        #   - The scan stamp is the first ray's acquisition time.
+        #   - One mounting transform is used for the whole scan; points have no
+        #     per-ray motion correction or IMU levelling.
+        #   - The scan's timing fields are retained.
         #
-        # - IMU quaternion/roll/pitch/vectors are in the policy body frame after
-        #   the external mounting TF is applied.
+        # IMU OBSERVATIONS:
+        # - LOCAL VARIABLE NAME: orientation_xyzw
+        #   - This is the orientation quaternion as an (x, y, z, w) tuple, or None.
+        # - LOCAL VARIABLE NAMES: roll_angle_in_radians, pitch_angle_in_radians
+        #   - A +x roll is forwards-axis rotation (i.e., car body tilts to the right).
+        #   - A +y pitch is left-axis rotation (i.e., car nose dips down).
+        # - LOCAL VARIABLE NAME: heading_angle_in_radians
+        #   - This is the yaw of the car.
+        #   - This is a relative heading that is re-zeroed ONLY when entering policy state.
+        #   - It is wrapped to [-pi, pi].
+        # - LOCAL VARIABLE NAME: angular_velocity_rad_per_sec
+        #   - This is the 3-axis gyroscope measurement, i.e., angular velocity about
+        #     each axis.
+        # - LOCAL VARIABLE NAME: specific_force_m_per_sec_squared
+        #   - This is the 3-axis accelerometer measurement, i.e., linear acceleration
+        #     along each axis.
+        #   - Specific force means that it INCLUDES GRAVITY; hence it is NOT pure
+        #     driving acceleration.
+        # - ADDITIONAL NOTES:
+        #   - IMU quaternion/roll/pitch/vectors are in the policy body frame after
+        #     the external mounting TF is applied.
+        #   - Angles can drift.
         #   - Absolute orientation uses magnetic ENU (east/north/up).
-        #   - Relative heading is re-zeroed ONLY when entering policy state, and
-        #     wrapped to [-pi, pi]. Angles can drift.
-        #   - A +x roll is forwards-axis rotation.
-        #   - A +y pitch is left-axis rotation.
-        #   - Specific force INCLUDES GRAVITY; it is not pure driving acceleration.
-        #   - Partial messages are normal and each IMU field may independently be
-        #     None.
+        #   - Partial messages are normal and each IMU field may independently be None.
         #
-        # - sensor_age_s[name] is the age in seconds of the last accepted sample,
-        #   or None if none exists.
-        #   - sensor_stamp_ns holds its ROS stamp in ns (None for wheel speed).
+        # RC STICK OBSERVATIONS
+        # - LOCAL VARIABLE NAMES: rc_drive_normalized, rc_steer_normalized
+        #   - These are the operator's remote control sticks, normalized to [-1, 1]
+        #     with zero at neutral/centre, as read by the vehicle interface.
+        #   - Positive drive is forwards. Steering should turn the wheels the same
+        #     way as the same steering_action; check the direction on a stand.
+        #   - While the vehicle is Enabled, the POLICY drives the car: the sticks do
+        #     NOT move it, so your policy can use them as the operator's request.
+        #   - Independently of this policy, holding the RC drive below the vehicle's
+        #     stop threshold (rc_stop_threshold_us in traxxas_vehicle_interface.yaml,
+        #     -0.2 by default) disables the vehicle. That is the operator's stop.
+        #   - The sticks are only published while both RC channels are GOOD, so
+        #     rc_available False (both values None) means no usable RC, NOT centred
+        #     sticks.
+        #
+        # OTHER RELEVANT INFORMATION:
+        # - LOCAL VARIABLE NAME: sensor_age_s[name]
+        #   - This is the age in seconds of the last accepted sample of that "name"
+        #     sensor; or None if none exists.
+        # - LOCAL VARIABLE NAME: sensor_stamp_ns[name]
+        #   - This holds the respective ROS stamp in ns (None for wheel speed).
         #   - If an optional observations is expired, then its value is None.
         #
-        # - dt is ACTUAL monotonic seconds between policy steps.
+        # - LOCAL VARIABLE NAME: dt
+        #   - This is the ACTUAL monotonic seconds between policy steps.
         #   - It is 0.0 on the first step.
         #   - Hence, if you use dt in your policy code, then you need to have a
         #     guard in your code to avoid division by dt.
@@ -592,24 +1108,37 @@ class PolicyNode(Node):
         #     sensor sample across several steps. In other words, a policy step is
         #     not necessarily a new measurement.
         #
-        # - policy_elapsed_s is seconds since entering policy state.
-        #   - The is_first_policy_step flag allows you reset an integrator (or similar)
-        #     once per run.
+        # - LOCAL VARIABLE NAME: policy_elapsed_s
+        #   - This is the time (in seconds) since entering policy state.
+        #
+        # - LOCAL VARIABLE NAME: is_first_policy_step
+        #   - This flag allows you reset an integrator (or similar) once per run.
 
         # ===============================
         # EXPLANATION OF THE ACTIONS
         # ===============================
         # ACTIONS are NORMALIZED values in [-1, 1]:
-        # - drive_action requests motor effort (ESC), NOT speed in m/s.
         #
-        # - steering_action is the calibrated steering interval; zero is centre.
+        # - LOCAL VARIABLE NAME: drive_action
+        #   - This requests motor effort (ESC), NOT speed in m/s.
         #
-        # - camera_pan_action is an independent servo target, NOT an angle in
-        #   radians. None means send no target and retain its current position.
-        #   It can move even while vehicle drive is disabled. Zero means centre.
+        # - LOCAL VARIABLE NAME: steering_action
+        #   - This requests steering position; zero is centre.
+        #   - This is NOT an angle in radians; it is a request normalized
+        #     over the configured steering interval, with steering trim applied.
+        #
+        # - LOCAL VARIABLE NAME: camera_pan_action
+        #   - This is the pan-servo target position.
+        #   - This is NOT an angle in radians; it is a request normalized
+        #     over the full pan-servo range available.
+        #   - None means send no target and retain its current position.
+        #   - It can move even while vehicle drive is disabled.
+        #   - Zero means centre.
         #
         # Values outside [-1,1] are clipped. NaN/infinity/programming errors stop
         # the policy. Invalid data never becomes a motor command.
+
+        # Initialize drive and steering to zero; None holds the camera pan position.
         drive_action = 0.0
         steering_action = 0.0
         camera_pan_action = None
@@ -644,11 +1173,17 @@ class PolicyNode(Node):
         #                   if cone_colour[i] == ConeDetection.COLOR_YELLOW]
         #
         # Example: retain only usable lidar returns:
-        # if lidar is not None:
-        #     hits = [(lidar['angle_min'] + i * lidar['angle_increment'], distance)
+        # if lidar_scan_available:
+        #     hits = [(lidar_scan['angle_min'] + i * lidar_scan['angle_increment'], distance)
         #             for i, distance in enumerate(lidar_ranges)
         #             if math.isfinite(distance)
-        #             and lidar['range_min'] <= distance <= lidar['range_max']]
+        #             and lidar_scan['range_min'] <= distance <= lidar_scan['range_max']]
+        #
+        # Example: inspect body-frame points and their original ranges:
+        # if lidar_cartesian_available:
+        #     for (x, y, z), ray_index in zip(lidar_points_xyz, lidar_scan_indices):
+        #         distance_from_lidar = lidar_ranges[ray_index]
+        #         # Your algorithm can use x/y/z, distance_from_lidar, or both.
 
         colour_converter = {
             ConeDetection.COLOR_YELLOW: ConeColour.YELLOW,
@@ -663,21 +1198,33 @@ class PolicyNode(Node):
             z_coords=z_coords,
             cone_colour=[colour_converter[colour] for colour in cone_colour],
             cone_confidence=cone_confidence,
+            cone_acquisition_to_publish_latency_s=cone_acquisition_to_publish_latency_s,
+            fiducials_available=fiducials_available,
+            fiducial_dictionary_name=fiducial_dictionary_name,
+            fiducial_source_frame_id=fiducial_source_frame_id,
+            fiducials=fiducials,
             wheel_speed_in_meters_per_second=wheel_speed_in_meters_per_second,
-            lidar=lidar,
+            lidar_scan=lidar_scan,
+            lidar_cartesian=lidar_cartesian,
             roll_angle_in_radians=roll_angle_in_radians,
             pitch_angle_in_radians=pitch_angle_in_radians,
             heading_angle_in_radians=heading_angle_in_radians,
             angular_velocity_rad_per_sec=angular_velocity_rad_per_sec,
             specific_force_m_per_sec_squared=specific_force_m_per_sec_squared,
+            rc_drive_and_steer=rc_drive_and_steer,
             sensor_age_s=sensor_age_s,
             sensor_stamp_ns=sensor_stamp_ns,
             dt=dt,
             policy_elapsed_s=policy_elapsed_s,
             is_first_policy_step=is_first_policy_step,
+            logging_params=self.logging_params,
         )
-        actions = run_movement_policy(observations)
-        drive_action, steering_action, camera_pan_action, debug1, debug2 = convert_actions(actions)
+        log_memory(self.memory, self.logging_params)
+        actions = self.movement_policy.step(observations, self.memory)
+        drive_action, steering_action, camera_pan_action, debug1, debug2 = convert_actions(actions, self.logging_params)
+        self.memory.step()
+        # Drawn on policy_visualisation/markers once the actions are published
+        self.visualised_step = (observations, actions)
 
         # =====================================
         # END OF: INSERT POLICY CODE ABOVE HERE
@@ -709,9 +1256,21 @@ class PolicyNode(Node):
             self.previous_policy_step_at = None
         self._change_state(requested, "Operator request")
 
+    def _state_name(self, state) -> str:
+        if state == FSM_STATE_PUBLISHING_POLICY_ACTION:
+            return "policy actions"
+        if state == FSM_STATE_PUBLISHING_ZERO_ACTIONS:
+            return "zero actions"
+        if state == FSM_STATE_NOT_PUBLISHING_ACTIONS:
+            return "not publishing actions"
+        return "unknown"
+
     def _change_state(self, state, reason):
         self.fsm_state = state
         self.state_reason = reason
+        _LOGGER.info("Changing state to %s", self._state_name(state))
+        if state == FSM_STATE_PUBLISHING_POLICY_ACTION:
+            self.logging_params = start_data_log(self.logging_params, self.parameter_values)
         if state == FSM_STATE_PUBLISHING_ZERO_ACTIONS:
             self.publish_zero_actions()
         self.get_logger().info(f"{STATE_NAMES[state]}: {reason}")

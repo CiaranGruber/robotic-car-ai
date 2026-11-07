@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scenario_description_schema.json",
+  "title": "Scenario description",
+  "description": "Optional names and description used to convert one logged observations/actions pair into a scenario. Every field is optional; the converter fills gaps and checks the result.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "input_name": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Stem of the logged pair, such as messy_cone_test. Not a filename."
+      },
+      "output_name": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Scenario filename stem. The file is this value with .json appended."
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Display name stored in the scenario."
+      },
+      "description": {
+        "type": "string",
+        "description": "Description stored in the scenario. An empty string means no description."
+      }
+    }
+  }
+}
