@@ -35,7 +35,7 @@ CARDS = [
      ["4 car sessions, 20 Oct–2 Nov (cars 20, 21, 13, 14): lane shifts, 90° turns, obstacles",
       "Made lane shifts visible (clearance 0.40 -> 0.28 m) and fixed the ArUco camera feed (--aruco)",
       "Phantom obstacles from marker stands and cones: 29% -> 4% of runs, real-box stops kept",
-      "Left 90° turns failed on the car: traced to the steering limit; 0/40 -> 39/40 in sim"],
+      "Left 90° turns failed on the car: traced to the steering limit; 2/40 -> 39/40 in sim"],
      "slide_left_turn.png", ("Turns + obstacles: sim only, car test pending", AMBER)),
 ]
 

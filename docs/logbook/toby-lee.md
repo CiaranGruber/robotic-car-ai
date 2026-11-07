@@ -174,8 +174,9 @@ the far row. After moving 0.15 m to the outside (a hook turn), one does.*
 ### 3.4 Reproducing the car's failure: "right turns work, left turns don't" (1–2 Nov)
 
 - **Question:** Yuhao saw this on the car. Was it the code or the car?
-- **Method:** I ran his exact commit `bf5e08c` in the marker simulation with car 20's left limit. It failed every
-  left case (0 of 8) and passed every right case (8 of 8), the same as the car.
+- **Method:** I ran his exact commit `bf5e08c` in the marker simulation with car 20's left reach, over 10 cases and
+  10 seeds. Left turns passed 2 of 40 (2 of 20 in 1 m roads, 0 of 20 in 0.8 m roads) and right turns 35 of 40, the
+  same pattern as the car. With marker stands added to the lidar, left turns passed 0 of 40 and right turns 40 of 40.
 - **Cause:** a 0.48 1/m left limit makes the arc 2.08 m. That has about 2 cm of room in a 1 m crossing and none in
   0.8 m, so the car either stops ("no clear start") or swings into the cones.
 
@@ -188,7 +189,7 @@ the far row. After moving 0.15 m to the outside (a hook turn), one does.*
   - Lookahead 0.8 m. The stronger steering made the move-aside before a right turn swing too sharply, which in turn
     made right turns clip cones.
   - Phantom-obstacle filters (Section 4.4).
-- **Result:** 57% → 99% of nominal cases, and left turns 0/40 → 39/40 on the pushed branch.
+- **Result:** 57% → 99% of nominal cases, and left turns 2/40 → 39/40 on the pushed branch.
 
 ### 3.5 What must the car's setup match? (2 Nov)
 
