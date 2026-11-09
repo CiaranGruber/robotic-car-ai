@@ -3,8 +3,8 @@
 The logbook supports the interactive oral, so it uses diagrams, plots, tables and short bullets rather than report
 prose. It's shown on the projector, and each person moves through their own section while answering questions.
 
-**Status:** this is a draft started on 4 Nov 2026 by Toby. Only Toby's section is written. The overview and the other
-sections are headings for each owner to fill in. Before submission, the team should check the
+**Status:** this draft began on 4 Nov 2026 with Toby's section. Completed individual sections are linked below;
+the overview and remaining sections await their owners. Before submission, the team should check the
 [things to agree](#things-to-agree-before-we-submit) list so no two sections propose conflicting things.
 
 ## How to use it
@@ -41,7 +41,7 @@ _To fill in:_
 | Toby Lee | MPC sub-team: Card 2 test cases and harness, car 20 MPC tuning, lane-side following, ArUco marker commands, intersection turns, marker simulation | [toby-lee.md](toby-lee.md) |
 | Ciaran Gruber | | _to add_ |
 | Peiyu Wang | MPC sub-team: Stage 1 task list and Card 1, MPC framework and first car run, Stage 1 design (baseline, MPC, RL, M1), lane-end and lost-lane stops, car models and control settings, Foxglove export and run timing | [peiyu-wang.md](peiyu-wang.md) |
-| Yuhao Liu | | _to add_ |
+| Yuhao Liu | MPC sub-team: measured-speed prediction, offline endpoint and cone-memory experiments, experimental junction routes, grouped marker commands and left-turn stopping/diagnosis | [yuhao-liu.md](yuhao-liu.md) |
 | Chris (Chuhan Wang) | Car control sub-team: system ID (cars 8, 20), CarController (FF + PI speed, per-side steering map), 26 Oct speed fix, obstacle-avoidance validation and spacing study | [chris-wang.md](chris-wang.md) |
 | Linna Zhang | | _to add_ |
 | Thanh Long Nguyen | | _to add_ |

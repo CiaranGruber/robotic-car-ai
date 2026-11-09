@@ -1,0 +1,151 @@
+{
+  "summaries": [
+    {
+      "case": "S1-acceleration",
+      "model": "nominal-speed",
+      "spatial_rms_m": 0.07158217297445923,
+      "min_scored_length_m": 4.5,
+      "worst_p99_ms": 0.9210435597560714,
+      "fallbacks": 0,
+      "min_stop_x": 5.88140856049348,
+      "max_stop_x": 5.881825553094835,
+      "passes": 0
+    },
+    {
+      "case": "S1-acceleration",
+      "model": "measured-speed",
+      "spatial_rms_m": 0.07071510497449511,
+      "min_scored_length_m": 4.5,
+      "worst_p99_ms": 1.5735602798667845,
+      "fallbacks": 0,
+      "min_stop_x": 5.878578845351788,
+      "max_stop_x": 5.879146203717877,
+      "passes": 0
+    },
+    {
+      "case": "S2-half-speed",
+      "model": "nominal-speed",
+      "spatial_rms_m": 0.08313940242735396,
+      "min_scored_length_m": 4.5,
+      "worst_p99_ms": 1.0268621401974087,
+      "fallbacks": 0,
+      "min_stop_x": 5.382017098795445,
+      "max_stop_x": 5.3821768442775255,
+      "passes": 0
+    },
+    {
+      "case": "S2-half-speed",
+      "model": "measured-speed",
+      "spatial_rms_m": 0.08172881114026471,
+      "min_scored_length_m": 4.5,
+      "worst_p99_ms": 0.856092750091193,
+      "fallbacks": 0,
+      "min_stop_x": 5.376634476200064,
+      "max_stop_x": 5.377030998516333,
+      "passes": 0
+    },
+    {
+      "case": "S3-slow-dropouts",
+      "model": "nominal-speed",
+      "spatial_rms_m": 0.07531954787428359,
+      "min_scored_length_m": 4.5,
+      "worst_p99_ms": 0.8462922000035177,
+      "fallbacks": 0,
+      "min_stop_x": 5.327172726596277,
+      "max_stop_x": 5.3274127233015856,
+      "passes": 0
+    },
+    {
+      "case": "S3-slow-dropouts",
+      "model": "measured-speed",
+      "spatial_rms_m": 0.0726478041876514,
+      "min_scored_length_m": 4.5,
+      "worst_p99_ms": 0.8760169999732169,
+      "fallbacks": 0,
+      "min_stop_x": 5.321229151071446,
+      "max_stop_x": 5.321631001577084,
+      "passes": 0
+    }
+  ],
+  "cases": [
+    {
+      "name": "S1-acceleration",
+      "offset": 0.2,
+      "heading": 0.0,
+      "noise": 0.01,
+      "delay_steps": 2,
+      "miss_probability": 0.0,
+      "empty_every": 0,
+      "speed": 1.0,
+      "speed_response_s": 0.5,
+      "speed_gain": 1.0
+    },
+    {
+      "name": "S2-half-speed",
+      "offset": -0.2,
+      "heading": -0.08726646259971647,
+      "noise": 0.01,
+      "delay_steps": 2,
+      "miss_probability": 0.0,
+      "empty_every": 0,
+      "speed": 1.0,
+      "speed_response_s": 0.5,
+      "speed_gain": 0.5
+    },
+    {
+      "name": "S3-slow-dropouts",
+      "offset": 0.15,
+      "heading": 0.17453292519943295,
+      "noise": 0.01,
+      "delay_steps": 2,
+      "miss_probability": 0.0,
+      "empty_every": 3,
+      "speed": 1.0,
+      "speed_response_s": 0.3,
+      "speed_gain": 0.6
+    }
+  ],
+  "config": {
+    "target_speed_m_per_s": 1.0,
+    "horizon_steps": 12,
+    "step_s": 0.1,
+    "max_curvature_per_m": 3.0,
+    "lateral_error_weight": 10.0,
+    "heading_error_weight": 1.0,
+    "curvature_weight": 0.1,
+    "curvature_change_weight": 1.0,
+    "lane_width_m": 1.0,
+    "lane_loss_timeout_s": 0.5,
+    "lane_loss_speed_fraction": 0.5
+  },
+  "seeds": [
+    200,
+    201,
+    202,
+    203,
+    204
+  ],
+  "python": "3.12.9",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "source_sha256": {
+    "tests/policy/evaluate_mpc_speed.py": "ea34f2c71a47132b2135f287f7a7d6454c411600ebc5c4a1f8ed119f2942903d",
+    "tests/policy/evaluate_mpc.py": "1d75402f4ae4783a2132844bab01743433061526fb0e2aff7577d744a1c499ff",
+    "policy/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "policy/action_policy/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "policy/action_policy/mpc.py": "7f0e46a0352ad1168879e8f97466623524b6b338c514dde1597aba2e0e08735c",
+    "policy/action_policy/policy.py": "a54837e8564b84ccbfed4436a60231e4618981e8feae090636ff3ef75d1568ee",
+    "policy/action_policy/reference.py": "4fdee64eb19c05660f0bdc6440b3837a421353824a3d8a58e4ed0c4c12888431",
+    "policy/cone_filter/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "policy/cone_filter/cone_filter.py": "64ebb65995cf84b31962b2952170819a71f3d673018efde9bf17ea8f239ad538",
+    "policy/control/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "policy/control/actions.py": "c5ad95fe89a9affc1f2aca735caa494e4f4c6050cc4a3b9b003ba9297f65097f",
+    "policy/control/control.py": "578bb756df906d7dea94f40f5b61c259c7d722df5224a5056e735833e4b40b5b",
+    "policy/input_output.py": "4f7db90465c6635b854bbf30a0fdd7ada60200f481009c52292329e5ea067f2e",
+    "policy/lane_detection/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "policy/lane_detection/lane_detection.py": "0c4fab9735e11bb23c746149d0c08001f3e22a1c07619f2d747b06b9f489491c",
+    "policy/lane_detection/lanes.py": "afc2aa9f770474e1e9598b4cc603af44bbb8346248586df502af149074ba0fa5",
+    "policy/policy_runner.py": "318492c7ff4331fc53ef4afb0ec5c939c0714f4840d35e593e624c6a4da0988c"
+  }
+}

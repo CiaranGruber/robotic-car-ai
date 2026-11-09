@@ -1,0 +1,87 @@
+"""Redraw logbook Figures 7–8 from the committed scalar CSV extracts.
+
+Run from any directory with Python 3 and matplotlib:
+    python3 docs/logbook/yuhao/make_figures.py
+
+No policy, simulator, vehicle service or network connection runs here.
+Figures 3–6 are preserved historical plots; see data/sources.json for origins.
+"""
+
+import csv
+import json
+from pathlib import Path
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+ROOT = Path(__file__).resolve().parent
+DATA = ROOT / "data"
+FIGURES = ROOT / "figures"
+
+
+def rows(name):
+    with (DATA / name).open(newline="", encoding="utf-8") as stream:
+        return list(csv.DictReader(stream))
+
+
+def main():
+    FIGURES.mkdir(exist_ok=True)
+    plt.rcParams.update({"font.size": 12, "axes.spines.top": False,
+                         "axes.spines.right": False, "savefig.facecolor": "white"})
+    marker = rows("marker-range.csv")
+    fig, ax = plt.subplots(figsize=(11, 4.7), layout="constrained")
+    for run, colour in [("2026-10-30_14-46-15", "#00695e"),
+                        ("2026-10-30_14-50-00", "#c05b24")]:
+        subset = [r for r in marker if r["run"] == run]
+        ax.plot([float(r["elapsed_s"]) for r in subset],
+                [float(r["distance_m"]) for r in subset],
+                "o-", color=colour, markersize=5,
+                label=f"Run {run[-8:].replace('-', ':')} ({len(subset)} observations)")
+    ax.axhline(2.0, color="#142b41", linestyle="--", label="Policy range gate: 2.0 m")
+    ax.set(xlabel="Time from each run's own start (s)",
+           ylabel="Reported planar marker range (m)", ylim=(0, 7),
+           title="Car 20, 30 Oct: all 41 posed ID-1 observations exceed the gate")
+    ax.legend(loc="lower right", frameon=False)
+    ax.grid(alpha=0.18)
+    fig.savefig(FIGURES / "05_marker_range.png", dpi=160)
+    plt.close(fig)
+
+    trace = [r for r in rows("post-reload-trace.csv") if float(r["elapsed_s"]) <= 10]
+    events = json.loads((DATA / "post-reload-events.json").read_text())
+    main_run = next(r for r in events if r["run"].endswith("15-02-43"))
+    confirm = next(e["elapsed_s"] for e in main_run["transitions"] if e["index"] == 32)
+    stop = next(e["elapsed_s"] for e in main_run["transitions"] if e["index"] == 63)
+    times = [float(r["elapsed_s"]) for r in trace]
+    fig, axes = plt.subplots(2, 1, figsize=(11, 6.4), sharex=True,
+                             layout="constrained")
+    axes[0].plot(times, [float(r["wheel_speed_m_per_s"]) for r in trace],
+                 color="#00695e", label="Recorded wheel-speed feedback")
+    axes[0].set(ylabel="Wheel speed (m/s)", ylim=(0, 0.75),
+                title="Car 20, 15:02:43 after detector reload: recognition, then a stop decision")
+    axes[0].legend(loc="lower right", frameon=False)
+    axes[1].step(times, [float(r["drive_action"]) for r in trace],
+                 where="post", color="#2458a6", label="Drive action")
+    axes[1].step(times, [float(r["steering_action"]) for r in trace],
+                 where="post", color="#c05b24", label="Steering action (includes centre trim)")
+    axes[1].axhline(0, color="grey", linewidth=0.7)
+    axes[1].set(xlabel="Time after run start (s)", ylabel="Normalised action (unitless)")
+    axes[1].legend(loc="lower right", frameon=False)
+    for ax in axes:
+        ax.axvline(confirm, color="#656565", linestyle=":")
+        ax.axvline(stop, color="#a93232", linestyle="--")
+        ax.axvspan(stop, 10, color="#a93232", alpha=0.055)
+        ax.grid(alpha=0.18)
+        ax.set_xlim(0, 10)
+    axes[0].text(confirm + 0.10, 0.96, f"ID 1 confirmed\n{confirm:.3f} s",
+                 transform=axes[0].get_xaxis_transform(), va="top", fontsize=10)
+    axes[0].text(stop + 0.12, 0.96, f"Geometry stop latched\n{stop:.3f} s",
+                 transform=axes[0].get_xaxis_transform(), va="top", fontsize=10,
+                 color="#a93232")
+    fig.savefig(FIGURES / "06_post_reload_trace.png", dpi=160)
+    plt.close(fig)
+
+
+if __name__ == "__main__":
+    main()
