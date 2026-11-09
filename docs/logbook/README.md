@@ -43,7 +43,7 @@ _To fill in:_
 | Peiyu Wang | MPC sub-team: Stage 1 task list and Card 1, MPC framework and first car run, Stage 1 design (baseline, MPC, RL, M1), lane-end and lost-lane stops, car models and control settings, Foxglove export and run timing | [peiyu-wang.md](peiyu-wang.md) |
 | Yuhao Liu | MPC sub-team: measured-speed prediction, offline endpoint and cone-memory experiments, experimental junction routes, grouped marker commands and left-turn stopping/diagnosis | [yuhao-liu.md](yuhao-liu.md) |
 | Chris (Chuhan Wang) | Car control sub-team: system ID (cars 8, 20), CarController (FF + PI speed, per-side steering map), 26 Oct speed fix, obstacle-avoidance validation and spacing study | [chris-wang.md](chris-wang.md) |
-| Thanh Long Nguyen | | _to add_ |
+| Thanh Long Nguyen | Lane estimation: lane edges from cones and the `LaneDetection` interface, the camera pan bias and hold, AUTO colour sides and width memory, the Foxglove lane overlay; the whole-system car simulator and live 3D viewer | [long-nguyen.md](long-nguyen.md) |
 | Zhenling Zhang | Obstacle handling: cone filter, lidar obstacle detection, obstacle stop and brake, avoidance planner, local map, obstacle simulation | [zhenling-zhang.md](zhenling-zhang.md) |
 | Yifei Xia | | _to add_ |
 
