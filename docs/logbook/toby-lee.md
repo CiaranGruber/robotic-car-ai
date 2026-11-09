@@ -7,7 +7,7 @@
 | Role | MPC sub-team. Card 2 test cases, then MPC tuning for the lab car, then ArUco marker actions and intersection turns |
 | PRs | #6 and #10 (Stage 1 tests), #15 (MPC calibration), #27 and #30 (lane side), #35 (markers and intersections, merged into `dev` on 2 Nov) |
 | Open work | `fix/left-turn-steering-and-obstacles`: 6 commits, pushed, no PR yet (waiting for review by Yuhao and Chris) |
-| Built on teammates' work | Ciaran: repo, CI and the upload script. Peiyu: MPC framework, Foxglove export. Linna: lane and obstacle detection, local map. Chris: steering calibration and the ±0.8 interval. Yuhao: system ID, grouped marker IDs, left-turn preparation |
+| Built on teammates' work | Ciaran: repo, CI and the upload script. Peiyu: MPC framework, Foxglove export. Zhenling Zhang: lane and obstacle detection, local map. Chris: steering calibration and the ±0.8 interval. Yuhao: system ID, grouped marker IDs, left-turn preparation |
 | Figures | `toby/figures/`, made by `python3 docs/logbook/toby/make_figures.py` (see its docstring for the two checkouts it simulates) |
 
 **Summary: four pieces of work, in order** (the same as my slide):
@@ -50,7 +50,7 @@ driving behaviour, while lane following, obstacle stopping and the safety rules 
 | Interface | Direction | What it carries | Assumption or constraint |
 | --- | --- | --- | --- |
 | `FiducialBatch` from `aruco_detector` | in | marker id, and its pose in `base_link` | Needs the RGB image, which only `oakd_cone_detector` publishes, so the runtime must start with `--aruco`. The distance is right only if `default_marker_size_m` is the printed size (0.081 m) |
-| `LaneDetection` (Linna) | in | the lane's centre line and width | The cross road's cones bend the fitted lane near an intersection. So during the approach, the turner keeps only the approach corridor's cones |
+| `LaneDetection` (Zhenling Zhang) | in | the lane's centre line and width | The cross road's cones bend the fitted lane near an intersection. So during the approach, the turner keeps only the approach corridor's cones |
 | Local map pose: dead reckoning with the IMU heading | in | where the car is relative to the planned entry | Drifts over metres. The turn is about 3 m long, so the drift is small |
 | Lidar obstacles | in | points ahead | Marker stands and the lane's own cones show up as obstacles (seen on car 13) |
 | `CarMemory` | state | lane side, intersection command, turn phase | A new run (explicit resume) clears it |
