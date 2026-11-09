@@ -78,7 +78,15 @@ $$e_k = v_{ref} - v_k, \qquad I_k = I_{k-1} + e_k\Delta t, \qquad u_k = u_{ff} +
 
 Let $\psi_v$ be vehicle heading and $\psi_t$ the selected world-frame camera heading. Leftward rotation is positive:
 
-$$\theta_{pan}^{*}=w(\psi_t-\psi_v), \qquad u_{pan}^{*}=c+g\theta_{pan}^{*}.$$
+```math
+\theta_d = w(\psi_t - \psi_v)
+```
+
+```math
+u_d = c + g\theta_d
+```
+
+The subscript $d$ denotes the desired camera angle or pan command.
 
 Here, $w$ (the `wrap` function) selects the shortest signed angle, $c=0.32$ is the forward-facing command, and $g\approx-0.43$ is the estimated command change per radian of leftward camera rotation.
 
