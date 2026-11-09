@@ -42,7 +42,7 @@ _To fill in:_
 | Ciaran Gruber | | _to add_ |
 | Peiyu Wang | MPC sub-team: Stage 1 task list and Card 1, MPC framework and first car run, Stage 1 design (baseline, MPC, RL, M1), lane-end and lost-lane stops, car models and control settings, Foxglove export and run timing | [peiyu-wang.md](peiyu-wang.md) |
 | Yuhao Liu | | _to add_ |
-| Chris | | _to add_ |
+| Chris (Chuhan Wang) | Car control sub-team: system ID (cars 8, 20), CarController (FF + PI speed, per-side steering map), 26 Oct speed fix, obstacle-avoidance validation and spacing study | [chris-wang.md](chris-wang.md) |
 | Linna Zhang | | _to add_ |
 | Thanh Long Nguyen | | _to add_ |
 | Zhenling | | _to add_ |

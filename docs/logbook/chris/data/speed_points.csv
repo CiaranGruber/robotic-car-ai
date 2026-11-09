@@ -1,0 +1,15 @@
+bag,drive_cmd,hold_s,v_ss_m_per_s,t_move_s
+c20_deadband_0.mcap,0.500,3.5,0.000,
+c20_deadband_0.mcap,0.520,4.0,0.665,1.28
+c20_deadband_0.mcap,0.540,4.0,0.671,1.19
+c20_deadband_0.mcap,0.560,4.0,0.747,0.99
+c20_deadband_0.mcap,0.580,4.0,0.970,0.15
+c20_deadband_0.mcap,0.600,4.0,1.316,0.48
+c20_speedmap_0.mcap,0.530,7.0,0.000,
+c20_speedmap_0.mcap,0.550,8.0,0.764,1.24
+c20_speedmap_0.mcap,0.570,8.0,0.958,0.61
+c20_batt_start_0.mcap,0.850,1.8,3.404,0.09
+c20_batt_start2_0.mcap,0.750,3.0,2.554,0.32
+c20_batt_start2_0.mcap,0.750,3.0,2.664,0.38
+c20_batt_start2_0.mcap,0.750,3.0,2.585,0.32
+c20_batt_check_0.mcap,0.750,3.4,2.321,0.21
