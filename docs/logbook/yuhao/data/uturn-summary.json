@@ -1,0 +1,717 @@
+{
+  "controller": "online sensed geometry + analytic lookahead feedback",
+  "learned_model_used": false,
+  "online_learning": false,
+  "config": {
+    "max_left_curvature_per_m": 2.2,
+    "max_right_curvature_per_m": 0.92,
+    "approach_speed_m_per_s": 0.3,
+    "turn_speed_m_per_s": 0.15,
+    "turning_radius_m": 0.5,
+    "lookahead_m": 0.6,
+    "endpoint_margin_m": 0.75,
+    "track_max_age_s": 8.0,
+    "route_max_age_s": 36.0,
+    "route_max_distance_m": 12.0,
+    "camera_max_age_s": 0.4,
+    "lidar_max_age_s": 0.2,
+    "empty_without_route_s": 0.8,
+    "memory_enabled": true,
+    "camera_empty_hold_s": 3.0,
+    "turn_inset_m": 0.35
+  },
+  "source_sha256": {
+    "policy/action_policy/connected_uturn.py": "20eb01cb996b3c2ab9d3d0a2d6514909577dfc53d67aff6ac5c564e83dc47590",
+    "policy/action_policy/three_row_uturn.py": "319513fc6e709a8dd748ea480066acce9c067a78e4313a3d8efefa891f4a67fe",
+    "policy/action_policy/corridor.py": "f5228fd64021b8aba57f7630cc72441e3851114449f5a2fccd22cafdd03a5733",
+    "policy/memory.py": "225f5109daf3e8c883e705d1a60894abc524680491a7e4ff8933bcdbc7c5b3c4",
+    "policy/input_output.py": "da145c952be1e52cd5e23bb96415e4def145110a80333fffba090c67d3f9b6a4",
+    "policy/serialisation.py": "901c0f18e916ae3ff3f5a6dae5cd0f552bcb69f9c4e6fbda18ef6b3273bcdb36",
+    "policy/cone_filter/cone_filter.py": "0066763e6eb4175f03fdb02c2b801b1c0881763d03468718737b1b8c02cdb6f4",
+    "policy/control/actions.py": "9d47887683daaff350dabfee4ae1276b2682973af205cf3a7ff41a9005f0d964",
+    "policy/lane_detection/lane_detection.py": "9492321e5aaf1e28506e73d3a40ee6887cb0f8e34433710ab36d23107bd1674d",
+    "policy/lane_detection/temporal.py": "ae611b364b4e29943c3ca0d429915b2211be4f8189d7d9bf87266988698ec1cd",
+    "tests/policy/connected_uturn_simulation.py": "413a0fa7006f5a3ec7866765052f5f5e2cc370dbd8cee906d7e0931b9b1b979e",
+    "tests/policy/three_row_simulation.py": "5756f2ef16cd47c3f526144ce51d3990079f1bf16059d1c5284cc8be7891ce5d",
+    "tests/policy/curved_lanes.py": "16eef74c625f601886edbe597881f03207de41dee5a2a4785960dd69832540d6",
+    "tests/policy/corridor_runtime_simulation.py": "e3386cc9bee87a05ae1443a47a5dae3d698d8c57e5d31e8c6d841abad923f92f",
+    "tests/policy/real_car_measurements.py": "505f6d056bdf36a8f97b8de70af255a82bb77a8862779ba8f974960071a6f52c",
+    "tests/policy/stage1_scenarios.py": "fe167538297ff9c5a8debb08c10fcc7d866022f00fb8a50dc09d2ff95b4949e8",
+    "tests/policy/evaluate_connected_realtime.py": "4095e5e6366b6b87144f2696b02dbb9d330594db63a7b599befb2fb7737d41cb"
+  },
+  "scope": "Local fixed-step10Hz simulation, no car upload/configuration changes. Geometry from sensed cones, acquisition-time wheel/gyro odometry and bounded memory. Initial turn radius/inset and circular-cap family remain assumptions. Turn/row frame retained after commitment; steering recomputed each tick. Supported fresh return geometry may replace the route. This is not continuous replanning or online model training. Elliptical caps are out-of-model probes. Stopping and physical steering are unverified. Measured tick times are local diagnostics, not hard realtime guarantees.",
+  "varied_layouts": [
+    {
+      "case": {
+        "track": {
+          "divider_length_m": 2.6,
+          "row_gap_m": 0.9,
+          "outer_extension_m": 0.9,
+          "cone_spacing_m": 0.4,
+          "placement_jitter_m": 0.025,
+          "placement_seed": 14000,
+          "removed_fraction": 0.0,
+          "remove_divider_tip": false,
+          "remove_cap_cone": false,
+          "cap_depth_scale": 1.0
+        },
+        "seed": 14200,
+        "profile": "nominal",
+        "start_left_m": 0.035,
+        "start_heading_deg": 1.0,
+        "duration_s": 80.0,
+        "trim_per_m": -0.03,
+        "max_left_curvature_per_m": 2.2,
+        "max_right_curvature_per_m": 0.92
+      },
+      "metrics": {
+        "completed": false,
+        "cones_touched": 0,
+        "max_outside_m": 0.0,
+        "safe_completion": false,
+        "duration_s": 24.22,
+        "distance_m": 5.188675956687587,
+        "stop_reason": "lidar or braking footprint blocked",
+        "latched_stop": true,
+        "guard_interventions": 1,
+        "max_empty_camera_s": 0.0,
+        "max_preview_empty_age_s": 0.20000000000000018,
+        "worst_outside_pose": null,
+        "goal_speed_m_per_s": null,
+        "tick_p95_ms": 1.0684208944439886,
+        "tick_max_ms": 1.2278750073164701
+      }
+    },
+    {
+      "case": {
+        "track": {
+          "divider_length_m": 3.0,
+          "row_gap_m": 0.9,
+          "outer_extension_m": 1.2,
+          "cone_spacing_m": 0.55,
+          "placement_jitter_m": 0.04,
+          "placement_seed": 14001,
+          "removed_fraction": 0.0,
+          "remove_divider_tip": false,
+          "remove_cap_cone": false,
+          "cap_depth_scale": 1.0
+        },
+        "seed": 14201,
+        "profile": "random_drops",
+        "start_left_m": -0.035,
+        "start_heading_deg": -1.0,
+        "duration_s": 80.0,
+        "trim_per_m": -0.03,
+        "max_left_curvature_per_m": 2.2,
+        "max_right_curvature_per_m": 0.92
+      },
+      "metrics": {
+        "completed": true,
+        "cones_touched": 0,
+        "max_outside_m": 0.0,
+        "safe_completion": true,
+        "duration_s": 41.37,
+        "distance_m": 9.519155426195297,
+        "stop_reason": "",
+        "latched_stop": false,
+        "guard_interventions": 0,
+        "max_empty_camera_s": 0.3000000000000028,
+        "max_preview_empty_age_s": 0.5000000000000071,
+        "worst_outside_pose": null,
+        "goal_speed_m_per_s": 0.29989568711725223,
+        "tick_p95_ms": 0.951025023823604,
+        "tick_max_ms": 1.1671660467982292
+      }
+    },
+    {
+      "case": {
+        "track": {
+          "divider_length_m": 3.8,
+          "row_gap_m": 1.0,
+          "outer_extension_m": 0.9,
+          "cone_spacing_m": 0.4,
+          "placement_jitter_m": 0.025,
+          "placement_seed": 14002,
+          "removed_fraction": 0.0,
+          "remove_divider_tip": false,
+          "remove_cap_cone": false,
+          "cap_depth_scale": 1.0
+        },
+        "seed": 14202,
+        "profile": "divider_hidden",
+        "start_left_m": 0.035,
+        "start_heading_deg": 1.0,
+        "duration_s": 80.0,
+        "trim_per_m": -0.03,
+        "max_left_curvature_per_m": 2.2,
+        "max_right_curvature_per_m": 0.92
+      },
+      "metrics": {
+        "completed": true,
+        "cones_touched": 0,
+        "max_outside_m": 0.0,
+        "safe_completion": true,
+        "duration_s": 44.69,
+        "distance_m": 10.560046005227061,
+        "stop_reason": "",
+        "latched_stop": false,
+        "guard_interventions": 0,
+        "max_empty_camera_s": 0.20000000000000143,
+        "max_preview_empty_age_s": 0.4000000000000057,
+        "worst_outside_pose": null,
+        "goal_speed_m_per_s": 0.2999691240086845,
+        "tick_p95_ms": 1.2329455697908998,
+        "tick_max_ms": 1.5381659613922238
+      }
+    },
+    {
+      "case": {
+        "track": {
+          "divider_length_m": 2.6,
+          "row_gap_m": 1.0,
+          "outer_extension_m": 1.2,
+          "cone_spacing_m": 0.55,
+          "placement_jitter_m": 0.04,
+          "placement_seed": 14003,
+          "removed_fraction": 0.0,
+          "remove_divider_tip": false,
+          "remove_cap_cone": false,
+          "cap_depth_scale": 1.0
+        },
+        "seed": 14203,
+        "profile": "outer_hidden",
+        "start_left_m": -0.035,
+        "start_heading_deg": -1.0,
+        "duration_s": 80.0,
+        "trim_per_m": -0.03,
+        "max_left_curvature_per_m": 2.2,
+        "max_right_curvature_per_m": 0.92
+      },
+      "metrics": {
+        "completed": true,
+        "cones_touched": 0,
+        "max_outside_m": 0.0,
+        "safe_completion": true,
+        "duration_s": 38.63,
+        "distance_m": 8.817333187787627,
+        "stop_reason": "",
+        "latched_stop": false,
+        "guard_interventions": 0,
+        "max_empty_camera_s": 0.8000000000000028,
+        "max_preview_empty_age_s": 1.0,
+        "worst_outside_pose": null,
+        "goal_speed_m_per_s": 0.29977638403514834,
+        "tick_p95_ms": 1.0392125463113189,
+        "tick_max_ms": 1.2120000319555402
+      }
+    },
+    {
+      "case": {
+        "track": {
+          "divider_length_m": 3.0,
+          "row_gap_m": 1.1,
+          "outer_extension_m": 0.9,
+          "cone_spacing_m": 0.4,
+          "placement_jitter_m": 0.025,
+          "placement_seed": 14004,
+          "removed_fraction": 0.0,
+          "remove_divider_tip": false,
+          "remove_cap_cone": false,
+          "cap_depth_scale": 1.0
+        },
+        "seed": 14204,
+        "profile": "short_all_hidden",
+        "start_left_m": 0.035,
+        "start_heading_deg": 1.0,
+        "duration_s": 80.0,
+        "trim_per_m": -0.03,
+        "max_left_curvature_per_m": 2.2,
+        "max_right_curvature_per_m": 0.92
+      },
+      "metrics": {
+        "completed": true,
+        "cones_touched": 0,
+        "max_outside_m": 0.0,
+        "safe_completion": true,
+        "duration_s": 39.51,
+        "distance_m": 9.126226043685879,
+        "stop_reason": "",
+        "latched_stop": false,
+        "guard_interventions": 0,
+        "max_empty_camera_s": 0.4000000000000007,
+        "max_preview_empty_age_s": 0.5999999999999996,
+        "worst_outside_pose": null,
+        "goal_speed_m_per_s": 0.29984829282826886,
+        "tick_p95_ms": 1.2327187869232148,
+        "tick_max_ms": 1.4259589370340109
+      }
+    },
+    {
+      "case": {
+        "track": {
+          "divider_length_m": 3.8,
+          "row_gap_m": 1.1,
+          "outer_extension_m": 1.2,
+          "cone_spacing_m": 0.55,
+          "placement_jitter_m": 0.04,
+          "placement_seed": 14005,
+          "removed_fraction": 0.1,
+          "remove_divider_tip": false,
+          "remove_cap_cone": false,
+          "cap_depth_scale": 1.0
+        },
+        "seed": 14205,
+        "profile": "nominal",
+        "start_left_m": -0.035,
+        "start_heading_deg": -1.0,
+        "duration_s": 80.0,
+        "trim_per_m": -0.03,
+        "max_left_curvature_per_m": 2.2,
+        "max_right_curvature_per_m": 0.92
+      },
+      "metrics": {
+        "completed": true,
+        "cones_touched": 0,
+        "max_outside_m": 0.0,
+        "safe_completion": true,
+        "duration_s": 46.06,
+        "distance_m": 11.136024044906112,
+        "stop_reason": "",
+        "latched_stop": false,
+        "guard_interventions": 0,
+        "max_empty_camera_s": 0.6,
+        "max_preview_empty_age_s": 0.8000000000000043,
+        "worst_outside_pose": null,
+        "goal_speed_m_per_s": 0.29998386247911824,
+        "tick_p95_ms": 1.156458049081266,
+        "tick_max_ms": 1.2671250151470304
+      }
+    },
+    {
+      "case": {
+        "track": {
+          "divider_length_m": 2.6,
+          "row_gap_m": 0.9,
+          "outer_extension_m": 0.9,
+          "cone_spacing_m": 0.4,
+          "placement_jitter_m": 0.025,
+          "placement_seed": 14006,
+          "removed_fraction": 0.0,
+          "remove_divider_tip": false,
+          "remove_cap_cone": false,
+          "cap_depth_scale": 1.0
+        },
+        "seed": 14206,
+        "profile": "nominal",
+        "start_left_m": 0.035,
+        "start_heading_deg": 1.0,
+        "duration_s": 80.0,
+        "trim_per_m": -0.03,
+        "max_left_curvature_per_m": 2.2,
+        "max_right_curvature_per_m": 0.92
+      },
+      "metrics": {
+        "completed": true,
+        "cones_touched": 0,
+        "max_outside_m": 0.0,
+        "safe_completion": true,
+        "duration_s": 36.86,
+        "distance_m": 8.136728747476328,
+        "stop_reason": "",
+        "latched_stop": false,
+        "guard_interventions": 0,
+        "max_empty_camera_s": 0.5000000000000057,
+        "max_preview_empty_age_s": 0.7000000000000028,
+        "worst_outside_pose": null,
+        "goal_speed_m_per_s": 0.2995109077340085,
+        "tick_p95_ms": 1.363075408153236,
+        "tick_max_ms": 1.674375031143427
+      }
+    },
+    {
+      "case": {
+        "track": {
+          "divider_length_m": 3.0,
+          "row_gap_m": 0.9,
+          "outer_extension_m": 1.2,
+          "cone_spacing_m": 0.55,
+          "placement_jitter_m": 0.04,
+          "placement_seed": 14007,
+          "removed_fraction": 0.0,
+          "remove_divider_tip": false,
+          "remove_cap_cone": false,
+          "cap_depth_scale": 1.0
+        },
+        "seed": 14207,
+        "profile": "random_drops",
+        "start_left_m": -0.035,
+        "start_heading_deg": -1.0,
+        "duration_s": 80.0,
+        "trim_per_m": -0.03,
+        "max_left_curvature_per_m": 2.2,
+        "max_right_curvature_per_m": 0.92
+      },
+      "metrics": {
+        "completed": false,
+        "cones_touched": 0,
+        "max_outside_m": 0.0,
+        "safe_completion": false,
+        "duration_s": 25.12,
+        "distance_m": 5.638070629147844,
+        "stop_reason": "lidar or braking footprint blocked",
+        "latched_stop": true,
+        "guard_interventions": 1,
+        "max_empty_camera_s": 0.1,
+        "max_preview_empty_age_s": 0.3000000000000007,
+        "worst_outside_pose": null,
+        "goal_speed_m_per_s": null,
+        "tick_p95_ms": 1.1840124614536762,
+        "tick_max_ms": 1.4032080071046948
+      }
+    },
+    {
+      "case": {
+        "track": {
+          "divider_length_m": 3.8,
+          "row_gap_m": 1.0,
+          "outer_extension_m": 0.9,
+          "cone_spacing_m": 0.4,
+          "placement_jitter_m": 0.025,
+          "placement_seed": 14008,
+          "removed_fraction": 0.0,
+          "remove_divider_tip": false,
+          "remove_cap_cone": false,
+          "cap_depth_scale": 1.0
+        },
+        "seed": 14208,
+        "profile": "divider_hidden",
+        "start_left_m": 0.035,
+        "start_heading_deg": 1.0,
+        "duration_s": 80.0,
+        "trim_per_m": -0.03,
+        "max_left_curvature_per_m": 2.2,
+        "max_right_curvature_per_m": 0.92
+      },
+      "metrics": {
+        "completed": true,
+        "cones_touched": 0,
+        "max_outside_m": 0.0,
+        "safe_completion": true,
+        "duration_s": 44.61,
+        "distance_m": 10.611042456803204,
+        "stop_reason": "",
+        "latched_stop": false,
+        "guard_interventions": 0,
+        "max_empty_camera_s": 0.6,
+        "max_preview_empty_age_s": 0.8000000000000043,
+        "worst_outside_pose": null,
+        "goal_speed_m_per_s": 0.29997150550120494,
+        "tick_p95_ms": 1.597120682708919,
+        "tick_max_ms": 2.0109579199925065
+      }
+    },
+    {
+      "case": {
+        "track": {
+          "divider_length_m": 2.6,
+          "row_gap_m": 1.0,
+          "outer_extension_m": 1.2,
+          "cone_spacing_m": 0.55,
+          "placement_jitter_m": 0.04,
+          "placement_seed": 14009,
+          "removed_fraction": 0.0,
+          "remove_divider_tip": true,
+          "remove_cap_cone": false,
+          "cap_depth_scale": 1.0
+        },
+        "seed": 14209,
+        "profile": "outer_hidden",
+        "start_left_m": -0.035,
+        "start_heading_deg": -1.0,
+        "duration_s": 80.0,
+        "trim_per_m": -0.03,
+        "max_left_curvature_per_m": 2.2,
+        "max_right_curvature_per_m": 0.92
+      },
+      "metrics": {
+        "completed": true,
+        "cones_touched": 0,
+        "max_outside_m": 0.0,
+        "safe_completion": true,
+        "duration_s": 38.53,
+        "distance_m": 8.727356235118107,
+        "stop_reason": "",
+        "latched_stop": false,
+        "guard_interventions": 0,
+        "max_empty_camera_s": 0.7000000000000014,
+        "max_preview_empty_age_s": 0.8999999999999986,
+        "worst_outside_pose": null,
+        "goal_speed_m_per_s": 0.2997609160281166,
+        "tick_p95_ms": 1.312010281253606,
+        "tick_max_ms": 1.547624939121306
+      }
+    },
+    {
+      "case": {
+        "track": {
+          "divider_length_m": 3.0,
+          "row_gap_m": 1.1,
+          "outer_extension_m": 0.9,
+          "cone_spacing_m": 0.4,
+          "placement_jitter_m": 0.025,
+          "placement_seed": 14010,
+          "removed_fraction": 0.0,
+          "remove_divider_tip": false,
+          "remove_cap_cone": false,
+          "cap_depth_scale": 1.0
+        },
+        "seed": 14210,
+        "profile": "short_all_hidden",
+        "start_left_m": 0.035,
+        "start_heading_deg": 1.0,
+        "duration_s": 80.0,
+        "trim_per_m": -0.03,
+        "max_left_curvature_per_m": 2.2,
+        "max_right_curvature_per_m": 0.92
+      },
+      "metrics": {
+        "completed": true,
+        "cones_touched": 0,
+        "max_outside_m": 0.0,
+        "safe_completion": true,
+        "duration_s": 39.13,
+        "distance_m": 8.982254965967911,
+        "stop_reason": "",
+        "latched_stop": false,
+        "guard_interventions": 0,
+        "max_empty_camera_s": 0.8000000000000028,
+        "max_preview_empty_age_s": 1.0,
+        "worst_outside_pose": null,
+        "goal_speed_m_per_s": 0.2998288819007309,
+        "tick_p95_ms": 1.921024959301576,
+        "tick_max_ms": 2.3894590558484197
+      }
+    },
+    {
+      "case": {
+        "track": {
+          "divider_length_m": 3.8,
+          "row_gap_m": 1.1,
+          "outer_extension_m": 1.2,
+          "cone_spacing_m": 0.55,
+          "placement_jitter_m": 0.04,
+          "placement_seed": 14011,
+          "removed_fraction": 0.0,
+          "remove_divider_tip": false,
+          "remove_cap_cone": true,
+          "cap_depth_scale": 1.0
+        },
+        "seed": 14211,
+        "profile": "nominal",
+        "start_left_m": -0.035,
+        "start_heading_deg": -1.0,
+        "duration_s": 80.0,
+        "trim_per_m": -0.03,
+        "max_left_curvature_per_m": 2.2,
+        "max_right_curvature_per_m": 0.92
+      },
+      "metrics": {
+        "completed": true,
+        "cones_touched": 0,
+        "max_outside_m": 0.0,
+        "safe_completion": true,
+        "duration_s": 47.42,
+        "distance_m": 11.259020206356022,
+        "stop_reason": "",
+        "latched_stop": false,
+        "guard_interventions": 0,
+        "max_empty_camera_s": 0.6999999999999943,
+        "max_preview_empty_age_s": 0.8999999999999986,
+        "worst_outside_pose": null,
+        "goal_speed_m_per_s": 0.29998643868723607,
+        "tick_p95_ms": 2.1600127103738487,
+        "tick_max_ms": 2.4279579520225525
+      }
+    }
+  ],
+  "varied_summary": {
+    "episodes": 12,
+    "navigation_passes": 10,
+    "guarded_stops": 2,
+    "cone_contacts": 0,
+    "max_outside_m": 0.0
+  },
+  "out_of_model_caps": [
+    {
+      "case": {
+        "track": {
+          "divider_length_m": 3.0,
+          "row_gap_m": 1.0,
+          "outer_extension_m": 1.0,
+          "cone_spacing_m": 0.5,
+          "placement_jitter_m": 0.025,
+          "placement_seed": 15000,
+          "removed_fraction": 0.0,
+          "remove_divider_tip": false,
+          "remove_cap_cone": false,
+          "cap_depth_scale": 0.8
+        },
+        "seed": 15200,
+        "profile": "nominal",
+        "start_left_m": 0.0,
+        "start_heading_deg": 0.0,
+        "duration_s": 80.0,
+        "trim_per_m": -0.03,
+        "max_left_curvature_per_m": 2.2,
+        "max_right_curvature_per_m": 0.92
+      },
+      "metrics": {
+        "completed": false,
+        "cones_touched": 0,
+        "max_outside_m": 0.0,
+        "safe_completion": false,
+        "duration_s": 39.65,
+        "distance_m": 9.088432438143544,
+        "stop_reason": "waiting for supported path",
+        "latched_stop": true,
+        "guard_interventions": 0,
+        "max_empty_camera_s": 2.1,
+        "max_preview_empty_age_s": 1.3000000000000043,
+        "worst_outside_pose": null,
+        "goal_speed_m_per_s": null,
+        "tick_p95_ms": 2.1764913806691766,
+        "tick_max_ms": 2.7453750371932983
+      }
+    },
+    {
+      "case": {
+        "track": {
+          "divider_length_m": 3.0,
+          "row_gap_m": 1.0,
+          "outer_extension_m": 1.0,
+          "cone_spacing_m": 0.5,
+          "placement_jitter_m": 0.025,
+          "placement_seed": 15001,
+          "removed_fraction": 0.0,
+          "remove_divider_tip": false,
+          "remove_cap_cone": false,
+          "cap_depth_scale": 0.9
+        },
+        "seed": 15201,
+        "profile": "nominal",
+        "start_left_m": 0.0,
+        "start_heading_deg": 0.0,
+        "duration_s": 80.0,
+        "trim_per_m": -0.03,
+        "max_left_curvature_per_m": 2.2,
+        "max_right_curvature_per_m": 0.92
+      },
+      "metrics": {
+        "completed": true,
+        "cones_touched": 0,
+        "max_outside_m": 0.0,
+        "safe_completion": true,
+        "duration_s": 39.22,
+        "distance_m": 9.084240071093658,
+        "stop_reason": "",
+        "latched_stop": false,
+        "guard_interventions": 0,
+        "max_empty_camera_s": 0.3000000000000028,
+        "max_preview_empty_age_s": 0.5000000000000071,
+        "worst_outside_pose": null,
+        "goal_speed_m_per_s": 0.29983887846063173,
+        "tick_p95_ms": 2.1841166308149695,
+        "tick_max_ms": 2.7294999454170465
+      }
+    },
+    {
+      "case": {
+        "track": {
+          "divider_length_m": 3.0,
+          "row_gap_m": 1.0,
+          "outer_extension_m": 1.0,
+          "cone_spacing_m": 0.5,
+          "placement_jitter_m": 0.025,
+          "placement_seed": 15002,
+          "removed_fraction": 0.0,
+          "remove_divider_tip": false,
+          "remove_cap_cone": false,
+          "cap_depth_scale": 1.1
+        },
+        "seed": 15202,
+        "profile": "nominal",
+        "start_left_m": 0.0,
+        "start_heading_deg": 0.0,
+        "duration_s": 80.0,
+        "trim_per_m": -0.03,
+        "max_left_curvature_per_m": 2.2,
+        "max_right_curvature_per_m": 0.92
+      },
+      "metrics": {
+        "completed": true,
+        "cones_touched": 0,
+        "max_outside_m": 0.0,
+        "safe_completion": true,
+        "duration_s": 40.21,
+        "distance_m": 9.351184948109156,
+        "stop_reason": "",
+        "latched_stop": false,
+        "guard_interventions": 0,
+        "max_empty_camera_s": 0.6,
+        "max_preview_empty_age_s": 0.8000000000000043,
+        "worst_outside_pose": null,
+        "goal_speed_m_per_s": 0.29987587375224467,
+        "tick_p95_ms": 1.7833122750744224,
+        "tick_max_ms": 2.135000075213611
+      }
+    },
+    {
+      "case": {
+        "track": {
+          "divider_length_m": 3.0,
+          "row_gap_m": 1.0,
+          "outer_extension_m": 1.0,
+          "cone_spacing_m": 0.5,
+          "placement_jitter_m": 0.025,
+          "placement_seed": 15003,
+          "removed_fraction": 0.0,
+          "remove_divider_tip": false,
+          "remove_cap_cone": false,
+          "cap_depth_scale": 1.2
+        },
+        "seed": 15203,
+        "profile": "nominal",
+        "start_left_m": 0.0,
+        "start_heading_deg": 0.0,
+        "duration_s": 80.0,
+        "trim_per_m": -0.03,
+        "max_left_curvature_per_m": 2.2,
+        "max_right_curvature_per_m": 0.92
+      },
+      "metrics": {
+        "completed": true,
+        "cones_touched": 0,
+        "max_outside_m": 0.0,
+        "safe_completion": true,
+        "duration_s": 40.83,
+        "distance_m": 9.567139649066005,
+        "stop_reason": "",
+        "latched_stop": false,
+        "guard_interventions": 0,
+        "max_empty_camera_s": 0.5000000000000057,
+        "max_preview_empty_age_s": 0.7000000000000028,
+        "worst_outside_pose": null,
+        "goal_speed_m_per_s": 0.2999062757946289,
+        "tick_p95_ms": 1.8027581507340074,
+        "tick_max_ms": 2.398333977907896
+      }
+    }
+  ],
+  "cap_summary": {
+    "episodes": 4,
+    "navigation_passes": 3,
+    "guarded_stops": 1,
+    "cone_contacts": 0,
+    "max_outside_m": 0.0
+  }
+}

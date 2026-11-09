@@ -3,8 +3,8 @@
 The logbook supports the interactive oral, so it uses diagrams, plots, tables and short bullets rather than report
 prose. It's shown on the projector, and each person moves through their own section while answering questions.
 
-**Status:** this is a draft started on 4 Nov 2026 by Toby. Only Toby's section is written. The overview and the other
-sections are headings for each owner to fill in. Before submission, the team should check the
+**Status:** this draft began on 4 Nov 2026 with Toby's section. Completed individual sections are linked below;
+the overview and remaining sections await their owners. Before submission, the team should check the
 [things to agree](#things-to-agree-before-we-submit) list so no two sections propose conflicting things.
 
 ## How to use it
@@ -40,9 +40,9 @@ _To fill in:_
 | --- | --- | --- |
 | Toby Lee | MPC sub-team: Card 2 test cases and harness, car 20 MPC tuning, lane-side following, ArUco marker commands, intersection turns, marker simulation | [toby-lee.md](toby-lee.md) |
 | Ciaran Gruber | | _to add_ |
-| Peiyu Wang | | _to add_ |
-| Yuhao Liu | | _to add_ |
-| Chris | | _to add_ |
+| Peiyu Wang | MPC sub-team: Stage 1 task list and Card 1, MPC framework and first car run, Stage 1 design (baseline, MPC, RL, M1), lane-end and lost-lane stops, car models and control settings, Foxglove export and run timing | [peiyu-wang.md](peiyu-wang.md) |
+| Yuhao Liu | MPC sub-team: measured-speed prediction, offline endpoint and cone-memory experiments, experimental junction routes, grouped marker commands and left-turn stopping/diagnosis | [yuhao-liu.md](yuhao-liu.md) |
+| Chris (Chuhan Wang) | Car control sub-team: system ID (cars 8, 20), CarController (FF + PI speed, per-side steering map), 26 Oct speed fix, obstacle-avoidance validation and spacing study | [chris-wang.md](chris-wang.md) |
 | Thanh Long Nguyen | | _to add_ |
 | Zhenling Zhang | Obstacle handling: cone filter, lidar obstacle detection, obstacle stop and brake, avoidance planner, local map, obstacle simulation | [zhenling-zhang.md](zhenling-zhang.md) |
 | Yifei Xia | | _to add_ |
@@ -63,3 +63,6 @@ These points come up in more than one person's work. The team should state each 
 | Phantom obstacles | Car 13 log: 16 avoidance lines with no obstacle on the track. The fixes are on `fix/left-turn-steering-and-obstacles`, which has no PR yet. | Zhenling Zhang (obstacle owner) |
 | Camera pan / yaw | The pan is held at 0, so the camera's yaw isn't measured. In simulation, ±4° of yaw costs one whole turn direction. | Lane detection owner, Thanh Long |
 | Which videos we submit | They must show real cars. The team should list which features have video. | Everyone |
+| RGB image and OpenCV 5 | Peiyu: with OpenCV 5 in the DREAM venv, publishing the RGB image crashes the cone detector (car 22, 12 Oct), so #24 turns it off. Toby's markers need the RGB image (`--aruco`). `dev` still has it on. | Toby, Yuhao |
+| Which MPC weights | Stage 1 design (A4) chose 3/1/0.1/3 with a 3.0 1/m limit. `dev` uses the lab calibration 10/1/0.1/2 with 0.48 / 0.92 1/m (#15). Each result should say which one it used. | Toby |
+| Control settings per car | `dev`'s speed control values suit car 22 only (the car 20 model reaches 0/12 cases). #18 proposes one setting for both cars; not yet reviewed. | Chris |
