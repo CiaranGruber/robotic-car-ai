@@ -43,9 +43,8 @@ _To fill in:_
 | Peiyu Wang | | _to add_ |
 | Yuhao Liu | | _to add_ |
 | Chris | | _to add_ |
-| Linna Zhang | | _to add_ |
 | Thanh Long Nguyen | | _to add_ |
-| Zhenling | | _to add_ |
+| Zhenling Zhang | Obstacle handling: cone filter, lidar obstacle detection, obstacle stop and brake, avoidance planner, local map, obstacle simulation | [zhenling-zhang.md](zhenling-zhang.md) |
 | Yifei Xia | | _to add_ |
 
 The names are taken from the repository's commit authors. Add anyone who's missing and correct the spelling.
@@ -61,6 +60,6 @@ These points come up in more than one person's work. The team should state each 
 | Marker IDs | `dev` uses grouped IDs: 1–4 turn left, 5–6 turn right, 7–8 straight, and any other ID stops the run. On `dev`, no ID maps to a keep-side command, so the lane-change demo needs the 23–27 Oct mapping. | Yuhao |
 | Lane shifting on a car | On car 20 on 20 Oct, `lane_side: LEFT` kept the car to the left (judged by eye; no log). The 21 Oct shift on car 21 was hard to see, and the clearance was retuned afterwards. | Whoever was at the 20 and 21 Oct sessions |
 | What ran on a real car | Detection and commands: car 13 logged "Marker 14: KEEP_RIGHT" on 27 Oct. No complete left turn at an intersection was shown before car access ended on 2 Nov. | Everyone who was at the sessions |
-| Phantom obstacles | Car 13 log: 16 avoidance lines with no obstacle on the track. The fixes are on `fix/left-turn-steering-and-obstacles`, which has no PR yet. | Obstacle owners (Linna?) |
+| Phantom obstacles | Car 13 log: 16 avoidance lines with no obstacle on the track. The fixes are on `fix/left-turn-steering-and-obstacles`, which has no PR yet. | Zhenling Zhang (obstacle owner) |
 | Camera pan / yaw | The pan is held at 0, so the camera's yaw isn't measured. In simulation, ±4° of yaw costs one whole turn direction. | Lane detection owner, Thanh Long |
 | Which videos we submit | They must show real cars. The team should list which features have video. | Everyone |
