@@ -39,7 +39,7 @@ _To fill in:_
 | Person | Sub-team / topics (owner to confirm) | Section |
 | --- | --- | --- |
 | Toby Lee | MPC sub-team: Card 2 test cases and harness, car 20 MPC tuning, lane-side following, ArUco marker commands, intersection turns, marker simulation | [toby-lee.md](toby-lee.md) |
-| Ciaran Gruber | | _to add_ |
+| Ciaran Gruber | Interfaces, observation/config data model, logged-data simulation and visualisation | [ciaran-gruber.md](ciaran-gruber.md) |
 | Peiyu Wang | MPC sub-team: Stage 1 task list and Card 1, MPC framework and first car run, Stage 1 design (baseline, MPC, RL, M1), lane-end and lost-lane stops, car models and control settings, Foxglove export and run timing | [peiyu-wang.md](peiyu-wang.md) |
 | Yuhao Liu | MPC sub-team: measured-speed prediction, offline endpoint and cone-memory experiments, experimental junction routes, grouped marker commands and left-turn stopping/diagnosis | [yuhao-liu.md](yuhao-liu.md) |
 | Chris (Chuhan Wang) | Car control sub-team: system ID (cars 8, 20), CarController (FF + PI speed, per-side steering map), 26 Oct speed fix, obstacle-avoidance validation and spacing study | [chris-wang.md](chris-wang.md) |
