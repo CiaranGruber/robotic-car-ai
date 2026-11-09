@@ -60,6 +60,22 @@ also record and show every step, so a car run can be checked afterwards.
 | `debug1`, `debug2` | out | lateral error (m) and heading error (rad), positive left | Lets Foxglove plot the lane estimate, also while the car is stopped on a stand |
 | Data logs and `policy_visualisation/markers` | out | every step's observations, actions and settings; the policy's cones, lane and plans | The offline tools replay a log through the current code, so a replay can choose other actions than the car did |
 
+**Requirements my parts are judged by.** These are the Stage 1 requirements from `docs/stage1-approach.md` 1.1. The
+harness scores every simulated case on them, except R6a, which counts only on the car computer. R7 replaces R5 on
+T12, the lost-lane case.
+
+| Id | Requirement | Pass if | What of mine it depends on |
+| --- | --- | --- | --- |
+| R1a | Stay in lane: no body corner past a cone row | 0.0 m | MPC weights and horizon (3.2); following the last plan while the lane is lost (2.3) |
+| R1b | Follow the lane centre, measured at the last cone pair | at most 0.10 m | Lateral weight and delay compensation (2.1). T11 fails it because of the tyre model (3.1) |
+| R2 | No cone touched | 0 | Horizon: 12 steps touched cones on T11 (3.2) |
+| R3 | Hold speed: mean absolute speed error | at most 0.10 m/s | The temporary drive conversion (2.2), then the control setting checked on every car model (3.1) |
+| R4 | Smooth: RMS rate of change of the requested curvature | at most 1.0 1/(m s) | Curvature-change weight (3.2). RL failed it on the unseen cases (3.4) |
+| R5 | Stop at the lane end, past the last cone pair | 0.0 to 0.5 m | Lane-end rule and the roll-out setting (2.3, 3.5) |
+| R6a | 99th-percentile calculation time per step, on the car computer | at most 20 ms | Bounded least squares with an iteration cap (2.1); measured on car 20 (4.1) |
+| R6b | Steps where the solver didn't converge | 0 | The fallback keeps the previous curvature and is counted (2.1) |
+| R7 | Lost lane to stop request | at most 0.6 s from the first batch without the lane (0.8 s counting the 0.2 s age) | The lost-lane bridge, 0.5 s (2.3) |
+
 **Design goals and the choices they forced:**
 - **One command per detection batch, well inside 20 ms.** Batches arrive every 0.1 s and the vehicle command times
   out after 0.5 s, so a step gets a fifth of the gap. The MPC is a small bounded least-squares problem with a fixed
@@ -71,8 +87,9 @@ also record and show every step, so a car run can be checked afterwards.
 - **Record first, explain later.** Any car step can be replayed into Foxglove and measured with one command, so a
   car session's failure can be studied off the car.
 - **System-level consequence:** the lane-end stop depends on the car's roll-out after a stop request
-  (`stop_distance_per_speed_s`). That's a Car Control property: 0.6 s in simulation and 2.1 s from car 22's coast
-  time constant. So my stop is only as good as that measurement.
+  (`stop_distance_per_speed_s`). That's a Car Control property. It is 0.6 s with the simulation's stand-in control,
+  and 2.1 s for car 22, taken from its model's coast time constant because stops coast. Neither has been measured on
+  a car yet (Section 4.7), so my stop is only as good as that number.
 
 ## 2. How it works (Standard 2)
 
@@ -94,6 +111,45 @@ $$\min_{\kappa_0..\kappa_{N-1}} \sum_k 3\,e_k^2 + 1\,\psi_k^2 + 0.1\,(\kappa_k -
 - Only the first curvature is sent. The problem is solved again with the next batch.
 - The weights above are the Task A4 choice (Section 3.2). On `dev`, Toby's lab calibration (#15) later set them to
   10/1/0.1/2, with car 20's limits of 0.48 1/m left and 0.92 1/m right, to keep curves (his Section 2.1).
+- **What the weights mean.** Only their ratios matter. Being 0.1 m off centre costs 3 × 0.1² = 0.03. That is the
+  same as about 10° (0.17 rad) of heading error, or a 0.1 1/m change of curvature between two steps. The small
+  curvature weight (0.1) keeps the best curvatures unique.
+
+**As a least-squares problem.** Stack the predicted states after steps 1 to N as
+$x = F x_0 + G\,(u - \kappa^{path}\mathbf{1})$, with $u = (\kappa_0, \dots, \kappa_{N-1})$. Every cost term is then a
+squared linear function of $u$, so the cost is $\lVert M u - c \rVert^2$:
+
+$$M = \begin{bmatrix} W^{1/2} G \\ \sqrt{0.1}\, I \\ \sqrt{3}\, D \end{bmatrix}, \qquad c = \begin{bmatrix} -W^{1/2}\,(F x_0 - G\,\kappa^{path}\mathbf{1}) \\ \sqrt{0.1}\,\kappa^{path}\mathbf{1} \\ \sqrt{3}\,\kappa_{prev}\,e_1 \end{bmatrix}$$
+
+- $W = \mathrm{diag}(3, 1, 3, 1, \dots)$ holds the lateral and heading weights. $D$ takes the difference of consecutive
+  curvatures, and its first row compares $\kappa_0$ with the previous command $\kappa_{prev}$.
+- $M$ depends only on the settings, so `MpcController` builds it once. Each step only changes $c$: the
+  delay-compensated state $x_0$, the path curvature and the previous command.
+- **Why `bvls`:**
+  - The only constraints are bounds on each $u_k$, which bounded-variable least squares solves exactly.
+  - `max_iter` = $4N$ caps the calculation time per step (R6a).
+  - SciPy is already on the car's computer.
+- **If it doesn't converge**, the policy keeps the previous curvature and counts a fallback (R6b). There were none
+  in any A4 run.
+
+**Model assumptions, and where they break:**
+
+| Assumption | Why it's reasonable | Where it breaks |
+| --- | --- | --- |
+| Small heading error: $\sin\psi \approx \psi$, $\cos\psi \approx 1$ | At 15° (U2's start) $\sin\psi$ is 1% below $\psi$ | Large heading errors, such as after a lost lane |
+| Constant speed over the horizon, equal to the target speed | Car Control holds the speed (R3) | A car faster than the target travels further than predicted. Car 22 drove 1.4 m/s for 0.5 m/s (4.2). Yuhao later predicted with the measured speed |
+| No slip: the car travels where its body points (kinematic) | A 3 kg car at 1 m/s on a dry floor | T11, wet floor: a steady 6° sideslip leaves the car 0.25 m off centre (3.1) |
+| Path curvature constant over the horizon | Straight lanes and constant curves | A curve's start isn't anticipated; the plan uses today's curvature for all N steps |
+| Each curvature is reached within its step | The only lag modelled is the 0.2 s detection age | A slow steering servo. R4's limit is about a fifth of the simulated servo's rate limit |
+
+**Constraints: what is in and what is left out:**
+
+| Item | How it's handled | Reason and effect |
+| --- | --- | --- |
+| Curvature limit | Hard bound, $\lvert\kappa_k\rvert \le \kappa_{max}$ | The steering can't turn further. A bound on each variable is all `bvls` takes, and the problem always has a solution. The default 3.0 1/m is tan 45° / 0.335 m. #15 replaced it with car 20's measured 0.48 left and 0.92 right |
+| Steering rate | Cost (curvature-change weight), not a constraint | A rate limit constrains differences of the variables. `lsq_linear` takes only bounds, so it would need a general QP solver. The cost already keeps R4 well under 1.0 (0.16 mean for the A4 choice) |
+| Lane edges ($\lvert e_k \rvert$ below half the free width) | Left out; the lateral weight pulls to the centre instead | A hard state limit makes the problem infeasible when a noisy or delayed observation already puts the car near an edge, and then there's no command. Without it the problem always has a solution |
+| Speed | Not a variable of the MPC | Car Control holds the speed (R3), and only the A7 rule changes it. With speed as a variable, speed × heading would make the model bilinear, not linear |
 
 ### 2.2 From (speed, curvature) to drive and steering: the temporary conversion (PR #8)
 
@@ -117,6 +173,14 @@ When the car sees no cones or only one side, `MpcPolicy._command_without_lane` a
    (`lane_loss_timeout_s`). If the lane comes back, carry on; otherwise request the stop.
 4. After a lost-lane stop, the car stays stopped until the policy is restarted. Distances are dead-reckoned from the
    larger of the wheel speed and the requested speed.
+
+| Setting | Value | Why this value, or what it does |
+| --- | --- | --- |
+| `lane_end_distance_m` | 1.5 m | It must be above about 0.6 m, where the last pair leaves the 80° view (more on wider lanes). It must also be below the range the camera reliably sees cones at (4 m shared default; Task A1), so a loss with cones far ahead still counts as unexpected. `policy_runner` refuses a cone filter range at or below it |
+| `lane_end_stop_past_m` | 0.25 m | The middle of R5's 0 to 0.5 m zone, so the stop has 0.25 m of margin for roll-out error either way |
+| `stop_distance_per_speed_s` | 0.6 s in simulation, 2.1 s for car 22 (#16) | Roll-out distance per m/s after a stop request. 0.6 s matches the simulation's stand-in control. 2.1 s is car 22's coast time constant from its model, since stops coast. Not measured on a car yet (4.7) |
+| `lane_loss_timeout_s` | 0.5 s | It counts up by the 0.1 s step from the first batch without a lane, so the stop is requested on the fifth such batch: 0.4 s after the first. With the 0.2 s age that's 0.6 s after the loss (T12), inside R7. A starting value, kept short because the followed plan only covers the horizon |
+| `lane_loss_speed_fraction` | 0.5 | Halves the distance driven on a stale plan while waiting for the lane to come back. The plan is indexed by the distance driven, so it doesn't run out faster at half speed |
 
 **R7 (my requirement):** the time from losing the lane to the stop request is at most 0.8 s, counting the 0.2 s
 detection age (0.6 s from when the policy first receives a batch without the lane).
@@ -183,6 +247,7 @@ no car run of it is recorded in the repository.
 
 ### 3.1 Making the simulation behave like our car (Task A2, 6 and 12 Oct)
 
+- **Question:** what must the simulation match about our cars before its results can guide car settings?
 - **Detection age.** Every batch now reaches the policy 0.2 s after it was taken, as measured on car 20. The tuning
   cases still pass, and the lane-end stop became more even (0.21 to 0.24 m past the last pair).
 - **T11 explained.** On the wet floor, dream-gym's tyre model settles into a steady sideslip under the MPC: the body
@@ -210,8 +275,11 @@ no car run of it is recorded in the repository.
 ### 3.2 A3 baseline and A4 MPC: which settings? (6 Oct)
 
 - **Question:** what are the best MPC settings, and does the MPC beat a simple tracker?
-- **Baseline method:** a cone-only pure pursuit with the same reference and lane-end rule. Lookahead 0.5–1.5 m, gain
-  0.5–1.5. Lookahead 1.0 m with gain 1.0 passes all 12 tuning cases, with and without 0.03 m of noise.
+- **Baseline method:** a cone-only pure pursuit with the same reference and lane-end rule. It steers along the arc
+  to the centre-line point a lookahead $L$ ahead:
+  $\kappa = g\,\dfrac{2\,y_L}{L^2 + y_L^2} + \kappa^{path}$, where $y_L = -e - L\tan\psi$ is how far left of the car
+  that point is, and $g$ is a gain. It ignores the detection age, as a simple tracker would. Lookahead 0.5–1.5 m,
+  gain 0.5–1.5. Lookahead 1.0 m with gain 1.0 passes all 12 tuning cases, with and without 0.03 m of noise.
 - **MPC method:** a grid of 324 options:
   - horizon 12, 20 or 30 steps;
   - lateral weight 3, 10 or 30;
@@ -222,6 +290,10 @@ no car run of it is recorded in the repository.
   Each option ran the 12 tuning cases with their own noise and again with 0.03 m: 24 runs. 73 options pass all 24.
 
 ![Design front](peiyu/figures/04_design_front.png)
+
+*Left: each design's tracking (lateral RMS) against its steering roughness (curvature-rate RMS), as the mean over
+the 24 runs. Lower left is better. The blue line is the Pareto front of the MPC options that pass all 24 runs, and
+the star is the A4 choice, the smoothest on it. The RL points are from Section 3.3. Right: tuning runs passed, of 24.*
 
 - **Result:** the starting values failed T11 (R1b) and, with noise, T5 (R4: 1.02 against 1.0). I chose horizon 20
   and weights 3/1/0.1/3, the smoothest design on the front:
@@ -257,6 +329,10 @@ no car run of it is recorded in the repository.
 
 ![M1 on the unseen cases](peiyu/figures/05_m1_unseen.png)
 
+*Left and middle: U2, with a 15° start, two missed cones and one wrong colour. Both designs pass, and the MPC
+steers more smoothly (R4 0.51 against 0.80). Right: R4 on each unseen case. RL is above the 1.0 limit on U1 and U2,
+so it isn't eligible.*
+
 - **Result:** the MPC passed all three, with a worst R4 of 0.51. The RL policy failed R4 on U1 (1.51) and U2 (1.59),
   so it wasn't eligible. **The MPC was chosen for Stage 1.** The baseline also passed and is on the front: it ends
   5 mm closer to the centre but steers more roughly (0.80).
@@ -271,6 +347,10 @@ no car run of it is recorded in the repository.
   last cone pair leaves the view about 0.6 m before the car reaches it, and the lane counted as "lost" early.
 
 ![Lane end and lost lane](peiyu/figures/03_lane_end.png)
+
+*Left: where T1–T10 stop before the A7 rule (red) and with it (green), both without the detection age. The shaded
+band is R5's zone. Right: T12, camera covered at 3 m. The requested speed halves 0.2 s later (the detection age),
+and the stop request (dashed) comes 0.60 s after the cover. The car then rolls to a stop inside the lane.*
 
 - **Result:** without the detection age, T1–T10 stopped 0.38–0.91 m short before the rule (`01a47a0`), and 0.19–0.30
   m past the last pair with it (`9a7f9d8`). With the 0.2 s age (final table in `docs/stage1-design.md`), they stop
@@ -288,7 +368,8 @@ no car run of it is recorded in the repository.
   - check that a control setting works on every car model before it ships.
 - **Can't:** predict the car.
   - dream-gym's tyres aren't scaled for a 1:10 car (T11).
-  - The roll-out is 0.6 s in simulation and unmeasured on our cars.
+  - The roll-out after a stop request hasn't been measured on a car. 0.6 s is the stand-in control's, and car 22's
+    2.1 s comes from its model.
   - The car models come from one calibration or one run each.
   - The lanes are perfect straight rows.
   - RL was trained with one seed.
@@ -354,18 +435,27 @@ log (Section 4.5).*
 
 ### 4.4 Seeing car runs in Foxglove (car 20, 19–20 Oct)
 
-- I deployed the live markers to car 20 on 19 Oct (PR #25). The data logs recorded on car 20 on 19–20 Oct replay into
-  MCAP with `scripts/mcap_export.py`.
+- **Question:** when a car run goes wrong, can we see off the car what the policy saw and planned at each step? And
+  how far can a replay be trusted as a record of the run?
+- **Method:**
+  - I deployed the live markers to car 20 on 19 Oct (PR #25).
+  - I replayed the data logs recorded on car 20 on 19–20 Oct into MCAP with `scripts/mcap_export.py`.
+  - `/policy/state` puts the replayed actions beside the logged ones (`actions_match`).
 
 ![A car 20 log in the Foxglove layers](peiyu/figures/08_car20_replay.png)
 
-- **What it shows:** the cones the car recorded, and the lane, usual line and MPC path the policy computes from
-  them, with the step's summary.
+*One step (3.0 s, 0.45 m/s) of car 20's log 2026-10-20_14-24-21, replayed and drawn with the same layers as
+Foxglove: the cones used, the lane, the usual line and the MPC's predicted path, beside the step's summary. The grey
+box is the car.*
+
+- **Result:** yes for the inputs. Any recorded step shows the cones the car recorded, and the lane, usual line and
+  MPC path the policy computes from them, with the step's summary.
 - **Limit:** a replay runs today's code. On this log it chose other actions than the car on 181 of 183 steps. So it
-  shows what the current policy would do with the recorded inputs, not what the car did. `/policy/state` puts the
-  logged actions beside the replayed ones (`actions_match`). The lane state recorded in these 20 Oct logs is noisy
-  (median heading error 30–60° while moving in several drives), and I haven't found why, so I draw no conclusion
-  about lane following from them.
+  shows what the current policy would do with the recorded inputs, not what the car did. The lane state recorded in
+  these 20 Oct logs is noisy (median heading error 30–60° while moving in several drives), and I haven't found why,
+  so I draw no conclusion about lane following from them.
+- **Decision:** to judge a car run, use its logged actions, and use the replay to ask "what would the current code
+  do". PR #31's run summary is logged on the car itself, so it doesn't depend on a replay.
 
 ### 4.5 How fast does the policy really step? (22 Oct car logs)
 
@@ -386,7 +476,18 @@ log (Section 4.5).*
   standstill. Excluding them gave the numbers above.
 - **Limit:** the calculation times are from a laptop. PR #31 hasn't been run on a car yet.
 
-### 4.6 The experiments still needed (method ready, not run)
+### 4.6 Simulation against the car
+
+| What | Simulation | Car | What it means |
+| --- | --- | --- | --- |
+| Speed with car 20's control values, 0.5 m/s target | car22a and car22b models: about 1.4–1.5 m/s (3.1) | Car 22, 12 Oct: about 1.4 m/s, up to 1.7 (4.2) | They agree. But the car 22 models were fitted to a car 22 run, so this is a consistency check, not an independent test |
+| Speed with the car 22 settings | Chosen in simulation to hold 0.5 m/s on car22a and car22b | Car 22 held 0.46–0.49 m/s at a drive of about 0.33 (4.2) | Settings chosen on the models held the speed on the car, within R3's 0.10 m/s |
+| Lost-lane stop | T12: stop request 0.60 s after the camera was covered (3.5) | Car 22 stopped 0.8 s after losing the lane, from the policy log (4.2) | The rule works on a car. The car's time has no known cover moment, so it isn't measured the same way and doesn't check R7's timing |
+| Time between policy steps | 0.1 s: one step per batch, from car 20's 10 Hz on 6 Oct (4.1) | 22 Oct logs: 57 ms median, up to 368 ms; detections about every 38 ms (4.5) | That car ran another branch with obstacle detection, so the step isn't what the harness assumes. The budget needs re-measuring for that setup |
+| Steering | Car models use the measured steering map | Car 22 didn't steer as asked (4.2) | Unexplained. The models can't predict car 22's steering until its sign, centre and camera yaw are checked |
+| Roll-out after a stop request | 0.6 s (stand-in control) | Not measured | The lane-end stop distances (3.5) aren't proven on a car until it is measured (4.7) |
+
+### 4.7 The experiments still needed (method ready, not run)
 
 | Question | Method | Controlled | Decision it feeds |
 | --- | --- | --- | --- |
