@@ -33,25 +33,9 @@ This is discussion material. The assessed talk allows **one personal slide for 1
 
 ## 1. Where my parts fit (Standard 1)
 
-```mermaid
-flowchart TD
-  S["DREAM sensors and acquisition-time transforms"] --> O["Cones, posed markers, lidar, wheel speed, IMU"]
-  O --> L["Teammates: lane and obstacle estimates"]
-  O --> M["My work: measured-speed prediction and motion-compensated memory"]
-  L --> P["MPC lane following or selected experimental route"]
-  M --> P
-  O --> C["Shared marker pipeline: select a command"]
-  C --> T["Default turner: prepare, arc, exit"]
-  L --> T
-  P --> G["Stops and validity checks"]
-  T --> G
-  G --> A["Speed in m/s, curvature in 1/m, brake request"]
-  A --> V["Chris: CarController maps to drive and steering"]
-  V --> D["DREAM vehicle interface and explicit vehicle enable"]
-  O -. "offline alternatives" .-> X["Final-pair stopping and connected U-turn experiments"]
-```
+![System diagram](yuhao/figures/00_system.png)
 
-*Figure 1. Where prediction, route selection and stop decisions sit in the shared pipeline. The default marker turner and the experimental MPC junction route are alternative paths. The dashed branch identifies experiments that should not be mistaken for the deployed controller.*
+*Figure 1. Where prediction, route selection and stop decisions sit in the shared pipeline. Blue boxes contain my contributions within shared components, not exclusive ownership. The default marker turner and experimental MPC junction route are alternative paths. The dashed branch identifies offline alternatives.*
 
 **Purpose.** Follow the observed lane, interpret the selected road sign and avoid continuing on a plan whose evidence or geometry is no longer usable.
 
@@ -293,7 +277,7 @@ The experimental navigator assumes equal-width perpendicular roads. Current near
 | 7 Marker ranges | Runtime snapshot fault before the detector-only intervention | 41 recorded policy-observation rows, with timestamps and units |
 | 8 Post-reload trace | Confirmed command, stop latch, actual wheel feedback and commands as distinct signals | 705 aligned scalar records, including old camera-pan command |
 
-**Provenance.** [sources.json](yuhao/data/sources.json) records the original ignored-build paths and SHA-256 hashes. Figures 3–6 are preserved historical simulation plots, not reruns on today's defaults. The small saved extracts make the displayed counts and car traces available with this logbook. Raw car captures remain outside the submission. [make_figures.py](yuhao/make_figures.py) redraws Figures 7–8 from the committed CSV files without a car connection. The original simulation evaluators are named in the manifest and must be run at their matching source revision for comparison.
+**Provenance.** [sources.json](yuhao/data/sources.json) records the original ignored-build paths and SHA-256 hashes. Figures 3–6 are preserved historical simulation plots, not reruns on today's defaults. The small saved extracts make the displayed counts and car traces available with this logbook. Raw car captures remain outside the submission. [make_figures.py](yuhao/make_figures.py) draws the system diagram and redraws Figures 7–8 from the committed CSV files without a car connection. The original simulation evaluators are named in the manifest and must be run at their matching source revision for comparison.
 
 **Lessons and remaining limits**
 

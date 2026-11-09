@@ -130,10 +130,26 @@
   ],
   "generated_figures": [
     {
+      "target": "figures/00_system.png",
+      "sha256": "41b4cd9aa754bbe2335eee2fdfc317c2055cbb80aa8833eee7702e8c94c90e9b",
+      "generator": "make_figures.py",
+      "generator_sha256": "4038e7048071666039ec50dd372e973e9bf2c66a9b465627fa742acb0a15468d",
+      "inputs": [],
+      "source_references": [
+        "policy/action_policy/mpc.py",
+        "policy/action_policy/policy.py",
+        "policy/action_policy/intersection.py",
+        "policy/action_policy/intersection_navigator.py",
+        "policy/control/control.py",
+        "docs/acceptance.md"
+      ],
+      "description": "Static rendering of the logbook system relationships; no experimental measurements invented"
+    },
+    {
       "target": "figures/05_marker_range.png",
       "sha256": "4d4e2c7b4d89eaae4f2296c055129c4f63190e3d6e82c8dc304a729de69ea633",
       "generator": "make_figures.py",
-      "generator_sha256": "c8b6ef6cd96ca797b3556e3b5a584b9db2729b97dabe64f9e02f9afafddd89e9",
+      "generator_sha256": "4038e7048071666039ec50dd372e973e9bf2c66a9b465627fa742acb0a15468d",
       "inputs": [
         "data/marker-range.csv"
       ]
@@ -142,7 +158,7 @@
       "target": "figures/06_post_reload_trace.png",
       "sha256": "8c32bfa70d58da7bfe4ac39d5df512131f9831c87d5b33a16b1a19b2d39c2a4d",
       "generator": "make_figures.py",
-      "generator_sha256": "c8b6ef6cd96ca797b3556e3b5a584b9db2729b97dabe64f9e02f9afafddd89e9",
+      "generator_sha256": "4038e7048071666039ec50dd372e973e9bf2c66a9b465627fa742acb0a15468d",
       "inputs": [
         "data/post-reload-trace.csv",
         "data/post-reload-events.json"

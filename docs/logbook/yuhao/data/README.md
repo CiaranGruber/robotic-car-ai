@@ -9,4 +9,4 @@
 - `post-reload-events.json`: the original two-run transition analysis, including capture completeness.
 - `sources.json`: origins, SHA-256 checksums and extraction rules. Paths beginning `build/` identify ignored source captures on the author's development machine, not files required to view the submitted logbook.
 
-These files record existing experiments. Adding this logbook did not rerun the experiments or establish new physical performance. Figures 7–8 can be redrawn with `../make_figures.py`; the earlier simulation plots retain their original bytes.
+These files record existing experiments. Adding this logbook did not rerun the experiments or establish new physical performance. The static system diagram and Figures 7–8 can be redrawn with `../make_figures.py`; the earlier simulation plots retain their original bytes.

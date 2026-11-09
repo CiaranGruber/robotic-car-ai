@@ -1,4 +1,4 @@
-"""Redraw logbook Figures 7–8 from the committed scalar CSV extracts.
+"""Draw the system diagram and redraw Figures 7–8 from committed CSV extracts.
 
 Run from any directory with Python 3 and matplotlib:
     python3 docs/logbook/yuhao/make_figures.py
@@ -15,6 +15,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.patches import FancyArrowPatch, Rectangle
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -26,10 +27,49 @@ def rows(name):
         return list(csv.DictReader(stream))
 
 
+def system_diagram():
+    fig, ax = plt.subplots(figsize=(15, 10.5), layout="constrained")
+    ax.set(xlim=(0, 12.2), ylim=(-0.8, 10.3))
+    ax.axis("off")
+    nodes = {
+        "s": (4.8, 9.6, 8.6, 0.8, "DREAM sensor services and acquisition-time transforms", False),
+        "o": (4.8, 8.2, 8.6, 0.9, "Cones and posed markers (m), lidar (m)\nWheel speed (m/s), IMU heading and yaw motion (rad, rad/s)", False),
+        "l": (1.5, 6.5, 2.6, 1.1, "Teammates\nLane and obstacle\nestimates", False),
+        "m": (4.5, 6.5, 2.6, 1.1, "My contribution\nMeasured-speed prediction\nMotion-compensated memory", True),
+        "c": (7.5, 6.5, 2.6, 1.1, "Shared marker pipeline\nReader and grouped\ndirection IDs", True),
+        "x": (10.5, 6.5, 2.7, 1.1, "Offline alternatives\nFinal-pair stopping\nConnected U-turn", True),
+        "p": (3.0, 4.5, 4.0, 1.1, "MPC lane following\nor an experimental selected route", True),
+        "t": (7.3, 4.5, 4.0, 1.1, "Default marker turner\nPrepare, arc, exit", True),
+        "g": (5.2, 2.7, 8.5, 0.9, "Shared guards and my stop-persistence changes\nValidity, obstacles and explicit new run after a latch", True),
+        "a": (5.2, 1.3, 8.5, 0.75, "Outputs: speed (m/s), curvature (1/m), brake request", False),
+        "v": (5.2, -0.1, 8.5, 0.9, "Chris: CarController maps drive and steering actions\nDREAM vehicle interface owns explicit vehicle enable", False),
+    }
+    for name, (x, y, w, h, label, mine) in nodes.items():
+        ax.add_patch(Rectangle((x-w/2, y-h/2), w, h,
+                              facecolor="#fff3d6" if name == "x" else ("#e3f0fb" if mine else "#eef0f2"),
+                              edgecolor="#7d6531" if name == "x" else "#344b5f", linewidth=1.3,
+                              linestyle="--" if name == "x" else "-"))
+        ax.text(x, y, label, ha="center", va="center", fontsize=11 if w < 3 else 13,
+                color="#142b41", linespacing=1.4)
+    for start, end in [("s", "o"), ("o", "l"), ("o", "m"), ("o", "c"),
+                       ("o", "x"), ("l", "p"), ("l", "t"), ("m", "p"),
+                       ("c", "t"), ("p", "g"), ("t", "g"), ("g", "a"), ("a", "v")]:
+        sx, sy, sw, sh, *_ = nodes[start]
+        tx, ty, tw, th, *_ = nodes[end]
+        ax.add_patch(FancyArrowPatch((sx, sy-sh/2-0.03), (tx, ty+th/2+0.03),
+                                     arrowstyle="-|>", mutation_scale=15,
+                                     linewidth=1.15, color="#455e72",
+                                     linestyle="--" if end == "x" else "-"))
+    ax.text(10.55, 8.55, "Simulation\ninterfaces", ha="center", va="center", fontsize=11, color="#7d6531")
+    fig.savefig(FIGURES / "00_system.png", dpi=160)
+    plt.close(fig)
+
+
 def main():
     FIGURES.mkdir(exist_ok=True)
     plt.rcParams.update({"font.size": 12, "axes.spines.top": False,
                          "axes.spines.right": False, "savefig.facecolor": "white"})
+    system_diagram()
     marker = rows("marker-range.csv")
     fig, ax = plt.subplots(figsize=(11, 4.7), layout="constrained")
     for run, colour in [("2026-10-30_14-46-15", "#00695e"),
