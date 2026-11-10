@@ -45,7 +45,7 @@ _To fill in:_
 | Chris (Chuhan Wang) | Car control sub-team: system ID (cars 8, 20), CarController (FF + PI speed, per-side steering map), 26 Oct speed fix, obstacle-avoidance validation and spacing study | [chris-wang.md](chris-wang.md) |
 | Thanh Long Nguyen | Lane estimation: lane edges from cones and the `LaneDetection` interface, the camera pan bias and hold, AUTO colour sides and width memory, the Foxglove lane overlay; the whole-system car simulator and live 3D viewer | [long-nguyen.md](long-nguyen.md) |
 | Zhenling Zhang | Obstacle handling: cone filter, lidar obstacle detection, obstacle stop and brake, avoidance planner, local map, obstacle simulation | [zhenling-zhang.md](zhenling-zhang.md) |
-| Yifei Xia | | _to add_ |
+| Yifei Xia | Car control testing with Chris, ArUco ID detection, camera pan calibration and simulation, battery-monitoring feasibility | [yifei-xia.md](yifei-xia.md) |
 
 The names are taken from the repository's commit authors. Add anyone who's missing and correct the spelling.
 
