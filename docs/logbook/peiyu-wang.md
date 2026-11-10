@@ -28,6 +28,9 @@ On real cars: the time budget and the MPC's calculation time (car 20), and speed
 (car 22). I also fixed the detector crash on car 22. Car 22's steering didn't work on 12 Oct, so my own car sessions
 didn't show the full lane follower. The M1 choice and the lane-end stop distances are simulation only.
 
+Alongside these, I kept the cars running through repeated crashes (detector, USB, CPU, battery) and resolved the
+merge conflicts when four branches landed on `dev` together (Section 5).
+
 ## Timeline
 
 | Week | What I did | Evidence |
@@ -529,7 +532,47 @@ Thanh Long, so they are in the team table (Team overview, 0.7). These two are mi
 | Calculation time with avoidance on the car | Upload #31, do one run, read the `Run summary` line | track, obstacle placement | Whether avoidance must get cheaper to keep a step under 20 ms |
 | Lane-end stop on the car | A 6 m × 1 m lane at 0.5 m/s, 5 runs, measure the stop past the last pair | speed, lane | R5 on a car, not only in simulation |
 
-## 5. Lessons and limits
+## 5. Keeping the cars running and the branches merged (Standards 1 and 4)
+
+The cars crashed or stopped again and again, and most failures first looked like policy bugs ("cone detections
+missing or stale"). Every time I checked the car read-only first: `dream runtime status` and `logs`, `top`, the
+kernel's USB events and `ros2 topic hz /car/cone_detections`. Only after finding the cause did I restart or change
+anything, because car 20 was shared with other teams.
+
+### 5.1 Car and runtime faults
+
+| Date, car | Symptom | Cause found | What I did | Still open |
+| --- | --- | --- | --- | --- |
+| 5 Oct | The first car run couldn't start the policy | The installed node couldn't import `policy/`, and the v0.3.0 merge left a removed lidar variable: a `NameError` on every step | Installed the package with `ament_python_install_package`, declared numpy and scipy, passed `lidar_scan` (`27ee6fe`) | — |
+| 6 Oct | `upload_to_car.sh` failed on macOS | bash 3.2 treats an empty array as unbound under `set -u` | Fixed the script, the same fix as the copy on car 20 (`db6dafc`) | — |
+| 12 Oct, car 22 | The cone detector exited about 13 s after every start | OpenCV 5 in the venv: `KeyError 16` publishing the RGB image | `publish_rgb_image: false` (#24); detections back at 10 Hz (4.3) | The DREAM venv needs OpenCV 4 |
+| 12–13 Oct, cars 22 and 20 | No cones; the detector dead | The OAK-D dropped off USB and stayed unbooted. The GPU detector logged "first result did not arrive", a segfault in `readCalibration`, or depthai "Device has crashed" | Restarting only the detector unit recovered it (20 Oct). A few disconnect cycles at start are normal depthai booting, so they aren't the fault | On car 22 a stop and start ended in a hard reboot; the cause is unknown and the car keeps no journal |
+| 12–13 Oct, cars 22 and 20 | Almost no CPU left for the policy | Each DREAM `runtime_runner` used 70–80% CPU, polling `/proc` every 0.05 s; six of them left 1–5% idle on the 6-core Jetson | Measured with `top`; a DREAM issue, so reported, not edited | Upstream |
+| 19 Oct, car 20 | Deploying the live markers could have overwritten other people's work | The car's policy folder held another team's clone with our files copied over it, plus an obstacle fix edited on the car that morning; the upload's rsync overwrites without warning | Backed up the car's source first (`~/ai4r_policy_backups/src_ai4r_policy_20261019_120724.tar.gz`), then deployed around the uncommitted fix | — |
+| 20 Oct, car 20 | The policy dropped to zero actions mid-drive, twice | Once someone restarted the detector (cones stale); once `lidar_cartesian` went stale after 9 s, with CPU idle about 0.3% | Zero actions on stale sensors is the intended safety response, so no change | CPU starvation suspected, not verified |
+| 20 Oct, car 20 | The policy ran but the car never moved | Yellow cones on the car's left with `left_colour: BLUE` give no lane; stray blue cones also broke the fit | Replayed the car's cone detections through the car's own `detect_lanes`; moved the cones rather than the setting | — |
+| 26 Oct, car 20 | "It won't run": drive 0.61 sent, 0.59 applied, wheel speed 0 | A flat motor battery | If the applied drive is above 0 and the wheel speed is 0, the software path works: check the battery and ESC first | — |
+
+### 5.2 Merge conflicts I resolved
+
+Four branches had to land on `dev` together around 12 Oct: Chris's `CarController` (#17), Toby's lab calibration
+(#15), my first car run (#8) and the Stage 1 design (#16). I resolved each conflict with `dev` as the base: keep the
+newer shared code, port my features onto it, then re-run the tests. Conflict hunks are where the merge result differs
+from both parents (`git show --cc`).
+
+| Date | Merge | Conflict hunks | How it was resolved |
+| --- | --- | --- | --- |
+| 6 Oct | `dev` into the first car run (`6032bbd`) | 7, in CMake, the yaml, `policy_runner`, `policy_node`, the control tests | Kept `CarControl`; took `dev`'s lidar handling over the branch's one-line fix; `MovementPolicy` takes the MPC, cone filter and control settings; the yaml keeps both sections |
+| 12 Oct | Chris's control into the MPC policy for car 20 (`96b6030`) | 5 | The control settings and `policy_runner` wiring for both |
+| 12 Oct | `dev` into #16 (`e8edafb`) | 16, in `mpc.py`, `policy.py`, `policy_runner`, the yaml and tests | `dev`'s controller (speed-scheduled prediction, strict solver checks) with the A4 defaults and A7 lane-end settings; `dev`'s `MpcPolicy` plus the A7 stop and the lane state for `debug1`/`debug2` |
+| 12 Oct | `dev` again, after #15 and #8 (`fb2442b`) | 22 | Took the lab weights 10/1/0.1/2, because A4's 3/1/0.1/3 with #15's change weight left a 3 m radius curve; kept the 20-step horizon; #15's camera yaw correction and lane offset with the A7 stop. Every Stage 1 tuning case still passed except T11 |
+| 12 Oct | #17 on `dev` (`a5a62b0`) | 1 | The control settings |
+| 20 Oct | `dev` into Toby's lane-side branch (`010939f`) | 11 | `MpcPolicy` keeps the lane side and its rate-limited offset beside `dev`'s avoidance path; re-ran the wide-track results on the merged code. I then merged #27; Toby reverted and re-landed it the same day (#29, #30) |
+
+- **Limit:** the faults in 5.1 come from my notes of the car sessions and the car's logs at the time; the cars keep
+  no persistent journal, so most can't be shown again now.
+
+## 6. Lessons and limits
 - **Measure the inputs before tuning.** The 0.2 s detection age and the 20 ms budget came from car 20's logs on 6 Oct,
   and every later design was tuned against them.
 - **A simple baseline keeps the MPC honest.** The first MPC lost to pure pursuit, and that's how its weights were

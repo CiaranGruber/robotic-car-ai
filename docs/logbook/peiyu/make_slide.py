@@ -43,20 +43,22 @@ HEADLINE = "Peiyu: designed the car's MPC lane follower, tested it against RL, a
 NAME = "Peiyu Wang, MPC sub-team"
 NOTES = """\
 I'm Peiyu, on the MPC sub-team. My part turns the lane into a speed and a curvature for Chris's controller, once \
-per batch of cones, inside the time budget, on camera data that's already a fifth of a second old.
+per batch of cones, on camera data that's already a fifth of a second old.
 
-I built the team's first MPC. It predicts the car's distance from the lane centre and its heading, and picks \
-curvatures that keep it close without jerky steering. It also steps the car forward past the camera delay.
+I built the team's first MPC. It predicts where the car will be and picks curvatures that bring it back to the lane \
+centre without jerky steering, starting from where the car is now, not where the camera saw it.
 
-To choose between MPC and RL, I ran a baseline, the MPC and an RL policy on the same simulated lanes. RL steered too \
-roughly on the unseen ones, so we used the MPC.
+On the same simulated lanes, RL steered too roughly on the unseen ones, so we used the MPC. And the car now stops in \
+the lane-end zone instead of short of it; car 22 also stopped by itself when it lost the lane.
 
-The car used to stop short of the lane end. Now it follows its last plan and stops in the zone, and if it loses the \
-lane it stops safely. Car 22 did that stop on the floor.
+Getting this onto the cars was its own job. They kept crashing: the cone detector died under OpenCV 5, the camera \
+dropped off USB, and DREAM's own processes ate the CPU. I checked each one read-only first, then fixed or worked \
+around it. Once the "bug" was a flat battery. I also resolved the merge conflicts when Chris's controller, Toby's \
+calibration and my MPC all landed on the same day.
 
-Last, Foxglove, which I set up so we can step through any run. Here it's my camera-pan simulation. The green fan is \
-the camera's view, turned into the bend, so the policy still finds the lane, in pink."""
-"""The one-minute script."""
+Last, the virtual debug tool in Foxglove. Here it's my camera-pan simulation: the green fan is the camera's view, \
+turned into the bend, so the policy still finds the lane, in pink."""
+"""The script, about a minute and a half."""
 TILE_W, TILE_H, TOP, LEFT, GAP = 6.15, 2.78, 1.3, 0.4, 0.2
 """Each tile's size, the grid's top left corner and the gap between tiles, in inches."""
 CAPTION_H = 0.42
