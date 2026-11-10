@@ -2315,6 +2315,7 @@ All three are shared with teammates, so they are in the team table (Team overvie
 | Built on teammates' work | Peiyu: original MPC framework, Stage 1 design, lane-end work and Foxglove tools. Toby: test harness, car-calibrated MPC tuning, marker reader, default intersection turner and marker simulator. Chris: CarController and measured steering/control data. Ciaran: DREAM integration, repository and recorded drives. Lane, obstacle and local-map work came from the perception team |
 | Status | Measured-speed and marker/stop changes integrated. Final-pair estimator and connected U-turn are separate offline experiments. The experimental junction navigator is disabled by default. No complete physical left intersection turn established by my records |
 | Figures and data | [Figure index](#yuhao-6), with source hashes and small result extracts in [yuhao/data/](yuhao/data/) |
+| Slides | [Presentation and discussion slides (PowerPoint)](yuhao/slide/yuhao-liu-slides.pptx). One personal summary slide and nine discussion backups, including the 10 Nov simulation rerun and matched marker-turn manoeuvre enabled/disabled comparison |
 
 **Summary: four pieces of work, in order**
 
