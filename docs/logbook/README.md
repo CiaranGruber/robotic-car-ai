@@ -3,13 +3,19 @@
 The logbook supports the interactive oral, so it uses diagrams, plots, tables and short bullets rather than report
 prose. It's shown on the projector, and each person moves through their own section while answering questions.
 
-**Status (10 Nov):** all eight sections and the team overview are in. **The single logbook to submit is
-[logbook.md](logbook.md)**, compiled from [overview.md](overview.md) and the `<name>.md` files by
+**Status (10 Nov):** all eight sections and the team overview are in.
 
-    python3 docs/logbook/build_logbook.py
+**To submit and show in the oral: [logbook-submission.md](logbook-submission.md) / `logbook-submission.pdf`**
+(about 44 pages), built from the short part files in [submission/](submission/) by
 
-Edit the source files, not `logbook.md`, then run the script again. Before submission, the team should check the
-[things to agree](#things-to-agree-before-we-submit) list so no two sections propose conflicting things.
+    python3 docs/logbook/submission/build.py --pdf
+
+It keeps each person's diagram, equations, key simulation and car results and their figures, and states every shared
+model, table and fact once. The longer `<name>.md` sections and their compiled [logbook.md](logbook.md) (104 pages)
+stay as the full record to copy from. Edit the part files for the submission, then run the script again.
+
+**Team slides:** `submission/team-slides.pptx`, made by `python3 docs/logbook/submission/make_team_slides.py`: a title
+slide, three team-overview slides, then each person's own slide (rendered from `<name>/slide/`, with their notes).
 
 **Duplicates.** A shared model, table or figure appears once, in its owner's part, and the other parts point to it:
 the MPC model and solver (Peiyu 2.1), the marker ID table (Toby 2.2), the turn geometry figure (Toby 2.3), the
