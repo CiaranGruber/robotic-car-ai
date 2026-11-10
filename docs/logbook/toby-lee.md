@@ -7,7 +7,7 @@
 | Role | MPC sub-team. Card 2 test cases, then MPC tuning for the lab car, then ArUco marker actions and intersection turns |
 | PRs | #6 and #10 (Stage 1 tests), #15 (MPC calibration), #27 and #30 (lane side), #35 (markers and intersections, merged into `dev` on 2 Nov) |
 | Open work | `fix/left-turn-steering-and-obstacles`: 6 commits, pushed, no PR yet (waiting for review by Yuhao and Chris) |
-| Built on teammates' work | Ciaran: repo, CI and the upload script. Peiyu: MPC framework, Foxglove export. Zhenling Zhang: lane and obstacle detection, local map. Chris: steering calibration and the ±0.8 interval. Yuhao: system ID, grouped marker IDs, left-turn preparation |
+| Built on teammates' work | Ciaran: repo, CI and the upload script. Peiyu: MPC framework, Foxglove export. Thanh Long: lane estimation (`LaneDetection`). Zhenling Zhang: obstacle detection and the local map. Chris: steering calibration and the ±0.8 interval. Yuhao: system ID, grouped marker IDs, left-turn preparation |
 | Figures | `toby/figures/`, made by `python3 docs/logbook/toby/make_figures.py` (see its docstring for the two checkouts it simulates) |
 
 **Summary: four pieces of work, in order** (the same as my slide):
@@ -50,7 +50,7 @@ driving behaviour, while lane following, obstacle stopping and the safety rules 
 | Interface | Direction | What it carries | Assumption or constraint |
 | --- | --- | --- | --- |
 | `FiducialBatch` from `aruco_detector` | in | marker id, and its pose in `base_link` | Needs the RGB image, which only `oakd_cone_detector` publishes, so the runtime must start with `--aruco`. The distance is right only if `default_marker_size_m` is the printed size (0.081 m) |
-| `LaneDetection` (Zhenling Zhang) | in | the lane's centre line and width | The cross road's cones bend the fitted lane near an intersection. So during the approach, the turner keeps only the approach corridor's cones |
+| `LaneDetection` (Thanh Long) | in | the lane's centre line and width | The cross road's cones bend the fitted lane near an intersection. So during the approach, the turner keeps only the approach corridor's cones |
 | Local map pose: dead reckoning with the IMU heading | in | where the car is relative to the planned entry | Drifts over metres. The turn is about 3 m long, so the drift is small |
 | Lidar obstacles | in | points ahead | Marker stands and the lane's own cones show up as obstacles (seen on car 13) |
 | `CarMemory` | state | lane side, intersection command, turn phase | A new run (explicit resume) clears it |
@@ -73,19 +73,16 @@ driving behaviour, while lane following, obstacle stopping and the safety rules 
 
 ### 2.1 MPC lane follower (framework by Peiyu and Yuhao; I tuned it and added the lane side)
 
-A linear path-frame model, with lateral error $e$, heading error $\psi$ and commanded curvature $\kappa$. The car
-drives a distance $d = v\,\Delta t$ each step, with $\Delta t = 0.1$ s, over $N = 12$ steps (about 0.6 m at
-0.5 m/s):
-
-$$e_{k+1} = e_k + d\,\psi_k + \tfrac{d^2}{2}(\kappa_k - \kappa^{path}_k), \qquad \psi_{k+1} = \psi_k + d\,(\kappa_k - \kappa^{path}_k)$$
+The path-frame model, its least-squares form and the delay compensation are in Peiyu's Section 2.1. The version I
+tuned for car 20 (on `dev`) predicts $N = 12$ steps of 0.1 s (about 0.6 m at 0.5 m/s) and adds the lane-side line
+$e^{line}_k$:
 
 $$\min_{\kappa_0..\kappa_{N-1}} \sum_k 10\,(e_k - e^{line}_k)^2 + 1\,\psi_k^2 + 0.1\,(\kappa_k - \kappa^{path}_k)^2 + 2\,(\kappa_k - \kappa_{k-1})^2 \quad\text{s.t.}\quad -0.92 \le \kappa_k \le 0.48$$
 
 - Solved as bounded least squares (`scipy.optimize.lsq_linear`); a whole policy step took 5 ms median and 15 ms at the 99th percentile on a laptop. The bounds are the only constraints,
   because they're the car's real limit. A soft lane-edge constraint isn't needed, since the cost already tracks a
   line inside the lane.
-- **Delay compensation:** the observation is about 0.2 s old (measured, below). So the state is first predicted
-  forward by $v \cdot \text{delay}$ using the previous command.
+- **Delay compensation:** as in Peiyu's 2.1, with the 0.2 s age measured from real recordings (Section 4.1).
 - **Lane side:** $e^{line}$ is the line `edge_clearance_m` in from the chosen edge, so the offset is
   $w/2 - c$. It moves at most `offset_change_per_m` per metre driven, which keeps the change smooth.
 - **My tuning (car 20):** asymmetric limits from Chris's measurement, and `curvature_change_weight` 1 → 2 (Section 3.1).
@@ -273,11 +270,10 @@ controlled one variable at a time:
 
 ### 4.5 The experiments still needed (method ready, not run)
 
-| Question | Method | Controlled | Decision it feeds |
-| --- | --- | --- | --- |
-| Real left and right steering reach at ±0.8 | Stand test: full lock at 0.3 m/s, measure the circle's diameter, 3 runs each way | speed, floor, battery | `max_curvature_per_m` = 1/R. A radius over 1.8 m means left turns can't work in lab crossings |
-| Camera yaw with the pan at 0 | A cone 2 m ahead on the centre line: each degree moves it 3.5 cm sideways | the car's position, pan 0 | `camera_yaw_offset_deg` |
-| Turn on the car vs simulation | A left turn in a 1 m crossing, with the marker exactly 1 m before, 5 runs | the marker distance, speed | Compare the path in Foxglove with the simulated path |
+All three are shared with teammates, so they are in the team table (Team overview, 0.7), with my methods kept:
+- the real left and right steering reach at ±0.8 (with Chris and Yuhao);
+- the camera yaw with the pan at 0 (with Thanh Long, Yuhao and Peiyu);
+- a left turn on the car compared with simulation (with Yuhao).
 
 ## 5. Lessons and limits
 - **Measure before you tune.** The 0.48/0.92 asymmetry I recorded on 12 Oct explained the 1 Nov failure. A 10-minute

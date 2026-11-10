@@ -536,9 +536,11 @@ My block was in every team car run from 14 Oct, so teammates' sessions are also 
 
 ### 4.8 The experiments still needed (method ready, not run)
 
+The camera-yaw check with the pan held at 0 is shared with Toby, Yuhao and Peiyu, so it is in the team table
+(Team overview, 0.7), with my tape-centred-lane method. These are mine alone:
+
 | Question | Method | Controlled | Decision it feeds |
 | --- | --- | --- | --- |
-| Is the camera yaw zero with the pan held? | Car on a tape-centred straight lane; compare $e_\psi$ with 0. Or a cone 2 m ahead: each degree moves it 3.5 cm sideways | pan 0, car pose by tape | `camera_yaw_offset_deg` |
 | Is the measured width right? | Tape-measure each lane; compare with the fitted 0.74–0.84 m | the lane | `lane_width_m`, plausible width range |
 | How far is $e_y$ from the truth? | Car on a stand at 0, ±0.1 and ±0.2 m from the centre, measured by tape; 20 steps each | car pose, pan 0 | Whether R1b can be met with this perception |
 | A wrong-colour cone on the floor | One swapped cone in the near row, with 4, 7 and 10 cones per row in view, 5 runs each | cone spacing, speed | Whether the lone-cone rule of 3.4 is needed |

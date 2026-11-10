@@ -7,6 +7,7 @@
 | Role | Car control sub-team with Chris (Chuhan Wang): speed-control testing, steering measurements and actuator calibration. Additional investigations into ArUco ID detection, battery monitoring and camera heading compensation |
 | Shared work | Chris: PI speed-control loop and vehicle tests, steering-map runs and motor calibration. Chris's section records the controller implementation, fitted models and subsequent fixes; these are not claimed here as my independent work |
 | Individual work | Camera pan calibration, marker-ID testing and troubleshooting, battery-monitoring feasibility investigation, and an interactive camera-compensation simulation developed with AI assistance |
+| PR | #26 (`5527932`, merged into `dev` on 19 Oct): `scripts/aruco_detection_test.py`, a read-only subscriber that prints the detected marker IDs, and `scripts/camera_pan_test.py`, a manual pan test tool (dry-run unless `--live`), with notes in `docs/control/aruco-detection-test.md` and `docs/control/camera-pan-test.md` and unit tests |
 | Evidence | Shared car-control results in [Chris's section](chris-wang.md); figures in `Yifei/figure/`; [camera simulation and instructions](Yifei/yifei/camera-game/README.md) |
 | Status | Shared speed and steering work supported the team's vehicle control. Marker-ID output was demonstrated. Battery-charge measurement was not implemented; physical camera stabilisation was not conclusively validated. Simulation comparison results remain to be documented |
 
@@ -26,7 +27,8 @@ Real-car observations and offline results are separated below. Successful softwa
 | Early control work; 27–29 Sep is Chris's recorded initial phase | Worked with Chris on drive/speed testing and an initial PI control loop | Our discussion records the collaboration; Chris dates the initial car 8 system-ID/PI phase. My attendance at every individual run is not independently recorded |
 | 5 Oct | Shared car 20 calibration and speed/steering testing with Chris | Chris explicitly identifies the steering-map session as work with Yifei; his Sections 4.1–4.3 document the procedure and results |
 | 12–13 Oct | Shared calibration work became supporting evidence for team controller integration | Chris records PR #17 and the Progress Assessment in this period. The implementation and merge are Chris's work, not an additional personal implementation claim |
-| 19 Oct | ArUco detection tests and diagnosis of the missing image stream; successful ID output | Terminal screenshots show dated logs, including `aruco-test-20261019-131746-299125.jsonl`; the raw log is not currently attached here |
+| 12 Oct | Camera pan test tool; a dry-run log of its commands | `pan-test-20261012-131532-120658.csv` in PR #26 (dry-run, so no camera movement is recorded) |
+| 19 Oct | ArUco detection tests and diagnosis of the missing image stream; successful ID output. The test tools merged as PR #26 | Terminal screenshots show dated logs, including `aruco-test-20261019-131746-299125.jsonl`; the raw log is not currently attached here. PR #26 |
 | 30 Oct–2 Nov | Battery-monitoring feasibility, camera-pan calibration and compensation troubleshooting | Discussion and vehicle-session context place this work in this period; exact dates for each calibration observation were not separately recorded |
 | 7 Nov | Developed and checked the interactive camera-compensation simulation | Local simulation/controller checks and GUI/CSV checks; see Section 3.1 |
 | 9 Nov | Organised logbook evidence, prepared the calibration figure, and ran stored-image ArUco tests | Figures below: calibration observations and terminal outputs for IDs 0, 2, 5 and 8 |
@@ -58,11 +60,9 @@ My work connected vehicle-control commands to observed physical response and che
 
 ### 2.1 Speed feedback and steering calibration with Chris
 
-The conceptual PI speed-control relationship is:
+The speed controller (feedforward plus PI on wheel speed, with its limits and conditional integration) and the
+steering map are written out in Chris's Section 2.2, so they aren't repeated here.
 
-$$e_k = v_{ref} - v_k, \qquad I_k = I_{k-1} + e_k\Delta t, \qquad u_k = u_{ff} + K_p e_k + K_i I_k.$$
-
-- **Meaning:** the proportional term reacts to current speed error; the integral term removes a persistent offset. Feedforward provides an initial command estimate. The deployed controller also has limits and conditional integration; the expression above is explanatory, not a complete implementation specification.
 - **My contribution:** I helped Chris with the initial control loop and physical speed/steering tests. Chris documents the final feedforward-plus-PI implementation, anti-windup choices, parameter values and later integral-rule fixes in [his technical section](chris-wang.md#2-how-it-works-standard-2).
 - **Steering distinction:** steering angle is measured in radians, while path curvature is measured in inverse metres. For the shared car 20 steering-map tests, Chris reports curvature calculated from yaw rate divided by speed, rather than treating normalised steer as a physical angle.
 - **Reasoning:** observed variation between runs and vehicles means calibration cannot be assumed transferable. We suspected battery condition as one influence, but did not measure charge sufficiently to establish it as the sole cause.
@@ -138,7 +138,7 @@ The simulation computes camera world heading as vehicle heading plus relative ca
 
 - **Question:** how do normalised drive and steering commands relate to the vehicle's measured motion, and how can speed feedback make the commanded speed more consistent?
 - **My contribution:** I worked with **Chris (Chuhan Wang)** on vehicle calibration and testing, including steering-map runs, and helped with the earlier PI control-loop work. Chris's logbook explicitly credits the shared steering measurements and motor calibration.
-- **Shared method, as documented by Chris:** drive levels were held for individual runs; wheel-speed feedback supported speed control. For the 5 October steering map, PI held a 0.5 m/s target while each steering level was tested, and curvature was averaged over the final three seconds. His record includes trim adjustment and repeated measurements after reboot.
+- **Shared method:** documented in Chris's Sections 4.1–4.2 (one drive level per run; for the steering map, PI held 0.5 m/s at each steering level, curvature averaged over the last 3 s).
 - **Evidence and attribution:** [Chris's Sections 4.1–4.3](chris-wang.md#4-on-the-car-standard-4) contain the shared procedure and resulting calibration/PI plots. His model fits, controller implementation and quantitative tuning results remain attributed to him; they are not reproduced here as independently analysed results.
 - **Observation and limitation:** fixed commands did not guarantee identical motion across testing conditions. Battery condition was a possible explanation, but no charge measurement established a causal relationship. Earlier tests on a different car also required recalibration rather than direct parameter transfer.
 - **Troubleshooting contribution:** I supported team testing and investigated cases involving stale required sensors, unexpected active policy settings and multiple drive-command publishers. A controller must receive valid inputs and be the intended command source before its physical behaviour can be evaluated.

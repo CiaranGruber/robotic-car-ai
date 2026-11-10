@@ -7,7 +7,7 @@
 | Role | MPC sub-team. Stage 1 task list and Card 1, the MPC framework and the first car run, the Stage 1 design (baseline, MPC, RL, milestone M1), lane-end and lost-lane stops, car models and control settings, then tools to see and measure car runs |
 | PRs | #1 (MPC framework), #8 (first car run), #16 (Stage 1 MPC with Chris's control and car models), #25 (Foxglove export and live markers), all merged into `dev` |
 | Open work | #18 (one control setting for car 20 and car 22), #24 (cone detector RGB image off), #31 (step timing and run summary), #32 (`run_report`): pushed, not merged. #18, #24 and #31 need a human's recorded diff review |
-| Built on teammates' work | Ciaran: repo, CI and the upload script. Toby: Card 2 test cases, the dream-gym harness and the lab calibration (#15). Chris: `CarController` and car 20's steering calibration (5 Oct). Yuhao: the MPC's measured-speed prediction and input validation. Linna and Zhenling: lane and obstacle detection, local map |
+| Built on teammates' work | Ciaran: repo, CI and the upload script. Toby: Card 2 test cases, the dream-gym harness and the lab calibration (#15). Chris: `CarController` and car 20's steering calibration (5 Oct). Yuhao: the MPC's measured-speed prediction and input validation. Thanh Long: lane estimation (`LaneDetection`). Zhenling: cone filter, obstacle detection and the local map |
 | Figures | `peiyu/figures/`, made by `python3 docs/logbook/peiyu/make_figures.py --simulate` (see its docstring for the commits it simulates) |
 
 **Summary: four pieces of work, in order** (the same as my slide):
@@ -60,21 +60,20 @@ also record and show every step, so a car run can be checked afterwards.
 | `debug1`, `debug2` | out | lateral error (m) and heading error (rad), positive left | Lets Foxglove plot the lane estimate, also while the car is stopped on a stand |
 | Data logs and `policy_visualisation/markers` | out | every step's observations, actions and settings; the policy's cones, lane and plans | The offline tools replay a log through the current code, so a replay can choose other actions than the car did |
 
-**Requirements my parts are judged by.** These are the Stage 1 requirements from `docs/stage1-approach.md` 1.1. The
-harness scores every simulated case on them, except R6a, which counts only on the car computer. R7 replaces R5 on
-T12, the lost-lane case.
+**Requirements my parts are judged by.** The Stage 1 requirements and their thresholds are in the team overview
+(0.1). This is where each one depends on my parts:
 
-| Id | Requirement | Pass if | What of mine it depends on |
-| --- | --- | --- | --- |
-| R1a | Stay in lane: no body corner past a cone row | 0.0 m | MPC weights and horizon (3.2); following the last plan while the lane is lost (2.3) |
-| R1b | Follow the lane centre, measured at the last cone pair | at most 0.10 m | Lateral weight and delay compensation (2.1). T11 fails it because of the tyre model (3.1) |
-| R2 | No cone touched | 0 | Horizon: 12 steps touched cones on T11 (3.2) |
-| R3 | Hold speed: mean absolute speed error | at most 0.10 m/s | The temporary drive conversion (2.2), then the control setting checked on every car model (3.1) |
-| R4 | Smooth: RMS rate of change of the requested curvature | at most 1.0 1/(m s) | Curvature-change weight (3.2). RL failed it on the unseen cases (3.4) |
-| R5 | Stop at the lane end, past the last cone pair | 0.0 to 0.5 m | Lane-end rule and the roll-out setting (2.3, 3.5) |
-| R6a | 99th-percentile calculation time per step, on the car computer | at most 20 ms | Bounded least squares with an iteration cap (2.1); measured on car 20 (4.1) |
-| R6b | Steps where the solver didn't converge | 0 | The fallback keeps the previous curvature and is counted (2.1) |
-| R7 | Lost lane to stop request | at most 0.6 s from the first batch without the lane (0.8 s counting the 0.2 s age) | The lost-lane bridge, 0.5 s (2.3) |
+| Id | What of mine it depends on |
+| --- | --- |
+| R1a | MPC weights and horizon (3.2); following the last plan while the lane is lost (2.3) |
+| R1b | Lateral weight and delay compensation (2.1). T11 fails it because of the tyre model (3.1) |
+| R2 | Horizon: 12 steps touched cones on T11 (3.2) |
+| R3 | The temporary drive conversion (2.2), then the control setting checked on every car model (3.1) |
+| R4 | Curvature-change weight (3.2). RL failed it on the unseen cases (3.4) |
+| R5 | Lane-end rule and the roll-out setting (2.3, 3.5) |
+| R6a | Bounded least squares with an iteration cap (2.1); measured on car 20 (4.1) |
+| R6b | The fallback keeps the previous curvature and is counted (2.1) |
+| R7 | The lost-lane bridge, 0.5 s (2.3). Mine: at most 0.6 s from the first batch without the lane (0.8 s counting the 0.2 s age) |
 
 **Design goals and the choices they forced:**
 - **One command per detection batch, well inside 20 ms.** Batches arrive every 0.1 s and the vehicle command times
@@ -89,7 +88,7 @@ T12, the lost-lane case.
 - **System-level consequence:** the lane-end stop depends on the car's roll-out after a stop request
   (`stop_distance_per_speed_s`). That's a Car Control property. It is 0.6 s with the simulation's stand-in control,
   and 2.1 s for car 22, taken from its model's coast time constant because stops coast. Neither has been measured on
-  a car yet (Section 4.7), so my stop is only as good as that number.
+  a car yet (team table, 0.7), so my stop is only as good as that number.
 
 ## 2. How it works (Standard 2)
 
@@ -129,8 +128,8 @@ $$M = \begin{bmatrix} W^{1/2} G \\ \sqrt{0.1}\, I \\ \sqrt{3}\, D \end{bmatrix},
   - The only constraints are bounds on each $u_k$, which bounded-variable least squares solves exactly.
   - `max_iter` = $4N$ caps the calculation time per step (R6a).
   - SciPy is already on the car's computer.
-- **If it doesn't converge**, the policy keeps the previous curvature and counts a fallback (R6b). There were none
-  in any A4 run.
+- **If it doesn't converge**, the Stage 1 policy kept the previous curvature and counted a fallback (R6b). There were
+  none in any A4 run. Yuhao later made a failed solve request a stop instead (his Section 2.1).
 
 **Model assumptions, and where they break:**
 
@@ -178,7 +177,7 @@ When the car sees no cones or only one side, `MpcPolicy._command_without_lane` a
 | --- | --- | --- |
 | `lane_end_distance_m` | 1.5 m | It must be above about 0.6 m, where the last pair leaves the 80° view (more on wider lanes). It must also be below the range the camera reliably sees cones at (4 m shared default; Task A1), so a loss with cones far ahead still counts as unexpected. `policy_runner` refuses a cone filter range at or below it |
 | `lane_end_stop_past_m` | 0.25 m | The middle of R5's 0 to 0.5 m zone, so the stop has 0.25 m of margin for roll-out error either way |
-| `stop_distance_per_speed_s` | 0.6 s in simulation, 2.1 s for car 22 (#16) | Roll-out distance per m/s after a stop request. 0.6 s matches the simulation's stand-in control. 2.1 s is car 22's coast time constant from its model, since stops coast. Not measured on a car yet (4.7) |
+| `stop_distance_per_speed_s` | 0.6 s in simulation, 2.1 s for car 22 (#16) | Roll-out distance per m/s after a stop request. 0.6 s matches the simulation's stand-in control. 2.1 s is car 22's coast time constant from its model, since stops coast. Not measured on a car yet (team table, 0.7) |
 | `lane_loss_timeout_s` | 0.5 s | It counts up by the 0.1 s step from the first batch without a lane, so the stop is requested on the fifth such batch: 0.4 s after the first. With the 0.2 s age that's 0.6 s after the loss (T12), inside R7. A starting value, kept short because the followed plan only covers the horizon |
 | `lane_loss_speed_fraction` | 0.5 | Halves the distance driven on a stale plan while waiting for the lane to come back. The plan is indexed by the distance driven, so it doesn't run out faster at half speed |
 
@@ -430,8 +429,9 @@ log (Section 4.5).*
   car 22.
 - **Fix:** `publish_rgb_image: false`. Car 22 drove again, with cone detections at 10 Hz (PR #24, split out of #18).
 - **Cost:** the ArUco detector and RGB logging get no image until the venv has OpenCV 4. That's a DREAM environment
-  fix for the teaching staff. It conflicts with the markers' `--aruco` start, so it's in the team's
-  [things to agree](README.md#things-to-agree-before-we-submit).
+  fix for the teaching staff. It conflicts with the markers' `--aruco` start, which needs the RGB image (Toby's
+  4.3). So on a car with OpenCV 5 in its venv, the cone detector and the markers can't both run until the venv is
+  fixed.
 
 ### 4.4 Seeing car runs in Foxglove (car 20, 19–20 Oct)
 
@@ -485,14 +485,15 @@ box is the car.*
 | Lost-lane stop | T12: stop request 0.60 s after the camera was covered (3.5) | Car 22 stopped 0.8 s after losing the lane, from the policy log (4.2) | The rule works on a car. The car's time has no known cover moment, so it isn't measured the same way and doesn't check R7's timing |
 | Time between policy steps | 0.1 s: one step per batch, from car 20's 10 Hz on 6 Oct (4.1) | 22 Oct logs: 57 ms median, up to 368 ms; detections about every 38 ms (4.5) | That car ran another branch with obstacle detection, so the step isn't what the harness assumes. The budget needs re-measuring for that setup |
 | Steering | Car models use the measured steering map | Car 22 didn't steer as asked (4.2) | Unexplained. The models can't predict car 22's steering until its sign, centre and camera yaw are checked |
-| Roll-out after a stop request | 0.6 s (stand-in control) | Not measured | The lane-end stop distances (3.5) aren't proven on a car until it is measured (4.7) |
+| Roll-out after a stop request | 0.6 s (stand-in control) | Not measured | The lane-end stop distances (3.5) aren't proven on a car until it is measured (team table, 0.7) |
 
 ### 4.7 The experiments still needed (method ready, not run)
 
+The roll-out after a stop request and car 22's steering and camera yaw are shared with Chris, Yuhao, Toby and
+Thanh Long, so they are in the team table (Team overview, 0.7). These two are mine alone:
+
 | Question | Method | Controlled | Decision it feeds |
 | --- | --- | --- | --- |
-| Roll-out after a stop request, per car | Drive at 0.5 m/s, request a stop at a tape mark, measure the distance, 3 runs | speed, floor, battery | `mpc.stop_distance_per_speed_s`, so the lane-end stop lands in 0–0.5 m on the car |
-| Car 22's steering direction and centre | On a stand, with the car left of the lane centre, the wheels must turn right. Then a cone 2 m straight ahead for camera yaw | the car's pose, pan 0 | Steering sign, trim and `camera_yaw_offset_deg` before car 22 drives a lane |
 | Calculation time with avoidance on the car | Upload #31, do one run, read the `Run summary` line | track, obstacle placement | Whether avoidance must get cheaper to keep a step under 20 ms |
 | Lane-end stop on the car | A 6 m × 1 m lane at 0.5 m/s, 5 runs, measure the stop past the last pair | speed, lane | R5 on a car, not only in simulation |
 

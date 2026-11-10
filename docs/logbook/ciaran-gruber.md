@@ -4,16 +4,30 @@
 
 | | |
 | --- | --- |
-| Role | Interfaces between policy components; observation and configuration data model; logged-data simulation and visualisation |
-| Figures | `ciaran/figures/` |
+| Role | Interfaces between policy components; observation and configuration data model; logged-data simulation and visualisation. Also the repository set-up, CI and the car upload script that every teammate used |
+| PRs | #3 and #7 (DREAM v0.3.0 update and the missing observations), #4 (car upload script), #5 (CI running the policy tests), #13 (data logging, scenario creation and the renderer), #20 (new scenarios with lidar, moved to Git LFS), #22 (`CarMemory`, structured memory for the car). All merged into `dev` |
+| Used by teammates | The four recorded drives of 6 Oct (`straight_even`, `messy_cone`, `outlier_cone`, `long_track`) that Toby (his 4.1) and Thanh Long (his 4.1–4.4) analysed; `CarMemory`, which holds the lane side, the marker command, the stops and Zhenling's local map; the data logs every car run writes |
+| Figures | `ciaran/figures/`. The overall block diagram is also the team's whole-system diagram (Team overview, 0.3) |
+
+## Timeline
+
+| Date | What I did | Evidence |
+| --- | --- | --- |
+| 29 Sep | Repository boilerplate, codebase documentation and the AI rules (`docs/ai_rules/`) | `3d10d33`, `dcf6612` |
+| 5–6 Oct | Car upload script; CI that runs the policy tests, then a compilation check; the DREAM v0.3.0 update and its missing observations | PR #4 (`0b43f6a`), PR #5 (`833613d`), PR #3, PR #7 (`2294f7a`) |
+| 7–8 Oct | Data logging of every step's observations and actions; scenario creation from the logs (`scripts/data_converter.py`) and the scenario renderer (`scripts/scenario_renderer.py`), with the four recorded 6 Oct drives | PR #13 (`b88ba24`, `b6ce342`, `238fe38`) |
+| 13 Oct | Scenarios with lidar detections and a curvy road; real scenarios moved to Git LFS | PR #20 (`7885512`, `9172290`, `c902436`) |
+| 18–19 Oct | `CarMemory`: memory kept between steps and written to the data logs | PR #22 (`cbc59a5`, `9a31408`) |
+| 26 Oct | Why the car veered into the cones on curves: replay of `fail_curvy_road` (Section 4) | `ciaran/figures/` |
 
 ---
 
 ## 1. Where my parts fit (Standard 1: Overall subsystem)
 
-![Overall block diagram](ciaran/figures/Overall%20block%20diagram.png)
-
-*Figure: Overall block diagram of the robotic system - my contributions laid on the interface between the dream input/output and the policy nodes themselves.*
+My overall block diagram of the robotic system is the team's whole-system diagram, so it is shown once, in the team
+overview (0.3). My contributions lie on the interface between the DREAM input/output and the policy nodes: the
+"Dream Input" and "Dream Output" blocks with their logging parameters, the observation and action data model they
+convert to, and `CarMemory`, which carries state between steps.
 
 ---
 

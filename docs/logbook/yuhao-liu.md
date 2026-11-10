@@ -60,26 +60,11 @@ This is discussion material. The assessed talk allows **one personal slide for 1
 
 ### 2.1 Measured-speed MPC
 
-Let $e$ be lateral error in m, $\psi$ heading error in rad, $v$ wheel speed in m/s, and $\kappa$ commanded curvature in m⁻¹. Positive lateral error and curvature are leftward. With $d=v\Delta t$, a small-error path-frame approximation near the reference gives the following discretisation, holding speed and curvature over each step. It neglects higher-order lateral-offset/path-curvature coupling.
+The path-frame model, the cost and its least-squares form $\|Mu-c\|^2$ (solved with SciPy's `bvls`) are in Peiyu's
+Section 2.1, with the Stage 1 weights, and in Toby's Section 2.1, with `dev`'s car 20 weights and the lane side.
+Only the first curvature is applied, then the policy solves again. My change is to the speed $v$ inside each
+predicted step, $d = v\Delta t$. The horizon covers $Nv\Delta t$, so the speed also changes how far ahead it looks.
 
-$$e_{k+1}=e_k+d\psi_k+\frac{d^2}{2}(\kappa_k-\kappa_k^{path}),\qquad
-\psi_{k+1}=\psi_k+d(\kappa_k-\kappa_k^{path}).$$
-
-The MPC chooses the curvature sequence $u=(\kappa_0,\ldots,\kappa_{N-1})$:
-
-$$\min_u\sum_k q_e(e_k-e_k^{ref})^2+q_\psi(\psi_k-\psi_k^{ref})^2
-+r_\kappa(\kappa_k-\kappa_k^{ref})^2+r_\Delta(\kappa_k-\kappa_{k-1})^2,
-\quad -\kappa_{right}\leq\kappa_k\leq\kappa_{left}.$$
-
-| Term | Meaning | Trade-off |
-| --- | --- | --- |
-| $q_e$ | Lateral tracking penalty | Larger values prioritise position error |
-| $q_\psi$ | Heading penalty | Aligns with the reference before lateral drift grows |
-| $r_\kappa$ | Curvature deviation penalty | Discourages steering beyond what the reference needs |
-| $r_\Delta$ | Change from the previous curvature | Reduces abrupt steering at a possible cost in tracking |
-| $N,\Delta t$ | Horizon steps and time per step | Predicted distance is $Nv\Delta t$, so speed changes what the horizon covers |
-
-- **Implementation:** stacking the linear prediction and weighted errors gives bounded least squares $\|Mu-c\|^2$. The existing SciPy solver uses `bvls`. Only the first curvature is applied, then the policy solves again.
 - **My change:** rebuild the motion matrices using fresh measured speed, holding it constant across this horizon. The delay projection also uses $d_\tau=v\tau$ and the previous requested curvature, not reconstructed motion history. The solver API uses nominal speed when feedback is omitted, while a measured zero remains zero. Required missing/stale wheel data still stops the ROS policy through its sensor checks.
 - **Why:** acceleration or under-speed makes a nominal-speed model predict the wrong travelled distance. Changing the model input addresses that mismatch directly.
 - **Constraints kept:** separate left/right curvature bounds. **Not represented:** tyre slip, steering slew, a complete vehicle dynamics model, or a hard lane/obstacle constraint inside the least-squares problem. Other policy guards check obstacles and stopping; the cost alone is not a containment proof.
@@ -118,13 +103,13 @@ $$\kappa=\frac{2y_L}{x_L^2+y_L^2}.$$
 
 The experimental navigator assumes equal-width perpendicular roads. Current near/far boundary evidence supports an exit; an interior closing row vetoes it. An unknown exit permits only a finite approach whose endpoint and stopping budget remain before the junction mouth. Old evidence cannot authorise an indefinitely moving endpoint.
 
-**Grouped commands after PR #35:** IDs **1–4 left, 5–6 right, 7–8 straight**. Other confirmed IDs stop the run. The nearest eligible posed marker ahead must be within 2 m and appear in two policy steps. These are policy checks in addition to the detector's own image confirmation. The 26 Oct figures instead use the historical **3/4/5 left/right/straight** mapping.
+**Grouped commands (my change in PR #35):** IDs 1–4 left, 5–6 right, 7–8 straight, and any other confirmed ID stops
+the run. The full table and the marker reader's 2 m, two-step rule are in Toby's Section 2.2. The 26 Oct figures
+instead use the historical **3/4/5 left/right/straight** mapping.
 
 **Why heading-aware admission matters.** $R=1/|\kappa_{max}|$, so the 0.48 m⁻¹ left limit gives $R=2.083$ m. A left-turn arc must start tangent to the **actual** heading and clear the inside corner and far row. My change prepares earlier and rejects an infeasible start rather than relaxing clearance. These checks do not prove the entire outside-row body sweep from every heading.
 
-![Shared turn geometry](toby/figures/08_turn_geometry.png)
-
-*Figure 2. Toby's right-turn geometry illustration, R=1.2 m in 0.8 m roads. Moving to the outside changes the feasible start window. This explains the shared geometric constraint, not a measured car trajectory or my independent calibration.*
+*Figure 2 is Toby's right-turn geometry (his Section 2.3), R=1.2 m in 0.8 m roads, not repeated here. Moving to the outside changes the feasible start window. This explains the shared geometric constraint, not a measured car trajectory or my independent calibration.*
 
 ## 3. Simulation (Standard 3)
 
@@ -257,12 +242,12 @@ The experimental navigator assumes equal-width perpendicular roads. Current near
 
 ### 4.4 Experiments still needed (method proposed, not run)
 
-| Question | Proposed method and controlled variables | Measurements / decision |
-| --- | --- | --- |
-| What radius can car 20 sustain at the widened steering interval? | Same floor, battery band and target speed; repeat left/right circles at each admitted setting | Measured radius and variability, not just a configured 0.91 m⁻¹ limit. Update calibrated bounds through the hardware/control owner |
-| Is the cone/marker frame correct with zero pan? | Fix car pose and pan; use surveyed targets at multiple ranges; repeat after component restart | Lateral/range error and yaw bias. A constant yaw offset cannot justify physical panning |
-| Does earlier preparation improve the physical left turn? | Fix road width, marker-to-entry distance and start pose; repeat old/new approved revisions under the same conditions | Recognition distance, tangent start, body clearance, exit completion and stop distance |
-| Do brake settings bound residual travel? | Several measured speeds under a controlled surface/battery condition, with safe stopping space | Reaction delay and stopping-distance distribution. Replace assumed stopping envelopes with measured evidence |
+All four are shared with teammates, so they are in the team table (Team overview, 0.7), with my methods and
+measurements kept:
+- the radius car 20 sustains at the widened steering interval (with Chris and Toby);
+- whether the cone and marker frame is right with zero pan (with Thanh Long, Toby and Peiyu);
+- whether earlier preparation improves the physical left turn (with Toby);
+- whether the brake settings bound the residual travel (with Zhenling, Peiyu and Chris).
 
 ## 5. Figures and evidence (Standard 5)
 

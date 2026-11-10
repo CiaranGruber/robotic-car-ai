@@ -3,9 +3,18 @@
 The logbook supports the interactive oral, so it uses diagrams, plots, tables and short bullets rather than report
 prose. It's shown on the projector, and each person moves through their own section while answering questions.
 
-**Status:** this draft began on 4 Nov 2026 with Toby's section. Completed individual sections are linked below;
-the overview and remaining sections await their owners. Before submission, the team should check the
+**Status (10 Nov):** all eight sections and the team overview are in. **The single logbook to submit is
+[logbook.md](logbook.md)**, compiled from [overview.md](overview.md) and the `<name>.md` files by
+
+    python3 docs/logbook/build_logbook.py
+
+Edit the source files, not `logbook.md`, then run the script again. Before submission, the team should check the
 [things to agree](#things-to-agree-before-we-submit) list so no two sections propose conflicting things.
+
+**Duplicates.** A shared model, table or figure appears once, in its owner's part, and the other parts point to it:
+the MPC model and solver (Peiyu 2.1), the marker ID table (Toby 2.2), the turn geometry figure (Toby 2.3), the
+speed controller (Chris 2.2), the Stage 1 requirements, the whole-system diagram, the facts every part uses and the
+experiments needed by more than one person (overview 0.1, 0.3, 0.6, 0.7).
 
 ## How to use it
 
@@ -26,13 +35,9 @@ the overview and remaining sections await their owners. Before submission, the t
 
 ## 1. Team overview (team lead, max 3 slides in the talk)
 
-_To fill in:_
-- Goals and requirements: the stage 1 and stage 2 behaviours and the cards.
-- What the system achieved on the car, with the "best" video.
-- Who did what, as sub-teams and individuals over time.
-- The integration timeline: releases, PRs and car sessions.
-- A whole-system block diagram. [Toby's diagram](toby-lee.md#1-where-my-parts-fit-standard-1) is a starting point;
-  replace the "teammates" boxes with each owner's part.
+In [overview.md](overview.md): goals and requirements, what ran on real cars, the whole-system diagram (Ciaran's),
+who did what, the timeline, the facts every part uses and the shared experiments still needed. The team lead
+should check it and fill in the videos.
 
 ## 2. Individual sections
 
@@ -66,3 +71,6 @@ These points come up in more than one person's work. The team should state each 
 | RGB image and OpenCV 5 | Peiyu: with OpenCV 5 in the DREAM venv, publishing the RGB image crashes the cone detector (car 22, 12 Oct), so #24 turns it off. Toby's markers need the RGB image (`--aruco`). `dev` still has it on. | Toby, Yuhao |
 | Which MPC weights | Stage 1 design (A4) chose 3/1/0.1/3 with a 3.0 1/m limit. `dev` uses the lab calibration 10/1/0.1/2 with 0.48 / 0.92 1/m (#15). Each result should say which one it used. | Toby |
 | Control settings per car | `dev`'s speed control values suit car 22 only (the car 20 model reaches 0/12 cases). #18 proposes one setting for both cars; not yet reviewed. | Chris |
+| Speed feedforward offset | Zhenling's timeline gives 0.48 → 0.15 (#34, 26 Oct); Chris's 4.4 says the car didn't move at 0.15 and his fix uses 0.48; `dev` has 0.48 since `bf5e08c`. The overview's 0.6 gives the whole history | Zhenling, Chris |
+| Who built lane detection | Toby's and Peiyu's sections credited it to Zhenling ("Linna" before the rename). It is Thanh Long's (his Part 2); both were corrected on 10 Nov | Thanh Long, Zhenling |
+| Edits made while compiling (10 Nov) | Repeats were replaced by pointers in Toby's, Peiyu's, Yuhao's, Long's, Yifei's and Ciaran's files; Ciaran's PR list and timeline and Yifei's PR #26 were added from git; Zhenling's timeline table got its lost line breaks back | Each owner, to check their own file |
