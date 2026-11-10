@@ -4,7 +4,8 @@
 
 Assertion-evidence design (Michael Alley, Penn State): a one-sentence headline, then pictures as the evidence and
 very few words, so the audience reads no more than about 15 a minute. One picture per piece of work:
-1. the MPC driving a simulated unseen lane (cropped from figures/05_m1_unseen.png);
+1. what the MPC does each step: one plan solved with the Stage 1 model and weights (mpc.py at 47f8838), from a car
+   0.25 m left of centre and pointing 8 degrees left, moved forward by the 0.2 s detection age first;
 2. MPC against RL: worst steering roughness on the unseen cases against the smoothness limit (R4), values from
    docs/stage1-design.md M1, drawn without numbers;
 3. where the car stops at the lane end, before and with the A7 rule (typical simulated stops, figures/03_lane_end.png);
@@ -17,13 +18,17 @@ the slide can be checked without PowerPoint. The .pptx is the one to present.
 """
 from pathlib import Path
 
+import math
+
 import matplotlib
+import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.patches import FancyBboxPatch, Rectangle  # noqa: E402
 from pptx import Presentation  # noqa: E402
 from pptx.dml.color import RGBColor  # noqa: E402
+from pptx.enum.text import PP_ALIGN  # noqa: E402
 from pptx.util import Inches, Pt  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
@@ -34,8 +39,7 @@ PREVIEW = HERE / "slide" / "peiyu-wang-slide.png"
 DARK, GREY = RGBColor(0x22, 0x22, 0x22), RGBColor(0x66, 0x66, 0x66)
 GREEN, AMBER = RGBColor(0x2A, 0x7F, 0x62), RGBColor(0xB2, 0x6B, 0x00)
 BAD, GOOD, NEUTRAL = "#c8553d", "#2a7f62", "#8a8a8a"
-HEADLINE = ("My MPC passed every unseen test, steered more smoothly than RL and stops in the zone; Foxglove shows "
-            "what the car sees")
+HEADLINE = "Peiyu: designed the car's MPC lane follower, tested it against RL, and built a virtual debug tool"
 NAME = "Peiyu Wang, MPC sub-team"
 NOTES = """\
 I'm Peiyu, on the MPC sub-team. My part turns the lane into a speed and a curvature for Chris's controller, once \
@@ -56,6 +60,8 @@ the camera's view, turned into the bend, so the policy still finds the lane, in 
 TILE_W, TILE_H, TOP, LEFT, GAP = 6.15, 2.78, 1.3, 0.4, 0.2
 """Each tile's size, the grid's top left corner and the gap between tiles, in inches."""
 CAPTION_H = 0.42
+TAG_W = 1.9
+"""Width of each tile's tag, right-aligned beside its title, in inches."""
 
 
 def crop(name: str, rows: tuple[float, float], columns: tuple[float, float], out: str) -> Path:
@@ -64,6 +70,61 @@ def crop(name: str, rows: tuple[float, float], columns: tuple[float, float], out
     height, width = image.shape[:2]
     path = TILES / out
     plt.imsave(path, image[int(rows[0] * height):int(rows[1] * height), int(columns[0] * width):int(columns[1] * width)])
+    return path
+
+
+def mpc_plan() -> Path:
+    """One MPC plan, solved as in policy/action_policy/mpc.py at 47f8838 (the Stage 1 design: N = 20 steps of
+    0.1 s at 1 m/s, weights 3/1/0.1/3, straight lane, previous curvature 0). The bounds (|curvature| <= 3 1/m) are
+    not reached, so plain least squares gives the same plan as bvls."""
+    steps, speed, step_s, age = 20, 1.0, 0.1, 0.2
+    weights = {"lateral": 3.0, "heading": 1.0, "curvature": 0.1, "change": 3.0}
+    seen_lateral, heading = 0.25, math.radians(8.0)
+    d = speed * step_s
+    step = np.array([[1.0, d], [0.0, 1.0]])
+    effect = np.array([d * d / 2.0, d])
+    free = np.vstack([np.linalg.matrix_power(step, k + 1) for k in range(steps)])
+    forced = np.zeros((2 * steps, steps))
+    for k in range(steps):
+        for j in range(k + 1):
+            forced[2 * k:2 * k + 2, j] = np.linalg.matrix_power(step, k - j) @ effect
+    state_weights = np.sqrt(np.tile([weights["lateral"], weights["heading"]], steps))
+    now = np.array([seen_lateral + speed * age * heading, heading])
+    cost = np.vstack([state_weights[:, None] * forced, math.sqrt(weights["curvature"]) * np.eye(steps),
+                      math.sqrt(weights["change"]) * (np.eye(steps) - np.eye(steps, k=-1))])
+    target = np.concatenate([-state_weights * (free @ now), np.zeros(2 * steps)])
+    curvatures = np.linalg.lstsq(cost, target, rcond=None)[0]
+    assert np.max(np.abs(curvatures)) < 3.0
+    lateral = (free @ now + forced @ curvatures)[0::2]
+    figure, axis = plt.subplots(figsize=(5.2, 3.0))
+    for x in np.arange(-0.5, 2.75, 0.5):
+        axis.plot(x, 0.5, "o", color="#e3b800", ms=8)
+        axis.plot(x, -0.5, "o", color="#2f6fdf", ms=8)
+    axis.plot([-0.6, 2.6], [0, 0], ls="--", color="#999999", lw=1.2)
+    axis.text(2.6, -0.1, "lane centre", ha="right", fontsize=10.5, color="#777777")
+
+    def car(x, y, colour, alpha):
+        axis.add_patch(Rectangle((x - 0.2, y - 0.11), 0.4, 0.22, angle=math.degrees(heading), rotation_point="center",
+                                 color=colour, alpha=alpha, lw=0))
+
+    car(0.0, seen_lateral, "#888888", 0.35)
+    car(speed * age, now[0], "#1f5fd1", 0.95)
+    xs = speed * age + d * np.arange(1, steps + 1)
+    axis.plot(xs, lateral, "o-", color=GOOD, ms=4.5, lw=1.5)
+    arrow = dict(arrowstyle="->", lw=1.3)
+    axis.annotate("camera saw the car here, 0.2 s ago", xy=(-0.05, 0.33), xytext=(-0.6, 0.78), fontsize=10.5,
+                  color="#666666", arrowprops=arrow | {"color": "#888888"})
+    axis.annotate("where it is now", xy=(0.25, 0.2), xytext=(0.1, -0.33), fontsize=11, weight="bold",
+                  color="#1f5fd1", arrowprops=arrow | {"color": "#1f5fd1"})
+    axis.text(1.0, 0.36, "MPC plan, 2 s ahead", fontsize=11.5, weight="bold", color=GOOD)
+    axis.set_xlim(-0.65, 2.65)
+    axis.set_ylim(-0.6, 0.9)
+    axis.set_aspect("equal")
+    axis.axis("off")
+    figure.tight_layout()
+    path = TILES / "mpc_plan.png"
+    figure.savefig(path, dpi=200)
+    plt.close(figure)
     return path
 
 
@@ -144,10 +205,9 @@ def tiles() -> list[tuple[Path, str, str, RGBColor]]:
     """:return: (picture, title, where it was shown, tag colour) for each tile, in reading order."""
     TILES.mkdir(parents=True, exist_ok=True)
     return [
-        (crop("05_m1_unseen.png", (0.06, 0.90), (0.0, 0.41), "mpc_lane.png"), "Passes every unseen test",
-         "Simulation", AMBER),
+        (mpc_plan(), "Plans from where the car is now", "Ran on car 20", GREEN),
         (mpc_or_rl(), "Smoother than RL", "Simulation", AMBER),
-        (lane_end(), "Stops in the zone, not short", "Sim; lost-lane stop on car 22", GREEN),
+        (lane_end(), "Stops in the zone, not short", "Simulation + car 22", GREEN),
         (foxglove_pan(), "The camera keeps the bend in view", "Foxglove", AMBER),
     ]
 
@@ -164,9 +224,10 @@ def placement(index: int, path: Path) -> tuple[float, float, float, float, float
     return left, top, left + (TILE_W - width) / 2, top + CAPTION_H, width, height
 
 
-def text_box(slide, x, y, w, h, runs):
+def text_box(slide, x, y, w, h, runs, align=PP_ALIGN.LEFT):
     frame = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h)).text_frame
     frame.word_wrap = True
+    frame.paragraphs[0].alignment = align
     for text, size, bold, colour in runs:
         run = frame.paragraphs[0].add_run()
         run.text = text
@@ -180,8 +241,8 @@ def pptx(pictures):
     text_box(slide, 0.4, 0.2, 12.5, 1.1, [(HEADLINE, 26, True, DARK)])
     for i, (path, title, tag, colour) in enumerate(pictures):
         left, top, x, y, width, height = placement(i, path)
-        text_box(slide, left, top, TILE_W, CAPTION_H, [(f"{i + 1}  {title}", 16, True, DARK), (f"    {tag}", 11, False,
-                                                                                                    colour)])
+        text_box(slide, left, top, TILE_W - TAG_W, CAPTION_H, [(f"{i + 1}  {title}", 16, True, DARK)])
+        text_box(slide, left + TILE_W - TAG_W, top + 0.05, TAG_W, CAPTION_H, [(tag, 11, False, colour)], PP_ALIGN.RIGHT)
         slide.shapes.add_picture(str(path), Inches(x), Inches(y), width=Inches(width), height=Inches(height))
     text_box(slide, 0.4, 7.12, 6, 0.3, [(NAME, 11, False, GREY)])
     slide.notes_slide.notes_text_frame.text = NOTES
@@ -196,8 +257,7 @@ def preview(pictures):
     axis.set_xlim(0, 13.333)
     axis.set_ylim(7.5, 0)
     axis.axis("off")
-    axis.text(0.5, 0.3, "My MPC passed every unseen test, steered more smoothly than RL\nand stops in the zone; "
-              "Foxglove shows what the car sees", fontsize=21, weight="bold", color=f"#{DARK}", va="top", linespacing=1.25)
+    axis.text(0.5, 0.3, "Peiyu: designed the car's MPC lane follower, tested it against RL,\nand built a virtual debug tool", fontsize=21, weight="bold", color=f"#{DARK}", va="top", linespacing=1.25)
     for i, (path, title, tag, colour) in enumerate(pictures):
         left, top, x, y, width, height = placement(i, path)
         axis.text(left + 0.08, top + 0.08, f"{i + 1}  {title}", fontsize=14, weight="bold", color=f"#{DARK}",
