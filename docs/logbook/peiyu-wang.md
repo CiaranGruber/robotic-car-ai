@@ -35,7 +35,7 @@ didn't show the full lane follower. The M1 choice and the lane-end stop distance
 | 0 (27 Sep) | The Stage 1 movement-policy task list: Cards 1–3, shared defaults, milestones M1 and M2 | `46dc984`, `docs/movement-policy-tasks.md` |
 | 1 (5–6 Oct) | MPC framework, a temporary drive/steering conversion, the first car run, a lane-loss hold. Card 1 and the time budget measured on car 20. Stage 1 design: A2–A7 and M1. Car 20 stand tests. RC-assisted open-space policy | PR #1, PR #8, `b0230ac`, `e7fc407`, `da0fd8c`, `15df539`, `9a7f9d8`, `47f8838`, `7e30078`, `docs/stage1-design.md` |
 | 2 (12 Oct) | Merged Chris's control into the Stage 1 MPC. Measured car models. Car 22 floor run. One control setting for both cars. The OpenCV 5 detector crash | PR #16, `0f02b2a`, `350fa3b`, PR #18, PR #24 |
-| 3 (19–20 Oct) | Foxglove live markers and MCAP export of data logs, deployed on car 20. Each run starts at `mpc.lane_side` | PR #25, `31b80f1` (in PR #27) |
+| 3 (19–20 Oct) | Foxglove live markers and MCAP export of data logs, deployed on car 20. Each run starts at `mpc.lane_side`. Camera-pan prototype simulation, exported to Foxglove | PR #25, `31b80f1` (in PR #27), `230c75b` |
 | 4 (22 Oct) | Step timing and a run summary in `policy_node`. `run_report` measured the 22 Oct car logs | PR #31, PR #32 |
 
 ---
@@ -359,6 +359,38 @@ and the stop request (dashed) comes 0.60 s after the cover. The car then rolls t
 - **A judgement that reversed:** my first version slowed along a constant-deceleration ramp. The simulated speed
   controller lags the request, so the car rolled 0.64–0.75 m past the last pair and failed R5. Requesting the stop
   at the roll-out distance fixed it.
+
+### 3.6 Can panning the camera keep tight curves in view? (20 Oct, `230c75b`)
+
+- **Question:** the camera sees 86° and 2.5 m, so on tight curves and loops the lane leaves the view. If the policy
+  aims the camera along the lane, does the MPC keep the lane? And how much do the servo facts nobody has measured
+  matter: the angle per unit, its speed, and the angle at the moment each image is taken?
+- **Method:** `tests/policy/prototype_camera_pan.py` (a throwaway prototype), on Toby's curved lanes, kinematic car
+  and measured camera. DREAM's camera TF is fixed at zero pan, so the policy turns the detected cones back by the
+  angle it believes the camera had. Four modes:
+  - fixed: the pan held at 0, as on `dev`;
+  - ideal: the true angle at the image's time, as an encoder would give;
+  - modelled: a servo model of the commands, while the real servo turns 10% further and slower;
+  - naive: the latest command, not the angle at the image's time.
+
+  `--export` writes chosen runs to MCAP with a layout, so each run can be stepped through in Foxglove.
+
+![The camera-pan simulation in Foxglove](peiyu/figures/foxglove_pan_sim.png)
+
+*Foxglove showing the exported hairpin run with the ideal pan, at 8.4 s. Left: the camera's view (green) has
+turned into the bend, the cones it sees are ringed, the pink line is the lane centre the policy found, and the blue
+line is the car's trail. Right: the pan angle over the run, and the true and estimated distance from the centre.*
+
+- **What the exported runs show** (one seed each):
+  - 1.5 m loop: with the pan fixed, the lane left the view after 8.6 s and the car stopped off the track. With the
+    ideal pan, the lane stayed in view all the way round. The car still swung wide, because the loop is tighter
+    than car 20's left reach: the curvature command sat at its 0.48 1/m limit.
+  - Oval: the naive pan lost the lane after 11.1 s, while the fixed camera finished.
+- **What I take from it:** panning helps only when the angle at the image's time is known (an encoder, or a measured
+  servo model). Without it, panning can be worse than not panning. And on loops the steering reach, not the camera,
+  is the next limit. The team kept the pan at 0 (Thanh Long 2.3).
+- **Limit:** a prototype with assumed servo values. The rates over several seeds come from running the script; they
+  aren't recorded here.
 
 ### What I can and can't conclude from simulation
 - **Can:**
