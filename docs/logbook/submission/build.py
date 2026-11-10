@@ -3,7 +3,8 @@
     python3 docs/logbook/submission/build.py          # writes docs/logbook/logbook-submission.md
     python3 docs/logbook/submission/build.py --pdf    # also docs/logbook/logbook-submission.pdf
 
-Edit the part files (0-team.md ... 8-yifei.md), not the output. Figure paths in the parts are relative to
+Edit the part files (0-team.md, 1-interfaces.md ... 4-car-control.md: one per sub-team, each with its shared section
+first and then one section per member), not the output. Figure paths in the parts are relative to
 docs/logbook, so the compiled file sits there. The longer per-person sections (<name>.md) and their compiled
 logbook.md stay as the full record; this file is the trimmed one to submit and show in the oral.
 
@@ -80,7 +81,7 @@ def print_pdf(markdown: str, chrome: str):
     with tempfile.TemporaryDirectory() as folder:
         page = Path(folder) / "logbook.html"
         # Shorter figures than the full logbook, so a figure and its explanation share a page
-        style = build_logbook.PAGE.replace("max-height: 235mm", "max-height: 105mm")
+        style = build_logbook.PAGE.replace("max-height: 235mm", "max-height: 85mm")
         page.write_text(style.format(title=TITLE, body=build_logbook.to_html(markdown)), encoding="utf-8")
         subprocess.run([chrome, "--headless=new", "--disable-gpu", "--no-pdf-header-footer",
                         "--allow-file-access-from-files", "--virtual-time-budget=60000",

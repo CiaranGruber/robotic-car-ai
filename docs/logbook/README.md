@@ -6,21 +6,19 @@ prose. It's shown on the projector, and each person moves through their own sect
 **Status (10 Nov):** all eight sections and the team overview are in.
 
 **To submit and show in the oral: [logbook-submission.md](logbook-submission.md) / `logbook-submission.pdf`**
-(about 44 pages), built from the short part files in [submission/](submission/) by
+(17 pages), built from the part files in [submission/](submission/) by
 
     python3 docs/logbook/submission/build.py --pdf
 
-It keeps each person's diagram, equations, key simulation and car results and their figures, and states every shared
-model, table and fact once. The longer `<name>.md` sections and their compiled [logbook.md](logbook.md) (104 pages)
-stay as the full record to copy from. Edit the part files for the submission, then run the script again.
+One part per sub-team (0 team, 1 interfaces, 2 perception, 3 movement policy, 4 car control). Each part opens with a
+shared section (the interfaces, model or controller its members all use, stated once), then one short section per
+person with their key diagram, equations, simulation and car results. The longer `<name>.md` sections and their
+compiled [logbook.md](logbook.md) (104 pages) stay as the full record. Edit the part files, then run the script again.
 
-**Team slides:** `submission/team-slides.pptx`, made by `python3 docs/logbook/submission/make_team_slides.py`: a title
-slide, three team-overview slides, then each person's own slide (rendered from `<name>/slide/`, with their notes).
+**Team slides:** the team's deck is the working `Presentation.pptx` (Ciaran's template). To add every member's slide to it in
+the speaking order from the presentation plan, as editable shapes with their notes:
 
-**Duplicates.** A shared model, table or figure appears once, in its owner's part, and the other parts point to it:
-the MPC model and solver (Peiyu 2.1), the marker ID table (Toby 2.2), the turn geometry figure (Toby 2.3), the
-speed controller (Chris 2.2), the Stage 1 requirements, the whole-system diagram, the facts every part uses and the
-experiments needed by more than one person (overview 0.1, 0.3, 0.6, 0.7).
+    python3 docs/logbook/submission/add_member_slides.py Presentation.pptx Presentation-with-members.pptx
 
 ## How to use it
 
