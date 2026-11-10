@@ -73,11 +73,12 @@ def compile_parts() -> str:
     return "\n".join(header + body).rstrip() + "\n"
 
 
-def print_pdf(markdown: str, chrome: str):
+def print_pdf(markdown: str, chrome: str | None = None):
     """Prints the compiled logbook to PDF with headless Chrome, in build_logbook.py's page style."""
     sys.path.insert(0, str(LOGBOOK))
     import build_logbook
 
+    chrome = chrome or build_logbook.find_chrome()
     with tempfile.TemporaryDirectory() as folder:
         page = Path(folder) / "logbook.html"
         # Shorter figures than the full logbook, so a figure and its explanation share a page
@@ -92,7 +93,7 @@ def print_pdf(markdown: str, chrome: str):
 def main():
     arguments = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     arguments.add_argument("--pdf", action="store_true", help="also print logbook-submission.pdf")
-    arguments.add_argument("--chrome", default="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    arguments.add_argument("--chrome", default=None, help="path to Google Chrome (auto-detected if omitted)")
     options = arguments.parse_args()
     markdown = compile_parts()
     OUT.write_text(markdown, encoding="utf-8")

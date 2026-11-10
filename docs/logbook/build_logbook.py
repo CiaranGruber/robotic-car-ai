@@ -16,7 +16,9 @@ are loaded from cdn.jsdelivr.net to draw the equations and flowcharts).
 """
 import argparse
 import html
+import os
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -24,8 +26,31 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "logbook.md"
 PDF = HERE / "logbook.pdf"
-CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-"""Chrome on macOS; pass --chrome for another path."""
+
+
+def find_chrome() -> str:
+    """
+    :return: Path to a Chrome/Chromium executable for headless PDF printing.
+    :raises FileNotFoundError: If no known install is found.
+    """
+    named = shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chrome")
+    if named:
+        return named
+    candidates = [
+        Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+        Path(os.environ.get("PROGRAMFILES", r"C:\Program Files")) / "Google/Chrome/Application/chrome.exe",
+        Path(os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")) / "Google/Chrome/Application/chrome.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Google/Chrome/Application/chrome.exe",
+        Path("/usr/bin/google-chrome"),
+        Path("/usr/bin/chromium"),
+        Path("/usr/bin/chromium-browser"),
+    ]
+    for path in candidates:
+        if path and path.is_file():
+            return str(path)
+    raise FileNotFoundError(
+        "Google Chrome not found; install it or pass --chrome with the executable path"
+    )
 PARTS = [
     ("overview", "overview.md"),
     ("ciaran", "ciaran-gruber.md"),
@@ -187,7 +212,7 @@ def print_pdf(markdown: str, chrome: str):
 def main():
     arguments = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     arguments.add_argument("--pdf", action="store_true", help="also print logbook.pdf (see the docstring)")
-    arguments.add_argument("--chrome", default=CHROME, help="path to Google Chrome")
+    arguments.add_argument("--chrome", default=None, help="path to Google Chrome (auto-detected if omitted)")
     options = arguments.parse_args()
     body, toc = [], []
     for number, (key, name) in enumerate(PARTS):
@@ -215,7 +240,7 @@ def main():
     OUT.write_text(markdown, encoding="utf-8")
     print("wrote", OUT, f"({len(header) + len(body)} lines)")
     if options.pdf:
-        print_pdf(markdown, options.chrome)
+        print_pdf(markdown, options.chrome or find_chrome())
 
 
 if __name__ == "__main__":
