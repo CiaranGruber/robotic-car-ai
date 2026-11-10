@@ -16,28 +16,34 @@ DARK, BLUE, GREY = RGBColor(0x22, 0x22, 0x22), RGBColor(0x1F, 0x5F, 0xD1), RGBCo
 GREEN, AMBER = RGBColor(0x2A, 0x7F, 0x62), RGBColor(0xB2, 0x6B, 0x00)
 
 CARDS = [
-    ("1  MPC lane following",
-     ["Helped build the first MPC lane follower with the MPC sub-team, and the Card 2 test cases we tuned it on",
-      "Measured latency, noise and camera yaw from real drives to make the simulation match the car",
-      "Tuned it to car 20's real steering: 0.48 / 0.92 1/m, smoother steering"],
-     "slide_mpc.png", ("Team car runs: stays between the cones", GREEN)),
-    ("2  Lane shifting left / right",
-     ["MPC follows a line beside the centre: keep LEFT, CENTRE or RIGHT",
-      "Shifts smoothly mid-run (0.3 m sideways per m driven)",
-      "Retuned so the shift is visible in 0.8–1 m lab lanes (40/40 in sim)"],
-     "slide_lane_change.png", ("Car 20, 20 Oct: kept to the left lane", GREEN)),
-    ("3  ArUco markers -> actions",
-     ["Marker ID -> keep side, turn left / right, straight",
-      "Only the nearest marker counts; the side is kept until the next side marker",
-      "Intersection turn: move aside, planned arc, hand back to lane following"],
-     "slide_aruco.png", ("Car 13, 27 Oct: \"Marker 14: KEEP_RIGHT\"", GREEN)),
-    ("4  Real-robot tuning",
-     ["4 car sessions, 20 Oct–2 Nov (cars 20, 21, 13, 14): lane shifts, 90° turns, obstacles",
-      "Made lane shifts visible (clearance 0.40 -> 0.28 m) and fixed the ArUco camera feed (--aruco)",
-      "Phantom obstacles from marker stands and cones: 29% -> 4% of runs, real-box stops kept",
-      "Left 90° turns failed on the car: traced to the steering limit; 2/40 -> 39/40 in sim"],
-     "slide_left_turn.png", ("Turns + obstacles: sim only, car test pending", AMBER)),
+    ("1  MPC tuned to car 20", "slide_mpc.png", "84 / 84",
+     "simulated curves kept with car 20's real steering limits", ("Car runs: stays between the cones", GREEN)),
+    ("2  Lane shifting", "slide_lane_change.png", "L · C · R",
+     "keep left, centre or right, moving across smoothly", ("Car 20, 20 Oct: kept to the left", GREEN)),
+    ("3  Markers -> actions", "slide_aruco.png", "ID -> action",
+     "nearest marker within 2 m, seen twice", ("Car 13, 27 Oct: \"Marker 14: KEEP_RIGHT\"", GREEN)),
+    ("4  Why left turns failed", "slide_left_turn.png", "R = 2.08 m",
+     "too wide for a 1 m crossing; fix: left turns 2/40 -> 39/40", ("Simulation; car test pending", AMBER)),
 ]
+"""(title, figure, key number, one line under it, (status badge, colour)). The rest is said, not written: see
+SCRIPT."""
+SCRIPT = """About 100 seconds. Point at each card as you reach it.
+[1] I'm Toby, in the MPC sub-team. Peiyu built our MPC. I wrote the Stage 1 test cases we tuned it on, and measured the
+real car's delay and cone noise from recorded drives so the simulation behaved like the car. Then I tuned the MPC to
+car 20 with Chris's measured steering limits: 0.48 per metre to the left and 0.92 to the right. With those limits it
+kept every one of the 84 simulated curves, and the steering became about three times smoother.
+[2] Next, lane shifting. Instead of the lane centre, the MPC can follow a line beside it, so the car keeps left, centre
+or right, and it moves across gradually, at most 0.3 metres sideways per metre driven. On car 20 on 20 October,
+changing only that setting to left kept the car on the left. In the lab's narrow lanes the shift was hard to see, so I
+worked out how much room there really is and retuned it: 40 out of 40 in simulation.
+[3] Then I connected the ArUco markers to the policy. Only the nearest marker within two metres counts, and only once
+it has been seen in two steps in a row. Its ID means keep a side, turn left, turn right or go straight. A turn is its
+own manoeuvre: move to the outside of the lane, drive a planned arc, then hand back to lane following. On car 13 the
+policy acted on a keep-right marker.
+[4] Last, four car sessions of testing. Left turns kept failing on car 20 while right turns worked. I reproduced the
+same pattern in simulation and traced it to the steering: car 20 can only turn left on a 2.08 metre radius, and that
+doesn't fit a one-metre crossing. With more steering range, left turns go from 2 out of 40 to 39 out of 40 in
+simulation. A full turn on a car is still to be shown."""
 
 
 def text_box(slide, x, y, w, h, paragraphs):
@@ -57,21 +63,23 @@ def main():
     deck.slide_width, deck.slide_height = Inches(13.333), Inches(7.5)
     slide = deck.slides.add_slide(deck.slide_layouts[6])
     text_box(slide, 0.4, 0.2, 12.5, 0.7, [[("Toby Lee  ", 26, True, DARK),
-                                           ("MPC sub-team: from lane following to marker-driven lane changes and turns",
+                                           ("MPC sub-team: car 20 tuning, lane shifting, marker actions and turns",
                                             18, False, BLUE)]])
-    width, gap, top = 3.02, 0.12, 1.0
-    for i, (title, bullets, figure, (status, colour)) in enumerate(CARDS):
-        x = 0.4 + i * (width + gap)
-        card = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x), Inches(top), Inches(width), Inches(6.0))
+    width, height, gap = 6.2, 2.9, 0.13
+    for i, (title, figure, number, line, (status, colour)) in enumerate(CARDS):
+        x, y = 0.4 + (i % 2) * (width + gap), 1.0 + (i // 2) * (height + gap)
+        card = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x), Inches(y), Inches(width), Inches(height))
         card.adjustments[0] = 0.04
         card.fill.solid()
         card.fill.fore_color.rgb = RGBColor(0xF6, 0xF7, 0xF9)
         card.line.color.rgb = RGBColor(0xD0, 0xD4, 0xDA)
-        text_box(slide, x + 0.1, top + 0.08, width - 0.2, 0.45, [[(title, 15, True, BLUE)]])
-        slide.shapes.add_picture(str(FIGURES / figure), Inches(x + 0.08), Inches(top + 0.6), width=Inches(width - 0.16))
-        text_box(slide, x + 0.1, top + 2.45, width - 0.2, 2.9, [[("• " + b, 12, False, DARK)] for b in bullets])
-        badge = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x + 0.1), Inches(top + 5.35),
-                                       Inches(width - 0.2), Inches(0.5))
+        text_box(slide, x + 0.12, y + 0.06, width - 0.24, 0.45, [[(title, 16, True, BLUE)]])
+        slide.shapes.add_picture(str(FIGURES / figure), Inches(x + 0.1), Inches(y + 0.5), height=Inches(2.28))
+        right = x + 4.1
+        text_box(slide, right, y + 0.55, width - 4.2, 0.7, [[(number, 26, True, DARK)]])
+        text_box(slide, right, y + 1.25, width - 4.2, 0.9, [[(line, 13, False, GREY)]])
+        badge = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(right), Inches(y + 2.18),
+                                       Inches(width - 4.22), Inches(0.55))
         badge.fill.solid()
         badge.fill.fore_color.rgb = colour
         badge.line.fill.background()
@@ -83,18 +91,7 @@ def main():
     text_box(slide, 0.4, 7.05, 12.5, 0.4, [[("Green = shown on a real car; amber = simulation so far. Details, "
                                              "evidence and the hows and whys: logbook, Toby's section.", 10, False,
                                              GREY)]])
-    slide.notes_slide.notes_text_frame.text = (
-        "About 90 seconds, whats only.\n"
-        "1. With the MPC sub-team I helped build the first MPC lane follower and the Card 2 test cases we tuned it on. "
-        "I measured the real car's latency, noise and camera yaw from recordings and tuned the MPC to car 20's real "
-        "steering limits.\n"
-        "2. Then I added lane shifting: the MPC can keep to the left, centre or right of the lane and move across "
-        "mid-run. On car 20 on 20 Oct, setting it to left kept the car on the left.\n"
-        "3. Then I mapped ArUco markers to policy actions: keep a side, or turn left, right or go straight at the next "
-        "junction, which uses a planned arc and hands back to lane following. Car 13 acted on a keep-right marker.\n"
-        "4. Finally, real-robot tuning and testing over four car sessions: I fixed the camera feed for the marker "
-        "detector, filtered the phantom obstacles the marker stands caused, and traced the failing left turns to car "
-        "20's steering. The fix works in simulation; the full turn still needs a car test.")
+    slide.notes_slide.notes_text_frame.text = SCRIPT.replace("\n[", "\n\n[")
     OUT.parent.mkdir(parents=True, exist_ok=True)
     deck.save(OUT)
     print("wrote", OUT)
