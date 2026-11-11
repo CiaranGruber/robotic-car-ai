@@ -19,33 +19,19 @@ CARDS = [
     ("1  MPC lane following", "slide_mpc.png", "12 cases",
      "test harness we used to choose the MPC over RL and tune it", ("Car runs: MPC stays between the cones", GREEN)),
     ("2  Lane shifting", "slide_lane_change.png", "L · C · R",
-     "keep left, centre or right, moving across smoothly", ("Car 20, 20 Oct: kept to the left", GREEN)),
+     "keep left or right of centre, moving across smoothly", ("Car 20, 20 Oct: kept to the left", GREEN)),
     ("3  Markers -> actions", "slide_aruco.png", "ID -> action",
-     "nearest marker within 2 m, seen twice", ("Car 13, 27 Oct: \"Marker 14: KEEP_RIGHT\"", GREEN)),
-    ("4  Why left turns failed", "slide_left_turn.png", "R = 2.08 m",
-     "too wide for a 1 m crossing; fix: left turns 2/40 -> 39/40", ("Simulation; car test pending", AMBER)),
+     "keep-side markers first, then turns; nearest within 2 m, seen twice", ("Car 13, 27 Oct: \"Marker 14: KEEP_RIGHT\"", GREEN)),
+    ("4  Refining intersection turns", "slide_left_turn.png", "39 / 40",
+     "left turns in simulation, up from 2/40 once traced to steering", ("Simulation; car test pending", AMBER)),
 ]
 """(title, figure, key number, one line under it, (status badge, colour)). The rest is said, not written: see
 SCRIPT."""
-SCRIPT = """About 100 seconds. Point at each card as you reach it.
-[1] I'm Toby, in the MPC sub-team. Peiyu designed our MPC; my part was making it testable. I wrote the Stage 1
-test cases and the harness that runs them: twelve cases with the car starting off-centre or at an angle, lanes 0.8 to
-1.2 metres wide, missed cones, detector noise, extra delay and a wet floor. The harness drives any design, MPC, RL or
-pure pursuit, closed loop in dream-gym and scores it against requirements R1 to R7. That is what we used to choose the
-MPC over RL and then tune it. Later I added the real car's delay, cone noise and steering limits, measured from
-recorded drives, so settings tuned in simulation carried over to the car.
-[2] Next, lane shifting. Instead of the lane centre, the MPC can follow a line beside it, so the car keeps left, centre
-or right, and it moves across gradually, at most 0.3 metres sideways per metre driven. On car 20 on 20 October,
-changing only that setting to left kept the car on the left. In the lab's narrow lanes the shift was hard to see, so I
-worked out how much room there really is and retuned it: 40 out of 40 in simulation.
-[3] Then I connected the ArUco markers to the policy. Only the nearest marker within two metres counts, and only once
-it has been seen in two steps in a row. Its ID means keep a side, turn left, turn right or go straight. A turn is its
-own manoeuvre: move to the outside of the lane, drive a planned arc, then hand back to lane following. On car 13 the
-policy acted on a keep-right marker.
-[4] Last, four car sessions of testing. Left turns kept failing on car 20 while right turns worked. I reproduced the
-same pattern in simulation and traced it to the steering: car 20 can only turn left on a 2.08 metre radius, and that
-doesn't fit a one-metre crossing. With more steering range, left turns go from 2 out of 40 to 39 out of 40 in
-simulation. A full turn on a car is still to be shown."""
+SCRIPT = """About 2-3 minutes. [pause] = breathe or move to the next card.
+[1] Hi, I'm Toby, and I'm in the MPC sub-team. [pause] The first thing I did was work with Vincent and Kevin to set up our first lane-following MPC. Vincent designed the controller itself, and my part in Stage 1 was the testing, so I built the test cases and a test harness to run them. [pause] I made twelve lane test cases. The car starts off-centre or at an angle, the lanes are different widths, and some cases add problems like missing cones, noise, extra delay or a wet floor. [pause] The harness can run any design, whether that's the MPC, RL or pure pursuit, and it scores each run against our requirements. We used it to choose the MPC over RL, and then to tune it.
+[2] The second main task I worked on was lane shifting. [pause] I wrote the part of the policy that lets the car keep to the left or the right side of the lane, instead of always driving down the middle, and it moves across gradually so the shift is smooth. [pause] On car 20, we changed just that one setting to "left", and the car stayed on the left. [pause] In the lab's narrower lanes the shift was hard to see, so I retuned how close it goes to the edge, and after that it passed all 40 simulation runs.
+[3] Next, I built the part that turns ArUco markers into actions for the policy. [pause] The first thing I tested was combining it with lane shifting, so a marker could tell the car to keep left or right. On car 13, the policy acted on a keep-right marker. [pause] I then expanded the marker actions to link up with the intersection turning that Kevin and I worked on, so a marker can also mean turn left, turn right or go straight. [pause] To avoid false triggers, the car only reacts to the nearest marker within two metres, and only after it has seen it twice in a row.
+[4] My last task was refining the intersection turns with Kevin. [pause] When we tested the first version on the robot, it wasn't very consistent. Left turns kept failing, while right turns worked. [pause] So I built a simulation suite that runs different turning scenarios with different parameters, to find out when the car can make a turn and when it can't. [pause] It showed the same pattern as the real car, and it traced the problem to the steering. Car 20 can't turn left any tighter than about a two-metre radius, and that's too wide for a one-metre crossing. [pause] With more steering range, left turns went from 2 out of 40 to 39 out of 40 in simulation, but a full turn on the real car is still to be shown."""
 
 
 def text_box(slide, x, y, w, h, paragraphs):

@@ -57,7 +57,7 @@ a delay; the wheels hold the last command (ZOH).*
 | | Zhenling Zhang | Cone filter, lidar obstacles, avoidance planner, obstacle stop, local map |
 | MPC and pathing (movement policy) | Peiyu Wang | MPC framework, Stage 1 design (MPC vs RL), lane end, car debugging, Foxglove |
 | | Toby Lee | Test cases, car 20 tuning, lane side, marker actions, intersection turner |
-| | Yuhao Liu | Measured-speed MPC, marker IDs and turn preparation, stop latch, car 20 diagnosis |
+| | Yuhao Liu | Measured-speed MPC, cone-memory U-turn, junction path finding, marker IDs and turn preparation, stop latch, car 20 diagnosis |
 | Control (car control) | Chris (Chuhan) Wang | System ID, `CarController`, speed fix, avoidance validation |
 | | Yifei Xia | Control tests with Chris, ArUco ID tests, camera pan calibration and simulation |
 
