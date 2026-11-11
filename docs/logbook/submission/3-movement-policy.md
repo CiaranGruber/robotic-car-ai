@@ -34,36 +34,89 @@ $$\min_{\kappa_0..\kappa_{N-1}} \sum_k q_e\,(e_k - e^{line}_k)^2 + q_\psi\,\psi_
 | Lane edges | left out | a hard state limit is infeasible when noise puts the car near an edge |
 | Speed | not a variable | would make the model bilinear; car control holds speed |
 
-### 3.2 Peiyu Wang — MPC design, MPC vs RL, lane end and car bring-up
+### 3.2 Peiyu Wang — MPC base, MPC vs RL, virtual debug, keeping the code and cars working
 
 **Built:** the MPC framework and first car run, the Stage 1 design (pure pursuit, MPC grid, RL, milestone M1), lane-end
-and lost-lane stops, car models, Foxglove export, car debugging. **PRs** #1 #8 #16 #25.
+and lost-lane stops, car models, the Foxglove replay tool, car bring-up, merges and reviews. **PRs** #1 #8 #16 #25;
+reviewed and merged #27.
 
-**S2: lane end and lost lane.** No lane and the farthest cone ≤ 1.5 m ahead → the rows ended: follow the last plan,
-request the stop at roll-out distance (`stop_distance_per_speed_s` × v) from 0.25 m past that cone. No lane otherwise →
-half speed ≤ 0.5 s, then a latched stop (R7: 0.6 s with the 0.2 s age). **RL:** PPO replaces only the solver; bounded
-penalties $P(x,s) = 1 - e^{-(x/s)^2}$, reward $r = 1 - aP(y,0.1) - bP(\psi,0.1) - cP(\dot\kappa,1.0)$.
+**1. The MPC base (S2, S4).** *Before:* no movement policy. I wrote the MPC framework (#1: the model and solver in 3.1)
+and the first car run (#8). The team built on it: Toby tuned it for car 20 and added lane side and turns (3.3), Yuhao
+added measured speed and stopping (3.4).
+- **Lane end and lost lane (S2):** no lane and the farthest cone ≤ 1.5 m ahead → the rows ended: follow the last plan,
+  request the stop at roll-out distance (`stop_distance_per_speed_s` × v) from 0.25 m past that cone. No lane
+  otherwise → half speed ≤ 0.5 s, then a latched stop (R7: 0.6 s with the 0.2 s age). *Before:* the car stopped
+  0.38–0.91 m short (the last pair leaves the 80° view ≈ 0.6 m early, so the lane looked lost); *after:* 0.21–0.24 m
+  past (R5).
+- **Time budget (S4, car 20, 6 Oct):** batches every 0.1 s, latency 0.197 s → 20 ms per step allowed. Solve N = 20:
+  0.46 ms median, 0.53 ms p99; N = 60 still 5.96 ms → the horizon is limited by camera range, not CPU.
 
-**S3: which MPC, and does it beat pure pursuit? (6 Oct)** 324 settings × 24 runs (12 cases, ± 0.03 m noise).
+<p><img src="peiyu/slide/tiles/mpc_base.png" alt="The MPC base and who built on it" width="49%" style="display:inline-block; margin:0"> <img src="peiyu/slide/tiles/car_timing.png" alt="MPC solve time on car 20" width="44%" style="display:inline-block; margin:0"></p>
+
+*Left: the MPC base and who built on it (blue: mine). Right: MPC solve time on car 20's computer, 300 solves per
+horizon, against the 20 ms budget.*
+
+**2. Deciding MPC or RL (S3).** *Why decide:* a learned policy might track better, but it had to stay smooth on lanes
+it was never tuned on. *How:* every design ran in the same harness with the same cone filter and lane-end rule; only
+the steering differed. First the MPC settings: 324 settings × 24 runs (12 cases, ± 0.03 m noise).
 
 ![Design front](peiyu/figures/04_design_front.png)
 
 *Tracking against roughness; Pareto front of passing settings; star = chosen (N 20, 3/1/0.1/3): the smoothest
 passing. Pure pursuit tracks 3 mm better but steers 2.3× rougher.*
 
-**M1: MPC or RL? (unseen cases U1–U3, opened once).** RL failed R4 on U1 (1.51) and U2 (1.59); the MPC passed all
-(U2: 0.51 vs 0.80) → **MPC chosen**. RL's first reward was exploited (unbounded penalties made leaving the lane best).
-**Lane end:** before, the car stopped 0.38–0.91 m short (the last pair leaves the 80° view ≈ 0.6 m early); with the
-rule, 0.21–0.24 m past (R5).
+**RL:** PPO replaces only the solver; bounded penalties $P(x,s) = 1 - e^{-(x/s)^2}$, reward
+$r = 1 - aP(y,0.1) - bP(\psi,0.1) - cP(\dot\kappa,1.0)$. Its first reward was exploited (unbounded penalties made
+leaving the lane best); with bounded penalties it drove the lane but still weaved. **M1 (unseen cases U1–U3, opened
+once, rule fixed before):** RL failed R4 on U1 (1.51) and U2 (1.59); the MPC passed all (U2: 0.51 vs 0.80) →
+***MPC chosen***, because it stayed smooth on lanes it was never tuned on.
 
-**S4.**
-- **Time budget (car 20, 6 Oct):** batches every 0.1 s, latency 0.197 s → 20 ms per step allowed. Solve N = 20:
-  0.46 ms median, 0.53 ms p99; N = 60 still 5.96 ms → the horizon is limited by camera range, not CPU.
-- **Car 22 (12 Oct):** car 20's settings drove 1.4 m/s for 0.5 → one setting checked on every car model (#18).
-  Lost-lane stop 0.8 s after losing the lane. Steering stayed biased (unsolved).
-- **Keeping the cars running:** cone detector crashed under OpenCV 5 (`KeyError 16`) → `publish_rgb_image: false`
-  (#24); OAK-D dropping off USB; DREAM processes at 70–80% CPU; a flat battery. Checked read-only first.
-- **Foxglove:** any logged step drawn with cones, lane and MPC plan; used to debug the car runs.
+<p><img src="peiyu/slide/tiles/rl_steering.png" alt="RL and MPC steering on U2" width="49%" style="display:inline-block; margin:0"> <img src="peiyu/slide/tiles/lane_end.png" alt="T1 lane end before and with the rule" width="49%" style="display:inline-block; margin:0"></p>
+
+*Left: the steering each design asks for on U2 (rerun at `47f8838` with `rl_models/balanced_1M.zip`; data in
+`peiyu/figures/m1_u2_steering.json`). RL turns hard right, then hard left; the MPC makes one smooth correction.
+Right: the end of T1 in the simulator's own top view (`stage1_scenarios.plot_result`), before the lane-end rule
+(`01a47a0`, 0.50 m short, FAIL) and with it (`9a7f9d8`, 0.20 m past, PASS; neither with the 0.2 s age).*
+
+**3. Virtual debug (S4, S5).** *Before:* when a car run went wrong, the team had the car's path and text logs: watch
+where it drove, then guess why. *Built:* every step's observations and actions are logged; `scripts/mcap_export.py`
+replays a data log through the policy into Foxglove, step by step, with the cones the car saw, the lane it found and
+the MPC's plan, and the car publishes the same drawings live (#25). *After:* problems are found by replaying runs
+instead of rerunning the car; Toby's turn checks read `/plan/intersection` in Foxglove, and Long's on-car live viewer
+draws the same markers (their full sections). A replay runs the current code, so car runs are judged by their logged actions (on the run below, the
+replay chose the car's own actions on every step). The camera pan prototype (`230c75b`, S3) used the same export:
+turning the camera into tight bends keeps the lane in view only when the camera's angle at each image is known; with
+the latest command instead, it lost an oval the fixed camera finished, so the pan stays at 0.
+
+<p><img src="peiyu/slide/tiles/car20_replay.png" alt="Car 20 run replayed in Foxglove" width="49%" style="display:inline-block; margin:0"> <img src="peiyu/slide/tiles/foxglove_pan.png" alt="Camera pan prototype in Foxglove" width="49%" style="display:inline-block; margin:0"></p>
+
+*Left: a car 20 run replayed in Foxglove: the car has drifted right and the MPC's plan steers it back. Right: the
+camera pan prototype in Foxglove (hairpin, ideal pan): the camera's view turned into the bend and the lane the policy
+found.*
+
+**4. Keeping the code and cars working (S1, S4).**
+- **Merge conflicts:** eight people pushed to `dev` at once. Chris's controller (#17), Toby's calibration (#15), the
+  first car run (#8) and the Stage 1 design (#16) landed together; I resolved six merges (largest 22 conflict hunks,
+  `fb2442b`): `dev`'s shared code kept, the MPC features ported onto it, tests re-run; lab weights 10/1/0.1/2 taken,
+  since A4's with #15's change weight left a 3 m radius curve.
+- **Code review (#27, Toby's lane side):** found and fixed a duplicate setting, a reset that kept the last run's lane
+  side, a first step planning from the previous run's line, a missing test with avoidance and a stale docstring;
+  merged `dev` in, re-ran the wide-track results (CI 560 passed), then merged.
+- **Every car differs:** with car 20's values car 22 drove 1.4 m/s for 0.5; car 22's values stall the car 20 model →
+  car models and one setting checked on every model (#18, waiting for review). Car 22 stopped 0.8 s after losing the
+  lane; its steering stayed biased (unsolved).
+- **Cars that would not start:** car sessions kept starting with a car that would not run, each time for a different
+  reason, and each cost restarts, log reading and redeploying the policy: the cone detector crashed under OpenCV 5
+  (`KeyError 16`) → `publish_rgb_image: false` (#24); the OAK-D dropped off USB → restart only the detector; DREAM's
+  `runtime_runner` processes at 70–80% CPU each (reported upstream); the policy running but the car not moving
+  (wrong `left_colour`, stray cones → moved the cones); a flat motor battery (drive applied, wheel speed 0 → check the
+  battery first). Car 20 was shared, so every check was read-only first and its source was backed up before deploying.
+
+<p><img src="peiyu/slide/tiles/car_models.png" alt="Every car differs" width="58%"></p>
+
+*Speed on T1 at 0.5 m/s through `CarController` and each measured car model (`45eb015`, data in
+`peiyu/figures/car_models_speed.json`): car 22's values stall car 20; car 20's drive car 22 3× too fast; one setting
+(#18) holds both.*
 
 ### 3.3 Toby Lee — car 20 tuning, lane side, marker actions and intersection turns
 
