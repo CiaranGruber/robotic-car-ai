@@ -125,7 +125,7 @@ found.*
 marker actions and the intersection turner (#35, with Yuhao), the turn simulation suite and the left-turn fix
 (`fix/left-turn-steering-and-obstacles`, **not merged**). Car sessions on cars 20, 21, 13 and 14.
 
-**S1: where my parts sit.** Markers decide *which line* the MPC follows; the turner takes over only for the arc.
+**Where markers and turns fit in the policy (S1).** Markers decide *which line* the MPC follows; the turner takes over only for the arc.
 
 ![Where my parts sit](toby/figures/01_system.png)
 
@@ -137,7 +137,7 @@ the turner during a turn, to car control (4.1). Constraint from 4.1: car 20 stee
 - **Assumptions:** cones mark a lane 0.8–1.0 m wide; the marker pose is in `base_link`; the camera points straight
   ahead (pan held, 2.2). A wrong camera yaw or steering reach breaks turns first (S3).
 
-**S2: how it works.**
+**How the car picks its line and plans a turn (S2): test harness, lane side, markers, arc-start window.**
 
 - **Test harness** (`stage1_scenarios.py`). 12 tuning cases T1–T12 (start offset and heading, 0.8–1.2 m lanes,
   noise, missed or extra cones, delay, a heavier car, a camera blackout); U1–U3 held back. Any `run_policy()`
@@ -170,7 +170,7 @@ $$\underbrace{-\sqrt{(R-b-r_c-m)^2 - (R-a-w/2)^2}}_{\text{inner side clears the 
 
 *Moving aside widens the window; a large radius closes it. This is why left turns failed (S3).*
 
-**S3: simulation.**
+**Simulation: tuning the MPC for car 20, lane side, and why left turns failed (S3).**
 
 - **Which MPC settings suit car 20? (12 Oct).** Settings for Peiyu's MPC, not a new controller. 84 curved-lane runs
   per setting (straight, 1.5–3 m radius curves, S-bend × 3 camera yaws × 4 seeds), 0.8 m lane, 0.2 s delay.
@@ -210,7 +210,7 @@ $$\underbrace{-\sqrt{(R-b-r_c-m)^2 - (R-a-w/2)^2}}_{\text{inner side clears the 
 *Left: if the real left reach is 0.7 1/m or less, every left turn fails, so 0.91 (not ground-measured, 4.2) must be
 measured before use. Right: camera yaw and marker position must be measured; latency and dropout matter less.*
 
-**S4: real car.**
+**Car tests: does each link from marker to action work? (S4)**
 
 | Question (car, date) | Method | Result → decision |
 | --- | --- | --- |
