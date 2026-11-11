@@ -233,6 +233,11 @@ $d_\tau = v\tau$. A failed solve requests a stop. The default turner starts prep
 after confirmation and checks an arc tangent to the actual heading. At the 0.48 1/m left limit, the radius is
 2.083 m. A rejected turn keeps its stop latched after the turn object clears.
 
+**Calibrated MPC integration.** I integrated Toby's asymmetric car 20 steering limits and lane offsets with my
+measured-speed prediction and stopping logic in PR #15. In PR #16 I resolved the follow-on CarController merge and
+added checks that reject non-finite control inputs.
+[Calibration repair](https://github.com/CiaranGruber/robotic-car-ai/commit/32723db) · [CarController integration](https://github.com/CiaranGruber/robotic-car-ai/commit/7390c92)
+
 - **Cone memory.** Wheel and gyro odometry reproject stored cones as the car moves. The U-turn controller holds its
   committed path through short camera dropouts and recomputes steering from the current pose.
 - **Junction path finding.** The navigator queues the ArUco command and uses cone rows and current lidar to verify
@@ -258,7 +263,26 @@ $e_{RMS} = \sqrt{L^{-1}\int_0^L e(s)^2 ds}$:
 - **Stop latch (sim):** at 0.48 1/m, 6/6 runs on 1.0 m roads stop without contact; 6/6 on 1.5 m complete the left
   exit. Suite at `488ec30`: 837 passed.
 
-#### S4. Car 20 left-turn diagnosis (30 Oct)
+**Cone-row association and replay.** I separated the incoming cone rows from transverse rows at junctions so the
+lane fitter could track the approach. The fitter still accepts coherent curves, and obstacle detection keeps all
+checked cones. Across the same 7,032 synthetic approach frames, accepted misaligned fits fell from 2,265 to 170 and
+aligned fits rose from 2,528 to 4,628. I also added separate observed-lane and selected-path views in Foxglove and MCAP
+replay. [Evaluation](https://github.com/CiaranGruber/robotic-car-ai/blob/37b7b39/docs/acceptance.md#cone-grouping-and-lane-formation-update-2026-10-26) · [Implementation](https://github.com/CiaranGruber/robotic-car-ai/commit/d59e812)
+
+![Selected MPC paths for left, right and straight exits at a simulated cross-junction](yuhao/figures/04_junction_selection.png)
+
+*The green lines show the selected MPC paths for three commands at the same simulated crossing. The marker IDs
+reflect the earlier experimental mapping.*
+
+#### S4. Car 20 deployment and diagnosis
+
+**23–26 Oct. Deployment and ArUco recovery.** The 23 Oct deployment passed the pinned-interface ROS gate with 186
+pytest cases and 189 colcon checks. At startup, all 82 observed drive-and-steering commands were zero in policy state 2.
+On 26 Oct I traced the missing ArUco stream to disabled camera RGB output. Restoring RGB and CameraInfo yielded 100
+advancing ArUco batches in 10 seconds. A later capture confirmed a valid ID 4 pose while the vehicle was disarmed.
+[Deployment record](https://github.com/CiaranGruber/robotic-car-ai/blob/37b7b39/docs/acceptance.md#car-104325433-intersection-deployment-2026-10-23) · [ArUco recovery](https://github.com/CiaranGruber/robotic-car-ai/blob/37b7b39/docs/acceptance.md#car-104325433-rgb-and-junction-configuration-repair-2026-10-26)
+
+**30 Oct. Left-turn diagnosis.**
 
 ![Marker range](yuhao/figures/05_marker_range.png)
 
@@ -267,4 +291,9 @@ size though the print was 0.081 m (range ×3.09); restarting the policy hadn't r
 
 - After restarting only the detector: ID 1 confirmed at 3.0 s, then a **geometry stop** at 5.4 s: 0.174 m outside
   vs 0.182 m needed, heading 4.6° outward. → prepare earlier, tangent admission; limits not relaxed. A zero command
-  isn't a physical stop (wheels still at 0.50 m/s).
+  isn't a physical stop (wheel-speed feedback was still 0.50 m/s).
+
+![Recorded drive, steering and wheel-speed feedback after the detector reload](yuhao/figures/06_post_reload_trace.png)
+
+*The 30 Oct trace marks when the policy confirmed ID 1 and when it latched a geometry stop. Drive command and
+wheel-speed feedback are shown separately.*
