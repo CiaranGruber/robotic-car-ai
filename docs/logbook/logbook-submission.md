@@ -21,7 +21,7 @@ Ciaran Gruber, Thanh Long Nguyen, Zhenling Zhang, Peiyu Wang, Toby Lee, Yuhao Li
   - [3.1 Shared: the MPC all three members build on](#s3-1)
   - [3.2 Peiyu Wang — MPC design, MPC vs RL, lane end and car bring-up](#s3-2)
   - [3.3 Toby Lee — car 20 tuning, lane side, marker actions and intersection turns](#s3-3)
-  - [3.4 Yuhao Liu — measured-speed MPC, turn preparation and stopping](#s3-4)
+  - [3.4 Yuhao Liu — measured-speed MPC, cone memory and junction planning](#s3-4)
 - [Part 4: Car control](#part-4)
   - [4.1 Shared: the car model, controller and limits everyone uses](#s4-1)
   - [4.2 Chris (Chuhan) Wang — system ID, speed fix and avoidance validation](#s4-2)
@@ -96,7 +96,7 @@ a delay; the wheels hold the last command (ZOH).*
 | | Zhenling Zhang | Cone filter, lidar obstacles, avoidance planner, obstacle stop, local map |
 | MPC and pathing (movement policy) | Peiyu Wang | MPC framework, Stage 1 design (MPC vs RL), lane end, car debugging, Foxglove |
 | | Toby Lee | Test cases, car 20 tuning, lane side, marker actions, intersection turner |
-| | Yuhao Liu | Measured-speed MPC, marker IDs and turn preparation, stop latch, car 20 diagnosis |
+| | Yuhao Liu | Measured-speed MPC, cone-memory U-turn, junction path finding, marker IDs and turn preparation, stop latch, car 20 diagnosis |
 | Control (car control) | Chris (Chuhan) Wang | System ID, `CarController`, speed fix, avoidance validation |
 | | Yifei Xia | Control tests with Chris, ArUco ID tests, camera pan calibration and simulation |
 
@@ -423,8 +423,9 @@ $$\min_{\kappa_0..\kappa_{N-1}} \sum_k q_e\,(e_k - e^{line}_k)^2 + q_\psi\,\psi_
 
 - **Delay compensation:** predict forward by $d_0 = v\cdot\text{age}$ (≈ 0.2 s) with the previous command; send only
   the first curvature.
-- **Bounded least squares:** stacking gives $\lVert Mu - c\rVert^2$; $M$ depends only on settings (built once), each
-  step only changes $c$. `lsq_linear(method="bvls")`, ≤ 4N iterations → bounded time (R6).
+- **Bounded least squares.** The fixed-speed MPC precomputes $M$ in $\lVert Mu - c\rVert^2$. With measured wheel
+  speed, the MPC rebuilds the speed-dependent terms of $M$ at each solve and reuses the fixed weights and curvature
+  penalties. The $4N$ cap in the BVLS solver limits iterations. R6 uses measured step time.
 
 | Setting | Stage 1 design (3.2) | Car 20, `dev` (3.3) |
 | --- | --- | --- |
@@ -525,15 +526,22 @@ all cases 57% → 99%. The 0.91 1/m left limit is not yet measured on the ground
 
 <a id="s3-4"></a>
 
-### 3.4 Yuhao Liu — measured-speed MPC, turn preparation and stopping
+### 3.4 Yuhao Liu — measured-speed MPC, cone memory and junction planning
 
-**Built:** measured-speed prediction and solver-failure stops (#14), grouped marker IDs, earlier and tangent-aware turn
-preparation, persistent stop latch (#35 #36), offline lane-end and junction experiments, car 20 diagnosis.
+**Built** measured-speed prediction and solver-failure stops (#14), an offline final-pair estimator, a cone-memory
+U-turn and an experimental cross/T-junction navigator. In Toby's default turner, added grouped marker IDs, earlier
+turn preparation, heading-aware arc admission and a persistent stop latch (#35, #36). Diagnosed car 20's left-turn failure.
 
-**S2.** Rebuild the motion matrices each step with measured speed in $d = v\Delta t$; delay projection $d_\tau = v\tau$.
-A failed solve requests a stop. Turns: prepare on the outside straight after confirmation; admit an arc tangent to the
-**actual** heading ($R = 1/0.48 = 2.083$ m); reject an infeasible start rather than relax clearance; keep the stop
-reason outside the turn's lifetime.
+**S2.** Measured wheel speed sets the prediction step distance $d = v\Delta t$ and the delay projection
+$d_\tau = v\tau$. A failed solve requests a stop. The default turner starts preparation on the outside of the lane
+after confirmation and checks an arc tangent to the actual heading. At the 0.48 1/m left limit, the radius is
+2.083 m. A rejected turn keeps its stop latched after the turn object clears.
+
+- **Cone memory.** Wheel and gyro odometry reproject stored cones as the car moves. The U-turn controller holds its
+  committed path through short camera dropouts and recomputes steering from the current pose.
+- **Junction path finding.** The navigator queues the ArUco command and uses cone rows and current lidar to verify
+  the requested exit. An unverified exit allows a finite approach ending before the junction. A closing row blocks
+  commitment. The selected centre path feeds MPC until fresh exit geometry and heading alignment allow lane following.
 
 **S3: does measured speed help?** 3 scenarios × 2 inputs × 5 seeds, 0.2 s delay; distance-weighted
 $e_{RMS} = \sqrt{L^{-1}\int_0^L e(s)^2 ds}$:
@@ -545,10 +553,16 @@ $e_{RMS} = \sqrt{L^{-1}\int_0^L e(s)^2 ds}$:
 | Slow with dropouts | 0.07532 m | 0.07265 m | 3.5% |
 
 - **Final-pair lane end (offline):** 20/20 when the pair is visible, but a hidden pair gives false ends → kept offline.
+- **Cone-memory U-turn.** The [branch experiment](https://github.com/CiaranGruber/robotic-car-ai/commit/fd01806)
+  completed 10/12 varied simulated layouts. Two triggered clearance stops. The planned 0.50 m radius and
+  2.2 1/m left curvature limit were simulation assumptions.
+- **Cross/T-junction navigation.** With the [experimental navigator](https://github.com/CiaranGruber/robotic-car-ai/commit/d59e812),
+  20/22 cross and 22/24 dense open-exit T cases completed in simulation. All six dense blocked-exit cases stopped.
+  The navigator assumes equal-width perpendicular roads and is disabled by default.
 - **Stop latch (sim):** at 0.48 1/m, 6/6 runs on 1.0 m roads stop without contact; 6/6 on 1.5 m complete the left
   exit. Suite at `488ec30`: 837 passed.
 
-**S4: why did ID 1 never request a turn? (car 20, 30 Oct)**
+#### S4. Car 20 left-turn diagnosis (30 Oct)
 
 ![Marker range](yuhao/figures/05_marker_range.png)
 
