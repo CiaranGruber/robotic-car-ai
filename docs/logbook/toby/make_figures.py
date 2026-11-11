@@ -18,6 +18,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
 from matplotlib.patches import Arc, Circle, FancyBboxPatch, Rectangle  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
@@ -373,14 +374,30 @@ def simulated(sim_repo: Path):
 
 def slide_figures():
     """Small figures for the one presentation slide."""
-    figure, axis = plt.subplots(figsize=(4.4, 2.3))
-    names = ["settings first\ndriven on car 20", "tuned to car 20\n(my settings)"]
-    bars = axis.bar(names, [12, 84], color=[BAD, GOOD], width=0.55)
-    label_bars(axis, bars)
-    axis.set_ylim(0, 100)
-    axis.set_ylabel("curved lanes kept\n(of 84, simulation)", fontsize=8)
-    axis.tick_params(labelsize=8)
-    axis.set_title("Lane following on 1.5-3 m curves", fontsize=9)
+    # The Stage 1 test harness (tests/policy/stage1_scenarios.py): cases in, closed-loop run, scored on R1-R7
+    figure, axis = plt.subplots(figsize=(4.4, 2.6))
+    axis.axis("off")
+    axis.set_xlim(0, 10)
+    axis.set_ylim(0, 6.2)
+    for x in np.arange(0.4, 9.8, 0.62):
+        axis.plot(x, 5.4, "o", color="#e6b800", markersize=5)
+        axis.plot(x, 3.6, "o", color="#3a66d6", markersize=5)
+    starts = [(0.0, 0.0, ""), (0.5, 0.0, "T2"), (0.0, 10.0, "T1, T3"), (-0.5, -10.0, "T5")]
+    for offset, degrees, name in starts:
+        y = 4.5 + offset
+        dx, dy = 1.1 * np.cos(np.radians(3 * degrees)), 1.1 * np.sin(np.radians(3 * degrees))
+        axis.annotate("", xy=(0.7 + dx, y + dy), xytext=(0.7, y),
+                      arrowprops=dict(arrowstyle="-|>", color="#555555", lw=1.2))
+        axis.text(0.55, y, name, fontsize=6.5, ha="right", va="center", color="#555555")
+    axis.text(2.4, 4.5, "start offsets and angles; 0.8 / 1.0 / 1.2 m lanes;\nnoise, missed cones, delay, wet floor",
+              fontsize=7, va="center", color="#333333")
+    boxes = [(0.2, "12 test cases\nT1-T12"), (3.55, "dream-gym\nclosed loop\n(MPC, RL, PP)"), (6.9, "score\nR1-R7\npass / fail")]
+    for x, label in boxes:
+        axis.add_patch(plt.Rectangle((x, 0.3), 2.9, 2.4, facecolor="#eef3fb", edgecolor=ACCENT, lw=1.2))
+        axis.text(x + 1.45, 1.5, label, ha="center", va="center", fontsize=8, weight="bold", color="#222222")
+    for x in (3.1, 6.45):
+        axis.annotate("", xy=(x + 0.45, 1.5), xytext=(x, 1.5), arrowprops=dict(arrowstyle="-|>", color=ACCENT, lw=1.5))
+    axis.set_title("Stage 1 test harness: any design, same cases, same scores", fontsize=9)
     save(figure, "slide_mpc.png")
 
     figure, axis = plt.subplots(figsize=(4.4, 2.3))

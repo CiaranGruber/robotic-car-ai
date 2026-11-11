@@ -16,8 +16,8 @@ DARK, BLUE, GREY = RGBColor(0x22, 0x22, 0x22), RGBColor(0x1F, 0x5F, 0xD1), RGBCo
 GREEN, AMBER = RGBColor(0x2A, 0x7F, 0x62), RGBColor(0xB2, 0x6B, 0x00)
 
 CARDS = [
-    ("1  MPC tuned to car 20", "slide_mpc.png", "84 / 84",
-     "simulated curves kept with car 20's real steering limits", ("Car runs: stays between the cones", GREEN)),
+    ("1  MPC lane following", "slide_mpc.png", "12 cases",
+     "test harness we used to choose the MPC over RL and tune it", ("Car runs: MPC stays between the cones", GREEN)),
     ("2  Lane shifting", "slide_lane_change.png", "L · C · R",
      "keep left, centre or right, moving across smoothly", ("Car 20, 20 Oct: kept to the left", GREEN)),
     ("3  Markers -> actions", "slide_aruco.png", "ID -> action",
@@ -28,10 +28,12 @@ CARDS = [
 """(title, figure, key number, one line under it, (status badge, colour)). The rest is said, not written: see
 SCRIPT."""
 SCRIPT = """About 100 seconds. Point at each card as you reach it.
-[1] I'm Toby, in the MPC sub-team. Peiyu built our MPC. I wrote the Stage 1 test cases we tuned it on, and measured the
-real car's delay and cone noise from recorded drives so the simulation behaved like the car. Then I tuned the MPC to
-car 20 with Chris's measured steering limits: 0.48 per metre to the left and 0.92 to the right. With those limits it
-kept every one of the 84 simulated curves, and the steering became about three times smoother.
+[1] I'm Toby, in the MPC sub-team. Peiyu designed our MPC; my part was making it testable. I wrote the Stage 1
+test cases and the harness that runs them: twelve cases with the car starting off-centre or at an angle, lanes 0.8 to
+1.2 metres wide, missed cones, detector noise, extra delay and a wet floor. The harness drives any design, MPC, RL or
+pure pursuit, closed loop in dream-gym and scores it against requirements R1 to R7. That is what we used to choose the
+MPC over RL and then tune it. Later I added the real car's delay, cone noise and steering limits, measured from
+recorded drives, so settings tuned in simulation carried over to the car.
 [2] Next, lane shifting. Instead of the lane centre, the MPC can follow a line beside it, so the car keeps left, centre
 or right, and it moves across gradually, at most 0.3 metres sideways per metre driven. On car 20 on 20 October,
 changing only that setting to left kept the car on the left. In the lab's narrow lanes the shift was hard to see, so I
@@ -63,7 +65,7 @@ def main():
     deck.slide_width, deck.slide_height = Inches(13.333), Inches(7.5)
     slide = deck.slides.add_slide(deck.slide_layouts[6])
     text_box(slide, 0.4, 0.2, 12.5, 0.7, [[("Toby Lee  ", 26, True, DARK),
-                                           ("MPC sub-team: car 20 tuning, lane shifting, marker actions and turns",
+                                           ("MPC sub-team: lane-following tests, lane shifting, marker actions and turns",
                                             18, False, BLUE)]])
     width, height, gap = 6.2, 2.9, 0.13
     for i, (title, figure, number, line, (status, colour)) in enumerate(CARDS):
