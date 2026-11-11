@@ -201,13 +201,14 @@ $$\underbrace{-\sqrt{(R-b-r_c-m)^2 - (R-a-w/2)^2}}_{\text{inner side clears the 
 
 <img src="toby/figures/06_root_cause_bars.png" alt="Root cause" style="width: 62%;">
 
-*Reproduces the car: left 2/40, right 35/40. Car evidence: Yuhao's 30 Oct geometry stop (3.4).*
+*Reproduces the car: left 2/40, right 35/40; failed runs stopped (arc does not fit) or touched cones. Car evidence:
+Yuhao's 30 Oct geometry stop (3.4).*
 
 | Fix (branch, not merged) | Problem | Result (sim) |
 | --- | --- | --- |
 | Steering ±0.5 → ±0.8 (Chris) and left limit 0.48 → 0.91 1/m | arc too wide for the crossing | left 39/40 |
 | Pure pursuit lookahead 0.5 → 0.8 m | sharper steering swung the move-aside | 43/48 vs 33/48 |
-| Ignore lidar near a seen marker or a known cone while turning | stands and cones read as obstacles | phantom avoidance 29% → 4%; turns 40% → 68% |
+| Ignore lidar near a seen marker or a known cone while turning; avoid only after 3 of 5 sightings | cones (and stands) read as obstacles | phantom avoidance 29% → 4%; turns 40% → 68% |
 
 ![Sensitivity](toby/figures/07_sensitivity.png)
 
@@ -226,7 +227,9 @@ measured before use. Right: camera yaw and marker position must be measured; lat
 
 <img src="toby/figures/09_car13_phantom_avoidance.png" alt="Car 13 phantom avoidance" style="width: 62%;">
 
-*Car 13, no box on the track: marker stands planned 16 avoidance lines. This led to the lidar filters in S3.
+*Car 13, no box on the track: 16 avoidance lines around objects that were not there. In simulation the same
+happened in ≈ 30% of runs with or without marker stands, so there the lane's own cones, not the stands, caused most of it;
+the filters in S3 cut it to 4%. On car 13 the cause (stand or cones) was not checked against the lidar points.
 **Limit:** they hide a real object within 0.15 m of a marker or 0.12 m of a cone.*
 
 ### 3.4 Yuhao Liu — measured-speed MPC, cone memory and junction planning
