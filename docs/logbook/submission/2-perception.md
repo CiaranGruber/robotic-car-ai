@@ -77,19 +77,97 @@ is the best video.
 **S2.**
 - **Cone filter:** keep $0 < x$, $|y| \le 2.0$ m, range ≤ 3.5 m, $-0.15 \le z \le 0.25$ m, confidence ≥ 0.5; merge
   same-colour cones < 0.10 m apart.
-- **Obstacles in lane coordinates:** each lidar point gets $s$ along the centre arc and $l$ across it; keep
-  $0 < s \le 3.5$ m, $|l| < w/2 - 0.15$ m; clusters ≥ 3 returns. A bend becomes straight, so a box on a bend is still
-  "in the lane".
+  - *Why range ≤ 3.5 m:* the lane fit describes each edge with one constant-curvature arc, so it can only follow the
+    lane a short way ahead. Far cones from the next bend, such as the second half of an S, would pull the fit near the
+    car the wrong way. A much shorter range leaves too few cones on each edge, and the fit jumps from step to step.
+- **Obstacle detection:** lidar points arrive in `base_link` as $(x, y)$ and are moved into lane coordinates on the
+  fitted centre arc (radius $R = 1/\kappa$; both edges are concentric with it): $s = R\,\theta - 0.30$ m is the
+  distance along the arc from the car's front, and $l = R - \rho$ is the offset across it, where $\theta$ is the angle
+  swept about the arc's centre and $\rho$ the point's distance from that centre (left bend; signs flip for a right
+  bend). Both edges then lie at $l = \pm w/2$ for every $s$, so a bend becomes a straight strip.
+  - *Range:* only points with $0 < s \le 3.5$ m count.
+  - *Inside the lane:* $|l| < w/2 - 0.15$ m, so returns from the cones are ignored.
+  - *Objects:* neighbouring returns less than 0.15 m apart form one object, which needs at least 3 returns.
+
+![Obstacle detection](zhenling/figures/Z4_obstacle_detection_real_scan.png)
+
+*Real scan, 22 Oct. (a) Car frame: the lidar also hits the cones, and a straight corridor misses object 1 on this
+bend. (b) Lane coordinates: the edges are straight lines; returns within 3.5 m and inside the edge margin form two
+objects.*
+
 - **Obstacle stop:** seen 3 steps in a row, within
 
 $$d_{stop} = (t_b + t_{scan})\,\max(v_{target}, v_{measured}) + m, \qquad t_b = 0.8\ \text{s},\ m = 0.2\ \text{m}\ \ (0.70\ \text{m at } 0.5\ \text{m/s})$$
 
-- **Avoidance planner:** body keeps 0.10 m from boxes and 0.05 m from cones; held offsets joined by quintics that match
-  offset, slope and curvature:
+| Term | Value | Meaning |
+| --- | --- | --- |
+| $t_{scan}\,v$ | $t_{scan}$ = each scan's own age | Distance travelled since the scan was taken |
+| $t_b\,v$ | $t_b$ = 0.8 s per m/s | Braking travel. Chosen in simulation: no hit for true braking up to 1.0 s per m/s |
+| $\max(v_{target}, v_{measured})$ | larger of the two | Covers a car faster than its target, and a car still speeding up |
+| $m$ | 0.2 m | Gap left between the car's front and the obstacle after stopping |
 
-$$d(u) = D\,(10u^3 - 15u^4 + 6u^5),\ u = s/L, \qquad \max|d''| = \frac{10}{\sqrt3}\frac{D}{L^2} \le \kappa_{max}$$
+- **Avoidance planner:** plans one avoidance path past all known obstacles, as an offset $d(s)$ from the lane centre
+  in lane coordinates, re-planned every step. The MPC follows it.
 
-  Ranked by obstacles passed, then room for the next, then $J = \Delta s \sum [(d - d_{usual})^2 + \kappa_{add}^2 + (d - d_{prev})^2]$.
+*1. Path structure.* The path is a chain of segments: straight **holds** at a fixed offset (beside an obstacle, or on
+the usual line) and **quintic moves** between two offsets. Obstacles far apart get a hold beside each; for close ones,
+one move runs straight into the next.
+
+*2. Quintic move.* A move over $[s_i, s_i + L]$, with $t = s - s_i \in [0, L]$, is
+
+$$d(t) = c_0 + c_1 t + c_2 t^2 + c_3 t^3 + c_4 t^4 + c_5 t^5$$
+
+It leaves the start state $(d_0, d_0', d_0'')$ and reaches the end state $(d_1, d_1', d_1'')$: offset, slope and
+curvature. These six conditions fix the six coefficients. The three at $t = 0$ give
+
+$$c_0 = d_0, \qquad c_1 = d_0', \qquad c_2 = \tfrac{1}{2}\,d_0''$$
+
+With what is left to reach at $t = L$ after those terms,
+
+$$\Delta d = d_1 - (c_0 + c_1 L + c_2 L^2), \qquad \Delta v = d_1' - (c_1 + 2 c_2 L), \qquad \Delta a = d_1'' - 2 c_2$$
+
+the three at $t = L$ give
+
+$$c_3 = \frac{10\,\Delta d - 4\,\Delta v\,L + \tfrac{1}{2}\Delta a\,L^2}{L^3}, \qquad c_4 = \frac{-15\,\Delta d + 7\,\Delta v\,L - \Delta a\,L^2}{L^4}, \qquad c_5 = \frac{6\,\Delta d - 3\,\Delta v\,L + \tfrac{1}{2}\Delta a\,L^2}{L^5}$$
+
+So the coefficients depend on both end states and on $L$, and offset, slope and curvature are continuous at every
+join. Every move ends on a hold ($d_1' = d_1'' = 0$). Only the first move of a step may start mid-turn, from where the
+previous step's path is now; the others start on a hold too.
+
+*Move length.* For a move between two holds with offset change $D = d_1 - d_0$, the peak curvature is
+$\frac{10}{\sqrt3}\frac{|D|}{L^2}$, so the shortest move within the curvature limit is
+$L_{min} = \sqrt{\frac{10}{\sqrt3}\frac{|D|}{\kappa_{max}}}$. A move that starts mid-turn first tries to end as the
+car's front reaches the obstacle's stretch, then the lengths $L_{min} \times \{1, 1.25, 1.5, 2, 3\}$, and takes the
+first whose peak curvature stays within $\kappa_{max}$.
+
+*3. Choosing the combination.*
+
+- **Keep-clear stretches:** each obstacle needs clearance from $\max(0.05\ \text{m}, d_{stop})$ before it to 0.05 m
+  after it. Obstacles whose stretches overlap form one group, passed on one offset.
+- **Candidate offsets** beside each group: the middle of each free gap wide enough for the car, the point nearest the
+  usual line, 5 evenly spread points, and the previous step's line.
+- **Joining:** before the first group, hold the current line, then take the shortest move, arriving as the car's
+  front reaches the stretch. Between groups, one of four ways: keep the offset; a move centred between them; a move
+  spread over the whole gap; or back to the usual line and out again. After the last group, one move back to the
+  usual line at the earliest point where the body keeps its clearances.
+- **Check and search:** each candidate is checked every 0.05 m with the car's body, a 0.25 × 0.60 m rectangle turned
+  along the path. The search goes group by group, keeping the 6 cheapest partial paths, for up to 3 groups.
+- **Ranking**, in order: obstacles passed (nearest first) → how close it comes to passing the next → already beside
+  the obstacles before $d_{stop}$ → lowest cost
+
+$$J = \Delta s \sum \Big[w_{dev}(d - d_{usual})^2 + w_{smooth}\,\kappa_{add}^2 + w_{change}(d - d_{prev})^2\Big] - w_{clear}\cdot\text{room}$$
+
+*4. Parameters.*
+
+| Parameter | Value | Why |
+| --- | --- | --- |
+| Car body | 0.25 × 0.60 m | The notebook car's size (not measured), checked as a rectangle along the path |
+| Clearance to obstacle / to cone | 0.10 m / 0.05 m | Balance passing the narrowest gap against jumps in the detected positions; gap needed 0.25 + 0.10 + 0.05 = 0.40 m |
+| Keep-clear start | $\max(0.05\ \text{m}, d_{stop})$ = 0.60 m | The car is beside the obstacle before the stop would brake for it |
+| Move curvature $\kappa_{max}$ | 0.45 1/m | Just under the car's left limit 0.48, leaving room for the MPC to track; shorter moves |
+| Return curvature | 0.40 1/m | Back to the usual line sooner, while still passing an obstacle close behind |
+| $w_{dev}, w_{smooth}, w_{change}, w_{clear}$ | 1, 1, 1, 5 | Room beside the obstacles counts most; $w_{change}$ keeps the chosen side from step to step |
+| Search limits | 5 spread offsets, 6 kept paths, 3 groups | Bounds the work inside the real-time policy step |
 
 ![Avoidance planner](zhenling/figures/Z7_avoidance_planner_candidates.png)
 
