@@ -95,7 +95,7 @@ a delay; the wheels hold the last command (ZOH).*
 | Environment detection (perception) | Thanh Long Nguyen | Lane estimation, pan hold, whole-system simulator |
 | | Zhenling Zhang | Cone filter, lidar obstacles, avoidance planner, obstacle stop, local map |
 | MPC and pathing (movement policy) | Peiyu Wang | MPC framework, Stage 1 design (MPC vs RL), lane end, car debugging, Foxglove |
-| | Toby Lee | Test cases, car 20 tuning, lane side, marker actions, intersection turner |
+| | Toby Lee | Test harness, MPC settings for car 20, lane side, marker actions, intersection turner, left-turn fix (branch) |
 | | Yuhao Liu | Measured-speed MPC, cone-memory U-turn, junction path finding, marker IDs and turn preparation, stop latch, car 20 diagnosis |
 | Control (car control) | Chris (Chuhan) Wang | System ID, `CarController`, speed fix, avoidance validation |
 | | Yifei Xia | Control tests with Chris, ArUco ID tests, camera pan calibration and simulation |
@@ -514,106 +514,109 @@ found.*
 
 ### 3.3 Toby Lee — test harness, MPC tuning, lane side, marker actions and intersection turns
 
-**Built:** Stage 1 test cases and harness (#6 #10), car 20 MPC calibration (#15), lane side (#27 #30), marker
-actions and the intersection turner (#35, with Yuhao), the turn simulation suite and the left-turn fix
-(`fix/left-turn-steering-and-obstacles`, not yet merged); four car sessions (cars 20, 21, 13, 14).
+**Built:** Stage 1 test cases and harness (#6 #10), car 20 MPC settings and lane offset (#15), lane side (#27 #30),
+marker actions and the intersection turner (#35, with Yuhao), the turn simulation suite and the left-turn fix
+(`fix/left-turn-steering-and-obstacles`, **not merged**). Car sessions on cars 20, 21, 13 and 14.
 
-**S2: how each part works.**
-- **Test harness** (`tests/policy/stage1_scenarios.py`). Twelve tuning cases T1–T12: start offset ±0.15 m and
-  heading up to 10°; 0.8, 1.0 and 1.2 m lanes; detector noise, a missed cone, an extra object, 3 m range, +0.2 s
-  delay, a wet floor with a 20% heavier car, and a camera blackout (scored on R7). U1–U3 are held back for M1. Any
-  `run_policy()` design (MPC, RL, pure pursuit) drives dream-gym closed loop; ground truth only places the car,
-  makes the disturbances and scores R1–R7. `--car` sends the command through the real `CarController` and a car model.
-- **Lane side** (`policy.py`). The MPC tracks a line offset $o$ from the lane centre instead of the centre. With
-  edge clearance $c$ and lane width $w$, the allowed range and the target are
-$$|o| \le \tfrac{w}{2} - c, \qquad o^{*} = \begin{cases} +(\tfrac{w}{2}-c) & \text{LEFT} \\ 0 & \text{CENTRE} \\ -(\tfrac{w}{2}-c) & \text{RIGHT}\end{cases}, \qquad o_k = o_{k-1} + \mathrm{clip}\big(o^{*} - o_{k-1},\ \pm\,0.3\,\Delta s_k\big)$$
-  On a curve $o$ is also kept within $0.5/|\kappa|$ of the inside. The MPC sees the offset line as its path:
-  $e' = e - o$, $\psi' = \psi$, $\kappa' = \kappa/(1 - \kappa o)$ (concentric). $c$ = 0.28 m gives ±0.12 m in a 0.8 m
-  lane and ±0.22 m in a 1 m lane.
-- **Markers → actions** (`markers.py`). Each step: keep posed markers with $x > 0$ and range ≤ 2.0 m, take the
-  nearest, count consecutive steps it stays nearest, fire once at 2. ID → command as in 0.4. Keep-side commands set
-  `lane_side` until the next side marker; turn and straight commands start the turner with the marker's position; an
-  unmapped ID latches a braking stop. During a turn, new markers are ignored except STOP.
-- **Intersection turn: APPROACH → ARC → EXIT** (`intersection.py`). The entry is placed 1 m past the marker along
-  the approach centre line. The car moves to the outside line (0.25 m from the outside edge) by pure pursuit,
-  $\kappa = 2y_L/(x_L^2+y_L^2)$ to a point 0.5 m ahead, at 0.3 m/s. The radius is $R = \max(R_{cfg}, 1/\kappa_{max})$.
-  The arc is a circle tangent to the car's heading; it starts at $s$ (along the approach, from the entry), which must
-  lie in the window below, nearest to the start that ends the arc on the exit centre line, $s^{*} = w_{cross}/2 - R$.
-  After ≥ 60° of turn, a lane with $|e| \le w/2 - 0.1$ m and $|\psi| \le 20°$ hands back to the MPC; past 85° the car
-  follows the exit line and stops if no lane appears within 1.5 m.
+**S1: where my parts sit.** Markers decide *which line* the MPC follows; the turner takes over only for the arc.
+
+![Where my parts sit](toby/figures/01_system.png)
+
+*Blue = my parts. In: lane (2.2), ArUco poses, lidar. Out: a lane side for the MPC (3.1), or (speed, curvature) from
+the turner during a turn, to car control (4.1). Constraint from 4.1: car 20 steers +0.48 1/m left, −0.92 right.*
+
+- **Requirements I tested against:** R1–R7 (0.1) for lane following; for turns, leave by the commanded road without
+  touching a cone; otherwise stop.
+- **Assumptions:** cones mark a lane 0.8–1.0 m wide; the marker pose is in `base_link`; the camera points straight
+  ahead (pan held, 2.2). A wrong camera yaw or steering reach breaks turns first (S3).
+
+**S2: how it works.**
+
+- **Test harness** (`stage1_scenarios.py`). 12 tuning cases T1–T12 (start offset and heading, 0.8–1.2 m lanes,
+  noise, missed or extra cones, delay, a heavier car, a camera blackout); U1–U3 held back. Any `run_policy()`
+  design (MPC, RL, pure pursuit) drives dream-gym closed loop and is scored on R1–R7.
+- **Lane side** (`policy.py`). The MPC tracks a line offset $o$ from the centre. With edge clearance $c$ = 0.28 m:
+
+$$|o| \le \tfrac{w}{2} - c, \qquad o^{*} = \pm(\tfrac{w}{2}-c)\ \text{or}\ 0, \qquad o_k = o_{k-1} + \mathrm{clip}\big(o^{*} - o_{k-1},\ \pm 0.3\,\Delta s_k\big)$$
+
+  ±0.12 m in a 0.8 m lane, ±0.22 m in a 1 m lane. The MPC sees the offset line as its path:
+  $e' = e - o$, $\kappa' = \kappa/(1 - \kappa o)$.
+- **Markers → actions** (`markers.py`). Nearest posed marker ahead within 2 m, fired after 2 steps in a row. Keep-side
+  IDs set the lane side; turn and straight IDs start the turner; an unknown ID latches a stop.
+- **Turner: APPROACH → ARC → EXIT** (`intersection.py`). Move to the outside line, then drive an arc of radius
+  $R = \max(R_{cfg}, 1/\kappa_{max})$ by pure pursuit, $\kappa = 2y/(x^2+y^2)$. Hand back to the MPC once the lane is
+  found again after ≥ 60°. The arc may only start where the body clears both corners:
 
 $$\underbrace{-\sqrt{(R-b-r_c-m)^2 - (R-a-w/2)^2}}_{\text{inner side clears the inside corner cone}} \;\le\; s \;\le\; \underbrace{w_{cross} - r_c - m - \sqrt{f^2+(R+b)^2}}_{\text{outer front corner clears the far row}}$$
 
-  With the arc centre at $(s,\ a - R)$ for a right turn (mirror for left), the inner side of the body sweeps radius
-  $R - b$, so the corner cone at $(0, -w/2)$ must lie within $R - b - r_c - m$ of the centre: this is the lower bound.
-  The outer front corner sweeps $\sqrt{f^2+(R+b)^2}$ and must stay $r_c + m$ short of the far row at $x = w_{cross}$:
-  this is the upper bound. Moving aside (larger $a$) widens the window; a larger $R$ narrows it. Values: car half
-  width $b$ = 0.125 m, base_link to front $f$ = 0.30 m, cone radius $r_c$ = 0.05 m, margin $m$ = 0.03 m,
-  $a = w/2 - 0.25$ m. An empty window, or the car already past the upper bound, is a braking stop (the "geometry stop").
+  $s$: arc start along the approach (m, 0 = entry); $a$: how far the car moved aside; $b$ = 0.125 m half width;
+  $f$ = 0.30 m to the front; $r_c + m$ = 0.08 m cone plus margin. The code also corrects for heading error
+  (Yuhao, 3.4). No valid $s$ → braking stop (the "geometry stop").
 
-| Window width (start can vary by) | 0.8 m roads | 1.0 m roads |
+<img src="toby/figures/08_turn_geometry.png" alt="Turn geometry" style="width: 85%;">
+
+| Window width | 0.8 m roads | 1.0 m roads |
 | --- | --- | --- |
-| Right, R = 1.2 m, from the centre ($a$ = 0) | none (−0.05 m) | — |
-| Right, R = 1.2 m, moved aside | 0.12 m | 0.45 m |
-| Left, R = 2.08 m (0.48 1/m) | none (−0.42 m) | 0.014 m |
+| Right, R = 1.2 m, from the centre / moved aside | none / 0.12 m | — / 0.45 m |
+| Left, R = 2.08 m (0.48 1/m, car 20) | none | 0.014 m |
 | Left, R = 1.1 m (0.91 1/m, the fix) | 0.17 m | 0.48 m |
 
-![Turn geometry](toby/figures/08_turn_geometry.png)
+*Moving aside widens the window; a large radius closes it. This is why left turns failed (S3).*
 
-*Right turn, 0.8 m roads, R = 1.2 m: from the centre no start clears both; after moving 0.15 m outside, one does.*
+**S3: simulation.**
 
-**S3.**
-- **MPC for car 20 (12 Oct).** Not a new controller: settings for Peiyu's MPC. Test: `curved_lanes.py`, a straight,
-  90° curves of 1.5 (right only), 2 and 3 m radius and an S-bend, × 3 camera yaws (±3°) × 4 noise seeds = 84 runs,
-  0.8 m lane, 0.5 m/s, 0.2 s delay, measured noise. Kept = no cone touched, body inside, reaches the last pair.
+- **Which MPC settings suit car 20? (12 Oct).** Settings for Peiyu's MPC, not a new controller. 84 curved-lane runs
+  per setting (straight, 1.5–3 m radius curves, S-bend × 3 camera yaws × 4 seeds), 0.8 m lane, 0.2 s delay.
 
-| Setting | Car 20's first run | Chosen (`dev`) | Why |
-| --- | --- | --- | --- |
-| Curvature limits | ±0.5 1/m | +0.48 / −0.92 1/m | Chris's measured reach; ±0.5 threw away right steering |
-| $q_\psi$ (heading) | 5 | 1 | 3 and 5 lost curves: the car lined up with the lane and drifted from its centre |
-| $q_\Delta$ (change) | 1 | 2 | 0.27 → 0.20 1/(m s) for the same lanes kept; 3 raised the end error (0.18 → 0.24 m) |
-| Result | 12/84 kept, 0.71 1/(m s) | **84/84, 0.20 1/(m s)** | 150 straight synthetic tracks: 97% (91% before) |
+![MPC tuning](toby/figures/02_mpc_tuning.png)
 
-  `mpc_tuning.py` checks the choice on straights: 5 horizons × 3 × 3 × 4 weights = 180 options, chosen on training
-  tracks by pass rate then accuracy + smoothness, compared on separate validation tracks. Nothing is learned: the MPC
-  solves its optimisation online every step, and only these settings were chosen, in simulation.
-- **Lane side (26 Oct):** c = 0.40 m left 0 cm of shift in a 0.8 m lane → c = 0.28 m: 40/40, side error ≤ 0.017 m.
-  Offset rate 0.3 m/m: 0.2 had not finished crossing 1.4 m after the marker; 0.5 hit cones in wide lanes.
-- **Why do left turns fail on car 20? (1–2 Nov).** The turn simulation suite (`marker_simulation.py`) runs the whole
-  `MovementPolicy` closed loop (cones, markers, lidar, IMU, the car's response) through left, right and straight
-  crossings at four-way and T intersections in 0.8–1.5 m roads, over noise seeds, and reports pass, stop or contact.
-  `--set` changes any setting, which is how steering reach, camera yaw, latency and dropout were swept.
-
-![Root cause](toby/figures/06_root_cause_bars.png)
-
-*Same pattern as the car: left 2/40, right 35/40. At 0.48 1/m the left arc (R = 2.08 m) has a 1.4 cm window in a 1 m
-crossing and none in 0.8 m roads (table above). All cases 57% → 99% with the changes below.*
-
-| Change (branch `fix/left-turn-steering-and-obstacles`) | Problem it fixes | Result (sim) |
+| Changed | From → to | Why |
 | --- | --- | --- |
-| Steering interval ±0.5 → ±0.8, steering map × 0.625 (Chris, c8988e8) | left saturates beyond −0.75 of ±0.5; the RC turns ≈ 2× further | more left reach on the same map |
-| `max_curvature_per_m` 0.48 → 0.91 (left R 2.08 → 1.1 m) | arc too wide for the crossing | left 39/40 in 0.8–1 m roads |
-| `intersection.lookahead_m` 0.5 → 0.8 | sharper left reach swung the move-aside too hard | 43/48 vs 33/48 |
-| Ignore lidar within 0.15 m of a seen marker; avoid only after 3 of 5 sightings; no new avoidance line at an intersection | marker stands read as obstacles (car 13, 27 Oct) | phantom avoidance 29% → 4% |
-| Ignore lidar within 0.12 m of a known cone while turning | the crossing's cones stopped 60% of turns with 3 cm misplacement | 40% → 68% |
+| Curvature limits | ±0.5 → +0.48 / −0.92 1/m | Chris's measured reach; a 0.48 right limit kept 0/12 of the 1.5 m right curves, 0.92 kept 12/12 |
+| Heading weight $q_\psi$ | 5 → 1 | 5 lined the car up with the lane but let it drift off centre |
+| Change weight $q_\Delta$ | 1 → 2 | steering 0.27 → 0.20 1/(m s); 3 was smoother but ended 0.24 m off centre vs 0.18 |
 
-  0.91 1/m is not measured on the ground: re-measure with `steering_test` before relying on it (4.2).
-- **Sensitivity:** ±4° camera yaw costs a whole turn direction; robust to doubled latency (92%) and 25% dropout (96%).
+  Result: 73 → 84 of 84 lanes kept, steering 0.71 → 0.20 1/(m s); 150 straight tracks 97% (91% `dev`). **Limit:**
+  those 150 tracks were also used to choose, so 97% is not held-out. Nothing is learned; only settings are chosen.
 
-**S4.**
+- **Lane side (26 Oct).** c = 0.40 m left no room to move in a 0.8 m lane → 0.28 m: 40/40, side error ≤ 0.017 m.
 
-| Quantity (from 4 recorded drives, 12 Oct) | Assumed | Measured | Used in sim |
-| --- | --- | --- | --- |
-| Lane width / cone noise | 1.0 m / 0.01 m | 0.77 m / 0.040 m | 0.8 m / 0.03 m |
-| Latency / range | 0 s / 4 m | 0.21 s / 2.54 m | 0.2 s / 2.5 m |
+<img src="toby/figures/04_lane_change_sim.png" alt="Lane change simulation" style="width: 80%;">
 
-| Link in the marker chain | Result |
-| --- | --- |
-| Lane side (car 20, 20 Oct) | `lane_side` LEFT only changed: car kept left (by eye) |
-| Camera image to detector | 0 marker batches in 9 runs → `car_management.sh --aruco` |
-| Command (car 13, 27 Oct) | "Marker 14: KEEP_RIGHT", 6 times |
-| Phantom obstacles (car 13) | marker stands planned 16 avoidance lines with no box → filters: 29% → 4% in sim |
-| Full turn (2 Nov) | not shown: wrong branch, then no `--aruco`; time ran out |
+*Keep left, right, then centre. Marker IDs 13, 14, 16 are the simulation's mapping, not `dev`'s.*
+
+- **Why do left turns fail on car 20? (1–2 Nov).** `marker_simulation.py` runs the whole policy closed loop through
+  left, right and straight crossings (0.8–1.5 m roads, noise seeds); `--set` sweeps one setting at a time.
+
+<img src="toby/figures/06_root_cause_bars.png" alt="Root cause" style="width: 62%;">
+
+*Reproduces the car: left 2/40, right 35/40. Car evidence: Yuhao's 30 Oct geometry stop (3.4).*
+
+| Fix (branch, not merged) | Problem | Result (sim) |
+| --- | --- | --- |
+| Steering ±0.5 → ±0.8 (Chris) and left limit 0.48 → 0.91 1/m | arc too wide for the crossing | left 39/40 |
+| Pure pursuit lookahead 0.5 → 0.8 m | sharper steering swung the move-aside | 43/48 vs 33/48 |
+| Ignore lidar near a seen marker or a known cone while turning | stands and cones read as obstacles | phantom avoidance 29% → 4%; turns 40% → 68% |
+
+![Sensitivity](toby/figures/07_sensitivity.png)
+
+*Left: if the real left reach is 0.7 1/m or less, every left turn fails, so 0.91 (not ground-measured, 4.2) must be
+measured before use. Right: camera yaw and marker position must be measured; latency and dropout matter less.*
+
+**S4: real car.**
+
+| Question (car, date) | Method | Result → decision |
+| --- | --- | --- |
+| How far is sim from the lab? (4 drives, 12 Oct) | recorded lane width, cone noise, delay, range | 0.77 m, 0.040 m, 0.21 s, 2.54 m → sim uses 0.8 m, 0.03 m, 0.2 s, 2.5 m |
+| Does lane side work? (20, 20 Oct) | only `lane_side` changed to LEFT | kept left, by eye only (no log) |
+| Do markers reach the policy? (9 runs) | count marker batches | 0 → start with `car_management.sh --aruco` |
+| Is the command right? (13, 27 Oct) | log the command | "Marker 14: KEEP_RIGHT", 6 times |
+| Full turn (2 Nov) | — | not shown: wrong branch, then no `--aruco` |
+
+<img src="toby/figures/09_car13_phantom_avoidance.png" alt="Car 13 phantom avoidance" style="width: 62%;">
+
+*Car 13, no box on the track: marker stands planned 16 avoidance lines. This led to the lidar filters in S3.
+**Limit:** they hide a real object within 0.15 m of a marker or 0.12 m of a cone.*
 
 <a id="s3-4"></a>
 

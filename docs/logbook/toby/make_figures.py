@@ -354,12 +354,20 @@ def simulated(sim_repo: Path):
               color=ACCENT)
     axis.annotate(f"arc start: {-start:.2f} m before the entry", (start, away), xytext=(-150, -45),
                   textcoords="offset points", fontsize=8, arrowprops=dict(arrowstyle="->"))
-    axis.text(-1.0, -0.65, f"inner body side\nR - w/2 = {radius - half:.3f} m", fontsize=8, color=GOOD)
-    axis.text(0.62, 0.55, f"outer front corner\nsqrt(f^2 + (R + w/2)^2)\n= {reach:.3f} m", fontsize=8, color=BAD)
-    axis.text(-2.15, -1.95, f"R = {radius} m, car width w = {2 * half} m, front f = {front} m (base_link to bumper)",
+    axis.text(-1.0, -0.65, f"inner body side\nR - b = {radius - half:.3f} m", fontsize=8, color=GOOD)
+    axis.text(0.62, 0.55, f"outer front corner\nsqrt(f^2 + (R + b)^2)\n= {reach:.3f} m", fontsize=8, color=BAD)
+    axis.text(-2.15, -1.95, f"R = {radius} m, road width w = {width} m,\ncar half width b = {half} m,\nfront f = {front} m (base_link to bumper)",
               fontsize=8)
-    axis.annotate("inside corner cone\n+ 3 cm margin", (0, -width / 2), xytext=(12, -28), textcoords="offset points",
+    axis.annotate("inside corner cone,\nradius r_c + m = 0.08 m", (0, -width / 2), xytext=(12, -28), textcoords="offset points",
                   fontsize=8, arrowprops=dict(arrowstyle="->"))
+    rc = CONE_RADIUS_M
+    earliest = -math.sqrt((radius - half - rc - margin) ** 2 - (radius - away - width / 2) ** 2)
+    latest = width - rc - margin - reach
+    axis.text(-2.15, 1.0, f"arc start window (a = {away:.2f} m aside):\n"
+              f"earliest {earliest:.3f} m (inner side clears the corner cone)\n"
+              f"latest {latest:.3f} m (front corner clears the far row)\n"
+              f"width {latest - earliest:.3f} m; ideal w/2 - R = {width / 2 - radius:.2f} m -> {start:.3f} m",
+              fontsize=8, bbox=dict(fc="white", ec="#999999", lw=0.6))
     axis.annotate("exit far row", (width, -1.6), xytext=(8, 0), textcoords="offset points", fontsize=8)
     axis.annotate("exit lane\ncentre", (width / 2, -1.85), xytext=(-55, 0), textcoords="offset points", fontsize=8)
     axis.set_xlim(-2.2, 1.6)
