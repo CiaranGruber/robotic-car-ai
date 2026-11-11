@@ -1,0 +1,1085 @@
+{
+ "fit_accuracy": {
+  "results": {
+   "curved, 3 cm noise": [
+    {
+     "cones_seen": 8,
+     "curvature_error": [
+      -0.064,
+      0.025,
+      0.151
+     ],
+     "curvature_per_m": 1.0,
+     "heading_deg": [
+      3.1,
+      7.29,
+      9.87
+     ],
+     "lateral_cm": [
+      2.96,
+      8.28,
+      12.26
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 18,
+     "curvature_error": [
+      -0.031,
+      0.001,
+      0.029
+     ],
+     "curvature_per_m": 0.667,
+     "heading_deg": [
+      1.3,
+      2.5,
+      5.44
+     ],
+     "lateral_cm": [
+      1.16,
+      2.57,
+      5.69
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 23,
+     "curvature_error": [
+      -0.019,
+      0.005,
+      0.021
+     ],
+     "curvature_per_m": 0.5,
+     "heading_deg": [
+      0.99,
+      1.98,
+      3.05
+     ],
+     "lateral_cm": [
+      0.84,
+      1.89,
+      3.87
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 23,
+     "curvature_error": [
+      -0.019,
+      -0.001,
+      0.023
+     ],
+     "curvature_per_m": 0.333,
+     "heading_deg": [
+      1.09,
+      1.91,
+      2.89
+     ],
+     "lateral_cm": [
+      1.04,
+      1.97,
+      3.43
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 22,
+     "curvature_error": [
+      -0.021,
+      -0.007,
+      0.011
+     ],
+     "curvature_per_m": 0.2,
+     "heading_deg": [
+      0.92,
+      1.76,
+      2.79
+     ],
+     "lateral_cm": [
+      0.91,
+      1.94,
+      2.79
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 21,
+     "curvature_error": [
+      -0.028,
+      -0.004,
+      0.016
+     ],
+     "curvature_per_m": 0.125,
+     "heading_deg": [
+      1.26,
+      1.68,
+      3.7
+     ],
+     "lateral_cm": [
+      1.24,
+      2.14,
+      3.05
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 20,
+     "curvature_error": [
+      -0.037,
+      -0.006,
+      0.023
+     ],
+     "curvature_per_m": 0.0,
+     "heading_deg": [
+      1.4,
+      2.83,
+      4.7
+     ],
+     "lateral_cm": [
+      1.76,
+      2.89,
+      5.41
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 20,
+     "curvature_error": [
+      -0.043,
+      -0.002,
+      0.022
+     ],
+     "curvature_per_m": -0.125,
+     "heading_deg": [
+      1.62,
+      2.96,
+      4.54
+     ],
+     "lateral_cm": [
+      1.88,
+      3.4,
+      4.73
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 19,
+     "curvature_error": [
+      -0.027,
+      0.001,
+      0.031
+     ],
+     "curvature_per_m": -0.2,
+     "heading_deg": [
+      1.25,
+      2.82,
+      4.03
+     ],
+     "lateral_cm": [
+      2.22,
+      3.22,
+      5.24
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 19,
+     "curvature_error": [
+      -0.019,
+      -0.001,
+      0.031
+     ],
+     "curvature_per_m": -0.333,
+     "heading_deg": [
+      1.14,
+      2.25,
+      3.48
+     ],
+     "lateral_cm": [
+      1.33,
+      2.51,
+      5.23
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 10,
+     "curvature_error": [
+      -0.065,
+      -0.016,
+      0.061
+     ],
+     "curvature_per_m": -0.5,
+     "heading_deg": [
+      1.48,
+      3.03,
+      6.49
+     ],
+     "lateral_cm": [
+      4.37,
+      8.51,
+      12.56
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 10,
+     "curvature_error": [
+      -0.094,
+      -0.019,
+      0.037
+     ],
+     "curvature_per_m": -0.667,
+     "heading_deg": [
+      1.6,
+      2.98,
+      5.6
+     ],
+     "lateral_cm": [
+      4.24,
+      8.91,
+      12.52
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 6,
+     "curvature_error": [
+      -0.125,
+      0.136,
+      0.296
+     ],
+     "curvature_per_m": -1.0,
+     "heading_deg": [
+      7.01,
+      12.34,
+      17.2
+     ],
+     "lateral_cm": [
+      3.47,
+      6.37,
+      12.79
+     ],
+     "no_lane": 0
+    }
+   ],
+   "curved, no noise": [
+    {
+     "cones_seen": 8,
+     "curvature_error": [
+      0.062,
+      0.062,
+      0.062
+     ],
+     "curvature_per_m": 1.0,
+     "heading_deg": [
+      2.48,
+      2.48,
+      2.48
+     ],
+     "lateral_cm": [
+      8.3,
+      8.3,
+      8.3
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 18,
+     "curvature_error": [
+      -0.009,
+      -0.009,
+      -0.009
+     ],
+     "curvature_per_m": 0.667,
+     "heading_deg": [
+      0.67,
+      0.67,
+      0.67
+     ],
+     "lateral_cm": [
+      0.68,
+      0.68,
+      0.68
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 23,
+     "curvature_error": [
+      -0.003,
+      -0.003,
+      -0.003
+     ],
+     "curvature_per_m": 0.5,
+     "heading_deg": [
+      0.24,
+      0.24,
+      0.24
+     ],
+     "lateral_cm": [
+      0.26,
+      0.26,
+      0.26
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 23,
+     "curvature_error": [
+      -0.003,
+      -0.003,
+      -0.003
+     ],
+     "curvature_per_m": 0.333,
+     "heading_deg": [
+      0.23,
+      0.23,
+      0.23
+     ],
+     "lateral_cm": [
+      0.25,
+      0.25,
+      0.25
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 22,
+     "curvature_error": [
+      -0.003,
+      -0.003,
+      -0.003
+     ],
+     "curvature_per_m": 0.2,
+     "heading_deg": [
+      0.22,
+      0.22,
+      0.22
+     ],
+     "lateral_cm": [
+      0.23,
+      0.23,
+      0.23
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 21,
+     "curvature_error": [
+      -0.002,
+      -0.002,
+      -0.002
+     ],
+     "curvature_per_m": 0.125,
+     "heading_deg": [
+      0.18,
+      0.18,
+      0.18
+     ],
+     "lateral_cm": [
+      0.18,
+      0.18,
+      0.18
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 20,
+     "curvature_error": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "curvature_per_m": 0.0,
+     "heading_deg": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "lateral_cm": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 20,
+     "curvature_error": [
+      0.002,
+      0.002,
+      0.002
+     ],
+     "curvature_per_m": -0.125,
+     "heading_deg": [
+      0.18,
+      0.18,
+      0.18
+     ],
+     "lateral_cm": [
+      0.19,
+      0.19,
+      0.19
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 19,
+     "curvature_error": [
+      0.004,
+      0.004,
+      0.004
+     ],
+     "curvature_per_m": -0.2,
+     "heading_deg": [
+      0.29,
+      0.29,
+      0.29
+     ],
+     "lateral_cm": [
+      0.31,
+      0.31,
+      0.31
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 19,
+     "curvature_error": [
+      0.003,
+      0.003,
+      0.003
+     ],
+     "curvature_per_m": -0.333,
+     "heading_deg": [
+      0.26,
+      0.26,
+      0.26
+     ],
+     "lateral_cm": [
+      0.3,
+      0.3,
+      0.3
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 10,
+     "curvature_error": [
+      -0.013,
+      -0.013,
+      -0.013
+     ],
+     "curvature_per_m": -0.5,
+     "heading_deg": [
+      0.8,
+      0.8,
+      0.8
+     ],
+     "lateral_cm": [
+      9.24,
+      9.24,
+      9.24
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 10,
+     "curvature_error": [
+      -0.036,
+      -0.036,
+      -0.036
+     ],
+     "curvature_per_m": -0.667,
+     "heading_deg": [
+      0.68,
+      0.68,
+      0.68
+     ],
+     "lateral_cm": [
+      9.35,
+      9.35,
+      9.35
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 6,
+     "curvature_error": [
+      0.092,
+      0.092,
+      0.092
+     ],
+     "curvature_per_m": -1.0,
+     "heading_deg": [
+      7.52,
+      7.52,
+      7.52
+     ],
+     "lateral_cm": [
+      4.44,
+      4.44,
+      4.44
+     ],
+     "no_lane": 0
+    }
+   ],
+   "straight edges, 3 cm noise": [
+    {
+     "cones_seen": 8,
+     "curvature_error": [
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "curvature_per_m": 1.0,
+     "heading_deg": [
+      50.6,
+      55.1,
+      57.32
+     ],
+     "lateral_cm": [
+      14.1,
+      15.51,
+      19.13
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 18,
+     "curvature_error": [
+      -0.667,
+      -0.667,
+      -0.667
+     ],
+     "curvature_per_m": 0.667,
+     "heading_deg": [
+      48.61,
+      49.52,
+      50.98
+     ],
+     "lateral_cm": [
+      39.77,
+      41.61,
+      44.68
+     ],
+     "no_lane": 2
+    },
+    {
+     "cones_seen": 23,
+     "curvature_error": [
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "curvature_per_m": 0.5,
+     "heading_deg": [
+      41.39,
+      42.28,
+      43.71
+     ],
+     "lateral_cm": [
+      39.03,
+      40.68,
+      44.76
+     ],
+     "no_lane": 3
+    },
+    {
+     "cones_seen": 23,
+     "curvature_error": [
+      -0.333,
+      -0.333,
+      -0.333
+     ],
+     "curvature_per_m": 0.333,
+     "heading_deg": [
+      27.96,
+      28.69,
+      29.3
+     ],
+     "lateral_cm": [
+      27.71,
+      28.95,
+      30.35
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 22,
+     "curvature_error": [
+      -0.2,
+      -0.2,
+      -0.2
+     ],
+     "curvature_per_m": 0.2,
+     "heading_deg": [
+      16.66,
+      17.03,
+      17.54
+     ],
+     "lateral_cm": [
+      16.81,
+      17.39,
+      18.76
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 21,
+     "curvature_error": [
+      -0.125,
+      -0.125,
+      -0.125
+     ],
+     "curvature_per_m": 0.125,
+     "heading_deg": [
+      9.87,
+      10.22,
+      10.6
+     ],
+     "lateral_cm": [
+      9.5,
+      10.2,
+      11.46
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 20,
+     "curvature_error": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "curvature_per_m": 0.0,
+     "heading_deg": [
+      0.25,
+      0.44,
+      0.61
+     ],
+     "lateral_cm": [
+      0.96,
+      1.37,
+      1.87
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 20,
+     "curvature_error": [
+      0.125,
+      0.125,
+      0.125
+     ],
+     "curvature_per_m": -0.125,
+     "heading_deg": [
+      9.97,
+      10.38,
+      10.74
+     ],
+     "lateral_cm": [
+      9.65,
+      11.04,
+      12.29
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 19,
+     "curvature_error": [
+      0.2,
+      0.2,
+      0.2
+     ],
+     "curvature_per_m": -0.2,
+     "heading_deg": [
+      15.28,
+      15.71,
+      16.54
+     ],
+     "lateral_cm": [
+      14.53,
+      16.2,
+      17.58
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 19,
+     "curvature_error": [
+      0.333,
+      0.333,
+      0.333
+     ],
+     "curvature_per_m": -0.333,
+     "heading_deg": [
+      26.06,
+      27.05,
+      28.05
+     ],
+     "lateral_cm": [
+      26.13,
+      28.13,
+      29.9
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 10,
+     "curvature_error": [
+      0.5,
+      0.5,
+      0.5
+     ],
+     "curvature_per_m": -0.5,
+     "heading_deg": [
+      33.03,
+      34.07,
+      36.45
+     ],
+     "lateral_cm": [
+      15.96,
+      17.95,
+      22.01
+     ],
+     "no_lane": 0
+    },
+    {
+     "cones_seen": 10,
+     "curvature_error": [
+      0.667,
+      0.667,
+      0.667
+     ],
+     "curvature_per_m": -0.667,
+     "heading_deg": [
+      42.39,
+      46.32,
+      47.88
+     ],
+     "lateral_cm": [
+      22.33,
+      27.22,
+      32.85
+     ],
+     "no_lane": 1
+    },
+    {
+     "cones_seen": 6,
+     "curvature_error": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "curvature_per_m": -1.0,
+     "heading_deg": [
+      47.63,
+      48.9,
+      50.31
+     ],
+     "lateral_cm": [
+      17.45,
+      19.91,
+      21.45
+     ],
+     "no_lane": 0
+    }
+   ]
+  },
+  "setup": {
+   "car_heading_deg": 5.0,
+   "car_offset_m": 0.1,
+   "cone_spacing_m": 0.2,
+   "far_m": 2.5,
+   "fov_deg": 86.0,
+   "lane_width_m": 0.8,
+   "near_m": 0.4,
+   "noise_m": 0.03,
+   "seeds": 30
+  }
+ },
+ "joint_vs_per_row": {
+  "heading_rms_deg": {
+   "joint (mine)": [
+    0.69,
+    0.69,
+    0.68,
+    0.66,
+    0.62,
+    0.51
+   ],
+   "per row (before)": [
+    1.32,
+    3.03,
+    1.89,
+    1.12,
+    0.75,
+    0.51
+   ]
+  },
+  "real_drives": {
+   "long_track": {
+    "median_heading_jump_deg_joint": 0.54,
+    "median_heading_jump_deg_per_row": 0.35,
+    "steps": 67
+   },
+   "messy_cone": {
+    "median_heading_jump_deg_joint": 0.68,
+    "median_heading_jump_deg_per_row": 0.55,
+    "steps": 37
+   },
+   "outlier_cone": {
+    "median_heading_jump_deg_joint": 1.25,
+    "median_heading_jump_deg_per_row": 1.61,
+    "steps": 64
+   },
+   "straight_even": {
+    "median_heading_jump_deg_joint": 0.56,
+    "median_heading_jump_deg_per_row": 0.91,
+    "steps": 35
+   }
+  },
+  "short_row_cones": [
+   2,
+   3,
+   4,
+   6,
+   8,
+   12
+  ]
+ },
+ "sides_and_width": {
+  "lane_found_share": {
+   "blue on the left, left_colour AUTO": 1.0,
+   "blue on the left, left_colour BLUE": 1.0,
+   "yellow on the left, left_colour AUTO": 1.0,
+   "yellow on the left, left_colour BLUE": 0.0
+  },
+  "lane_width_m": 0.6,
+  "one_edge_mean_abs_error_fixed_m": 0.203,
+  "one_edge_mean_abs_error_remembered_m": 0.019,
+  "remembered_width_m": 0.599
+ },
+ "wrong_colour_cone": {
+  "counts": [
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12
+  ],
+  "outcomes": {
+   "curved, stray far": [
+    [
+     "false lane",
+     {
+      "e_psi_deg": -59.3,
+      "e_y": 0.421,
+      "width": 0.36
+     }
+    ],
+    [
+     "no lane: stop",
+     null
+    ],
+    [
+     "no lane: stop",
+     null
+    ],
+    [
+     "false lane",
+     {
+      "e_psi_deg": 77.8,
+      "e_y": -0.418,
+      "width": 0.35
+     }
+    ],
+    [
+     "false lane",
+     {
+      "e_psi_deg": 71.4,
+      "e_y": -0.452,
+      "width": 0.5
+     }
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     0.0
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     0.0
+    ]
+   ],
+   "curved, stray near": [
+    [
+     "no lane: stop",
+     null
+    ],
+    [
+     "no lane: stop",
+     null
+    ],
+    [
+     "no lane: stop",
+     null
+    ],
+    [
+     "no lane: stop",
+     null
+    ],
+    [
+     "no lane: stop",
+     null
+    ],
+    [
+     "no lane: stop",
+     null
+    ],
+    [
+     "no lane: stop",
+     null
+    ],
+    [
+     "cone left out",
+     0.0
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     0.0
+    ]
+   ],
+   "straight, stray far": [
+    [
+     "false lane",
+     {
+      "e_psi_deg": -55.5,
+      "e_y": 0.391,
+      "width": 0.41
+     }
+    ],
+    [
+     "cone left out",
+     0.0
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     0.0
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     0.0
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     0.0
+    ]
+   ],
+   "straight, stray near": [
+    [
+     "no lane: stop",
+     null
+    ],
+    [
+     "one edge kept",
+     {
+      "e_y": 0.1,
+      "status": "LEFT_EDGE_ONLY"
+     }
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     0.0
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     0.0
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     0.0
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     -0.0
+    ],
+    [
+     "cone left out",
+     0.0
+    ]
+   ]
+  }
+ }
+}

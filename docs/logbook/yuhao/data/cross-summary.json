@@ -1,0 +1,1875 @@
+{
+  "scope": "Closed-loop MovementPolicy/MPC/CarController and CAR_20 kinematic plant; decoded sensors, no GPU pixels or ROS.",
+  "source_sha256": {
+    "policy/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "policy/action_policy/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "policy/action_policy/avoidance.py": "0a5d5c4d5f1a09a6bc6284dc4ff543d238959ef803a93168b4d3628aecc81134",
+    "policy/action_policy/endpoint.py": "caa75cc295d3f8829784680fd93213afca5408470bd012ccefe3afdfd0dce340",
+    "policy/action_policy/intersection.py": "32616284c66287646195fb0d11d4e131bd00d257ba22e91eb380f2c2f70180ae",
+    "policy/action_policy/lane_path.py": "13d85009b188358b926ee03a6b2c46df3dd3c00b3764d0c77726562754f43709",
+    "policy/action_policy/mpc.py": "f2d4a0864cc5d9f495e434d7e69e624d59cfba3d36949876898696ace8dbadce",
+    "policy/action_policy/open_space.py": "e49d2e9ba0c3dbc6410f6aa2b3af91e8c9008646dfc85f983005bf13cf241a94",
+    "policy/action_policy/policy.py": "b5ae950db83c4b94d45ae4a9c251f951d2dcd8cf18722a0b4513abb45cb4f822",
+    "policy/action_policy/reference.py": "8331afd90bb82fa102248c34735563413c07e70d90b872559faf8192f2ac5fde",
+    "policy/cone_filter/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "policy/cone_filter/cone_filter.py": "0e9197e357222740af685d608d4c4ede27c373f9edb1f8cf7d2a24b4397ed1e9",
+    "policy/control/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "policy/control/actions.py": "9d47887683daaff350dabfee4ae1276b2682973af205cf3a7ff41a9005f0d964",
+    "policy/control/control.py": "0196a0a525c95d0f044346a9dddc02a33d827199f99e4c1bb23ede5626df5031",
+    "policy/data_logging/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "policy/data_logging/data_logging.py": "60ba05c0bc630c4aa3d61e9c77539ad9b843872e4932b16ca22e4d016efb0416",
+    "policy/input_output.py": "da145c952be1e52cd5e23bb96415e4def145110a80333fffba090c67d3f9b6a4",
+    "policy/intersection_state.py": "b4254f3dcdf5fefae5d39738c77ce3ccc1ffe1598190da57d90adc0477af52f0",
+    "policy/lane_detection/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "policy/lane_detection/lane_detection.py": "f5d6f79d36809a2f9ce481f1c5cf1da806090f4d8e8fdca5cd718fb8bcb7e2e6",
+    "policy/lane_detection/lanes.py": "77e627e6df32709231d224cfc4f0224e455ac8fae07571cef2b2dcc1c9f3bdbe",
+    "policy/lane_detection/selection.py": "5be0a2c299f24fba0a5295a4f419782f3369628850c899a7a7af58e917674034",
+    "policy/markers/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "policy/markers/commands.py": "162d9529673a01b97ad4338ec92ec1305fe29ffd0021bcfe94fb03a38e5e4921",
+    "policy/markers/markers.py": "e1aa0bb79649da4ba163d372050f8082c002cadc37c0c3ec47e4d51bf556758d",
+    "policy/memory.py": "73e00563c00b4c3c5453dc17b17302ae9c78c4c8ae6be5704059086a8be560f3",
+    "policy/obstacle_detection/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "policy/obstacle_detection/obstacle_detection.py": "ec2aed545d3a8e2b5bdae1f96e59062ee226cf9c1028203fb7110690e1b4cd25",
+    "policy/obstacle_detection/obstacles.py": "4b17dd5b10a91ab97fbdc35c46af133e0f862ee307561218f337df37fd6ca111",
+    "policy/policy_runner.py": "f482d1e0668f1a821584b48aa508c7c1989cf64cc6974c6d10ff6fe6d7b5f6ff",
+    "policy/serialisation.py": "901c0f18e916ae3ff3f5a6dae5cd0f552bcb69f9c4e6fbda18ef6b3273bcdb36",
+    "policy/visualisation.py": "29a63736fe365dd9ae4be4fae36b9bccae5aba98d1ab494c5a0a919721452ec4",
+    "config/ai4r_policy.yaml": "480604af6e814dfeb9fb7f8fa6279ee40850a1108e3f4db891123f3eebeb6102",
+    "config/aruco_detector.yaml": "ab6b612459cf3c76f979b18cf8af14e094fc745bd5e10e9980ca71ad641bd8ef",
+    "tests/policy/intersection_simulation.py": "608ec537d401218cd97d8aa6728cd27d2c63be5eb6693ad0b7cefc342add00bb",
+    "tests/policy/car_models.py": "52b4e01ab743e3a66e6a363b83ef4efa096211c9d28f63704fadca4b95e819ec",
+    "tests/policy/stage1_scenarios.py": "fe167538297ff9c5a8debb08c10fcc7d866022f00fb8a50dc09d2ff95b4949e8",
+    "tests/policy/intersection_turning.py": "36c406fea17745a7e0735e6923d6bfa43b78f3ae2e92e2d1fbaed13ff9e300d1",
+    "tests/policy/intersection_identification.py": "b083f57d12d2394c1947af475f4a0501380488a711a53005429fff3c98436d5b"
+  },
+  "policy_parameters": {
+    "policy_update_mode": "cone_detection",
+    "policy_update_rate_hz": 50.0,
+    "required_sensors": [
+      "cone_detections",
+      "wheel_speed",
+      "lidar_cartesian"
+    ],
+    "sensor_timeout_s": {
+      "cone_detections": 0.5,
+      "fiducial_detections": 0.5,
+      "lidar_scan": 0.5,
+      "lidar_cartesian": 0.5,
+      "wheel_speed": 0.5,
+      "imu_orientation": 0.5,
+      "imu_angular_velocity": 0.5,
+      "imu_specific_force": 0.5,
+      "rc_drive_and_steer": 0.5
+    },
+    "cone_empty_timeout_s": 1.0,
+    "supervision_rate_hz": 20.0,
+    "status_period_s": 0.5,
+    "timestamp_tolerance_s": 0.05,
+    "policy_frame_id": "base_link",
+    "use_sim_time": false,
+    "action_policy": "mpc",
+    "logging": {
+      "is_data_logging": true,
+      "logging_folder": "/home/ai4r/policy_logs",
+      "log_level": "info",
+      "log_to_file": false
+    },
+    "visualisation": {
+      "publish_rate_hz": 10.0
+    },
+    "mpc": {
+      "target_speed_m_per_s": 0.5,
+      "horizon_steps": 12,
+      "step_s": 0.1,
+      "max_curvature_per_m": 0.48,
+      "max_right_curvature_per_m": 0.92,
+      "lateral_error_weight": 10.0,
+      "heading_error_weight": 1.0,
+      "curvature_weight": 0.1,
+      "curvature_change_weight": 2.0,
+      "lane_width_m": 0.8,
+      "lane_side": "CENTRE",
+      "lane_offset_m": 0.0,
+      "edge_clearance_m": 0.4,
+      "offset_change_per_m": 0.2,
+      "camera_yaw_offset_deg": 0.0,
+      "lane_loss_timeout_s": 0.5,
+      "lane_loss_speed_fraction": 0.5,
+      "lane_end_distance_m": 1.5,
+      "lane_end_stop_past_m": 0.25,
+      "stop_distance_per_speed_s": 2.1,
+      "run_duration_s": 0.0,
+      "obstacle_stop_enabled": true,
+      "obstacle_stop_margin_m": 0.2,
+      "obstacle_stop_distance_per_speed_s": 0.0,
+      "obstacle_confirm_steps": 2
+    },
+    "open_space": {
+      "speed_m_per_s": 0.5,
+      "rc_drive_threshold": 0.25,
+      "rc_steer_deadband": 0.15,
+      "max_preferred_heading_rad": 0.5,
+      "max_heading_rad": 0.7,
+      "heading_count": 29,
+      "look_ahead_m": 1.5,
+      "clearance_m": 0.35,
+      "clearance_cap_m": 1.0,
+      "preferred_heading_weight_m_per_rad": 0.5,
+      "heading_change_weight_m_per_rad": 0.2,
+      "steering_look_ahead_m": 1.0,
+      "cone_memory_s": 1.0,
+      "memory_merge_distance_m": 0.25
+    },
+    "cone_filter": {
+      "max_lateral_m": 2.0,
+      "min_height_m": -0.15,
+      "max_height_m": 0.25,
+      "min_confidence": 0.5,
+      "merge_distance_m": 0.1,
+      "row_residual_m": 0.15,
+      "max_fit_cones_per_colour": 8,
+      "check_straight_rows": false
+    },
+    "lane_detection": {
+      "left_colour": "BLUE",
+      "lane_width_m": 1.0,
+      "min_cones_per_edge": 2,
+      "min_lane_width_m": 0.3,
+      "max_lane_width_m": 3.0,
+      "max_curvature_per_m": 2.0,
+      "typical_curvature_per_m": 0.5,
+      "outlier_distance_m": 0.15,
+      "associate_branches": true
+    },
+    "control": {
+      "speed_ff_offset": 0.48,
+      "speed_ff_gain": 9.18,
+      "speed_kp": 0.15,
+      "speed_ki": 0.04,
+      "speed_i_max": 0.2,
+      "speed_i_band": 0.2,
+      "speed_feedback_min_m_per_s": 0.4,
+      "max_drive_action": 0.75,
+      "steering_centre_action": 0.02,
+      "steering_left_action_per_curvature": -1.587,
+      "steering_right_action_per_curvature": -1.043,
+      "max_steering_action": 1.0,
+      "brake_action": 0.3,
+      "brake_max_s": 1.0
+    },
+    "obstacle_detection": {
+      "beam_count": 61,
+      "field_of_view_deg": 180.0,
+      "min_range_m": 0.05,
+      "max_range_m": 4.0,
+      "car_front_m": 0.3,
+      "corridor_half_width_m": 0.2,
+      "corridor_length_m": 1.5,
+      "lane_length_m": 2.5,
+      "min_points": 3,
+      "lane_edge_margin_m": 0.1,
+      "cluster_gap_m": 0.15
+    },
+    "avoidance": {
+      "enabled": true,
+      "car_width_m": 0.25,
+      "car_rear_m": 0.3,
+      "cone_radius_m": 0.05,
+      "cone_clearance_m": 0.1,
+      "obstacle_clearance_m": 0.1,
+      "pass_distance_m": 0.05,
+      "max_ramp_curvature_per_m": 0.3,
+      "deviation_weight": 1.0,
+      "smoothness_weight": 1.0,
+      "clearance_weight": 5.0,
+      "change_weight": 1.0
+    },
+    "markers": {
+      "keep_left_id": 0,
+      "keep_right_id": 9,
+      "keep_centre_id": 1,
+      "turn_left_id": 3,
+      "turn_right_id": 4,
+      "straight_id": 5,
+      "max_distance_m": 1.5,
+      "confirm_steps": 2
+    },
+    "intersection": {
+      "enabled": false,
+      "turning_radius_m": 2.5,
+      "turn_speed_m_per_s": 0.4,
+      "sensor_timeout_s": 0.3,
+      "camera_empty_hold_s": 4.0,
+      "command_max_age_s": 12.0,
+      "route_max_age_s": 24.0,
+      "route_max_distance_m": 10.0
+    }
+  },
+  "detector_parameters": {
+    "dictionary_name": "DICT_4X4_50",
+    "default_marker_size_m": 0.081,
+    "allowed_marker_ids": [],
+    "min_consecutive_frames": 3
+  },
+  "effective_intersection_parameters": {
+    "enabled": true,
+    "turning_radius_m": 2.5,
+    "turn_speed_m_per_s": 0.4,
+    "sensor_timeout_s": 0.3,
+    "camera_empty_hold_s": 4.0,
+    "command_max_age_s": 12.0,
+    "route_max_age_s": 24.0,
+    "route_max_distance_m": 10.0
+  },
+  "assumptions": {
+    "cross_width_m": 2.4,
+    "cone_spacings_m": [
+      0.2,
+      0.4
+    ],
+    "turn_radius_m": 2.5,
+    "camera_half_fov_deg": 43.0,
+    "camera_range_m": 2.5,
+    "near_forward_m": 0.4,
+    "sensor_age_s": 0.2,
+    "policy_period_s": 0.1,
+    "plant_period_s": 0.01,
+    "turn_occlusion_trigger_abs_heading_deg": 20.0,
+    "occlusion_durations_s": {
+      "turn_blue_missing": 1.2,
+      "turn_camera_gap": 0.8,
+      "turn_corner_missing": 1.2
+    }
+  },
+  "limitations": [
+    "Synthetic ideal three-return cone lidar without occlusion; no actuator deadtime, tyre slip or measured braking.",
+    "The optional navigator is enabled only for these local simulations; deployment configuration is not changed.",
+    "Route formation uses an equal-width perpendicular-cross assumption after sensor admission.",
+    "Observed cone-fit arcs and selected current-body route are separate; selected routes are not detected boundaries.",
+    "Physical cone colours remain fixed; the existing completed-exit handoff reacquires sides with AUTO.",
+    "Goal crossing is sustained moving exit alignment, not a stopped goal or physical qualification."
+  ],
+  "case_count": 22,
+  "policy_frames": 4205,
+  "navigation_passes": 20,
+  "reasons": {
+    "exit_reached": 20,
+    "policy_stop": 2
+  },
+  "runs": [
+    {
+      "direction": "left",
+      "marker_id": 3,
+      "profile": "nominal",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.2,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_LEFT",
+        "actual_exit": "left",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.6999999999999997,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.492580956072532
+      },
+      "timing": {
+        "tick_p95_ms": 3.267125086858868,
+        "tick_max_ms": 12.286834069527686
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "TURN_LEFT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ]
+    },
+    {
+      "direction": "right",
+      "marker_id": 4,
+      "profile": "nominal",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.2,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_RIGHT",
+        "actual_exit": "right",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.6999999999999997,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.492580956072532
+      },
+      "timing": {
+        "tick_p95_ms": 3.4321292652748525,
+        "tick_max_ms": 12.113958015106618
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "TURN_RIGHT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ]
+    },
+    {
+      "direction": "left",
+      "marker_id": 3,
+      "profile": "noisy_cones",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.2,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.5,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_LEFT",
+        "actual_exit": "left",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.0000000000000004,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.48800326953983136
+      },
+      "timing": {
+        "tick_p95_ms": 9.050012624356892,
+        "tick_max_ms": 18.305041012354195
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975553277864254,
+          "command": "TURN_LEFT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ]
+    },
+    {
+      "direction": "right",
+      "marker_id": 4,
+      "profile": "noisy_cones",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.2,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_RIGHT",
+        "actual_exit": "right",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 3.4,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.49460434084626353
+      },
+      "timing": {
+        "tick_p95_ms": 9.674812521552667,
+        "tick_max_ms": 17.917457967996597
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975553277864254,
+          "command": "TURN_RIGHT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ]
+    },
+    {
+      "direction": "left",
+      "marker_id": 3,
+      "profile": "turn_blue_missing",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.2,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_LEFT",
+        "actual_exit": "left",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.6999999999999997,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.492580956072532
+      },
+      "timing": {
+        "tick_p95_ms": 2.98539118375629,
+        "tick_max_ms": 12.08641694393009
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "TURN_LEFT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ],
+      "disturbance": {
+        "trigger_heading_deg": 20.0,
+        "started_at_s": 9.1,
+        "duration_s": 1.2,
+        "acquisition_steps_active": 12
+      }
+    },
+    {
+      "direction": "right",
+      "marker_id": 4,
+      "profile": "turn_blue_missing",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.2,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_RIGHT",
+        "actual_exit": "right",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.6999999999999997,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.492580956072532
+      },
+      "timing": {
+        "tick_p95_ms": 3.484183677937835,
+        "tick_max_ms": 12.360749999061227
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "TURN_RIGHT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ],
+      "disturbance": {
+        "trigger_heading_deg": 20.0,
+        "started_at_s": 9.1,
+        "duration_s": 1.2,
+        "acquisition_steps_active": 12
+      }
+    },
+    {
+      "direction": "left",
+      "marker_id": 3,
+      "profile": "turn_camera_gap",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.2,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_LEFT",
+        "actual_exit": "left",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.6999999999999997,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.492580956072532
+      },
+      "timing": {
+        "tick_p95_ms": 3.1874625594355157,
+        "tick_max_ms": 11.992416926659644
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "TURN_LEFT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ],
+      "disturbance": {
+        "trigger_heading_deg": 20.0,
+        "started_at_s": 9.1,
+        "duration_s": 0.8,
+        "acquisition_steps_active": 8
+      }
+    },
+    {
+      "direction": "right",
+      "marker_id": 4,
+      "profile": "turn_camera_gap",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.2,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_RIGHT",
+        "actual_exit": "right",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.6999999999999997,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.492580956072532
+      },
+      "timing": {
+        "tick_p95_ms": 3.5520624252967528,
+        "tick_max_ms": 12.226332910358906
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "TURN_RIGHT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ],
+      "disturbance": {
+        "trigger_heading_deg": 20.0,
+        "started_at_s": 9.1,
+        "duration_s": 0.8,
+        "acquisition_steps_active": 8
+      }
+    },
+    {
+      "direction": "left",
+      "marker_id": 3,
+      "profile": "turn_corner_missing",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.2,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_LEFT",
+        "actual_exit": "left",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.6999999999999997,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.492580956072532
+      },
+      "timing": {
+        "tick_p95_ms": 3.1829044339247043,
+        "tick_max_ms": 11.885249987244606
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "TURN_LEFT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ],
+      "disturbance": {
+        "trigger_heading_deg": 20.0,
+        "started_at_s": 9.1,
+        "duration_s": 1.2,
+        "acquisition_steps_active": 12
+      }
+    },
+    {
+      "direction": "right",
+      "marker_id": 4,
+      "profile": "turn_corner_missing",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.2,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_RIGHT",
+        "actual_exit": "right",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.6999999999999997,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.492580956072532
+      },
+      "timing": {
+        "tick_p95_ms": 3.461971238721161,
+        "tick_max_ms": 12.021124945022166
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "TURN_RIGHT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ],
+      "disturbance": {
+        "trigger_heading_deg": 20.0,
+        "started_at_s": 9.1,
+        "duration_s": 1.2,
+        "acquisition_steps_active": 12
+      }
+    },
+    {
+      "direction": "left",
+      "marker_id": 3,
+      "profile": "nominal",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.4,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_LEFT",
+        "actual_exit": "left",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.6999999999999997,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.492580956072532
+      },
+      "timing": {
+        "tick_p95_ms": 2.832528634462505,
+        "tick_max_ms": 11.595709016546607
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "TURN_LEFT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ]
+    },
+    {
+      "direction": "right",
+      "marker_id": 4,
+      "profile": "nominal",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.4,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_RIGHT",
+        "actual_exit": "right",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.6999999999999997,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.492580956072532
+      },
+      "timing": {
+        "tick_p95_ms": 2.7174456510692835,
+        "tick_max_ms": 11.673792032524943
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "TURN_RIGHT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ]
+    },
+    {
+      "direction": "left",
+      "marker_id": 3,
+      "profile": "noisy_cones",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.4,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.1,
+        "marker_disappeared_at_s": 3.2,
+        "intersection_entered_at_s": 11.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_LEFT",
+        "actual_exit": null,
+        "requested_exit_reached": false,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 5.799999999999999,
+        "reason": "policy_stop",
+        "policy_stop": "LANE_LOSS",
+        "navigation_pass": false,
+        "handoff_completed": false,
+        "command_consumed": false,
+        "final_speed_m_per_s": 0.0
+      },
+      "timing": {
+        "tick_p95_ms": 5.827937973663211,
+        "tick_max_ms": 11.21237501502037
+      },
+      "events": [
+        {
+          "time_s": 2.1,
+          "x_m": -4.980076275386536,
+          "command": "TURN_LEFT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 7.800000000000001,
+          "phase": "stopped",
+          "stop_reason": "existing stop latch"
+        }
+      ]
+    },
+    {
+      "direction": "right",
+      "marker_id": 4,
+      "profile": "noisy_cones",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.4,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.1,
+        "marker_disappeared_at_s": 3.2,
+        "intersection_entered_at_s": 11.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_RIGHT",
+        "actual_exit": null,
+        "requested_exit_reached": false,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 5.799999999999999,
+        "reason": "policy_stop",
+        "policy_stop": "LANE_LOSS",
+        "navigation_pass": false,
+        "handoff_completed": false,
+        "command_consumed": false,
+        "final_speed_m_per_s": 0.0
+      },
+      "timing": {
+        "tick_p95_ms": 5.748936964664608,
+        "tick_max_ms": 11.268749949522316
+      },
+      "events": [
+        {
+          "time_s": 2.1,
+          "x_m": -4.980076275386536,
+          "command": "TURN_RIGHT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 7.800000000000001,
+          "phase": "stopped",
+          "stop_reason": "existing stop latch"
+        }
+      ]
+    },
+    {
+      "direction": "left",
+      "marker_id": 3,
+      "profile": "turn_blue_missing",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.4,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_LEFT",
+        "actual_exit": "left",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.6999999999999997,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.492580956072532
+      },
+      "timing": {
+        "tick_p95_ms": 2.910670812707393,
+        "tick_max_ms": 11.820291983895004
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "TURN_LEFT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ],
+      "disturbance": {
+        "trigger_heading_deg": 20.0,
+        "started_at_s": 9.1,
+        "duration_s": 1.2,
+        "acquisition_steps_active": 12
+      }
+    },
+    {
+      "direction": "right",
+      "marker_id": 4,
+      "profile": "turn_blue_missing",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.4,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_RIGHT",
+        "actual_exit": "right",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.6999999999999997,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.492580956072532
+      },
+      "timing": {
+        "tick_p95_ms": 2.6945670251734555,
+        "tick_max_ms": 11.849542031995952
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "TURN_RIGHT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ],
+      "disturbance": {
+        "trigger_heading_deg": 20.0,
+        "started_at_s": 9.1,
+        "duration_s": 1.2,
+        "acquisition_steps_active": 12
+      }
+    },
+    {
+      "direction": "left",
+      "marker_id": 3,
+      "profile": "turn_camera_gap",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.4,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_LEFT",
+        "actual_exit": "left",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.6999999999999997,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.492580956072532
+      },
+      "timing": {
+        "tick_p95_ms": 2.7188043342903243,
+        "tick_max_ms": 11.925541912205517
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "TURN_LEFT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ],
+      "disturbance": {
+        "trigger_heading_deg": 20.0,
+        "started_at_s": 9.1,
+        "duration_s": 0.8,
+        "acquisition_steps_active": 8
+      }
+    },
+    {
+      "direction": "right",
+      "marker_id": 4,
+      "profile": "turn_camera_gap",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.4,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_RIGHT",
+        "actual_exit": "right",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.6999999999999997,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.492580956072532
+      },
+      "timing": {
+        "tick_p95_ms": 2.7729205205105245,
+        "tick_max_ms": 12.207541964016855
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "TURN_RIGHT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ],
+      "disturbance": {
+        "trigger_heading_deg": 20.0,
+        "started_at_s": 9.1,
+        "duration_s": 0.8,
+        "acquisition_steps_active": 8
+      }
+    },
+    {
+      "direction": "left",
+      "marker_id": 3,
+      "profile": "turn_corner_missing",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.4,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_LEFT",
+        "actual_exit": "left",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.6999999999999997,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.492580956072532
+      },
+      "timing": {
+        "tick_p95_ms": 2.7008499018847942,
+        "tick_max_ms": 11.662458069622517
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "TURN_LEFT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ],
+      "disturbance": {
+        "trigger_heading_deg": 20.0,
+        "started_at_s": 9.1,
+        "duration_s": 1.2,
+        "acquisition_steps_active": 12
+      }
+    },
+    {
+      "direction": "right",
+      "marker_id": 4,
+      "profile": "turn_corner_missing",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.4,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.4,
+        "command_before_intersection": true,
+        "remembered_command": "TURN_RIGHT",
+        "actual_exit": "right",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 2.6999999999999997,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.492580956072532
+      },
+      "timing": {
+        "tick_p95_ms": 2.743149863090366,
+        "tick_max_ms": 12.376125087030232
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "TURN_RIGHT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.5,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.8,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ],
+      "disturbance": {
+        "trigger_heading_deg": 20.0,
+        "started_at_s": 9.1,
+        "duration_s": 1.2,
+        "acquisition_steps_active": 12
+      }
+    },
+    {
+      "direction": "straight",
+      "marker_id": 5,
+      "profile": "nominal",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.2,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.3,
+        "command_before_intersection": true,
+        "remembered_command": "STRAIGHT",
+        "actual_exit": "straight",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 3.7000000000000006,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.5101959471230573
+      },
+      "timing": {
+        "tick_p95_ms": 3.1945622467901558,
+        "tick_max_ms": 6.1750420136377215
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975541905171539,
+          "command": "STRAIGHT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.0,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.3,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ]
+    },
+    {
+      "direction": "straight",
+      "marker_id": 5,
+      "profile": "noisy_cones",
+      "seed": 26026,
+      "track": {
+        "width_m": 2.4,
+        "arm_length_m": 8.0,
+        "cone_spacing_m": 0.2,
+        "marker_x_m": -3.8,
+        "marker_y_m": -0.7,
+        "exit_gate_m": 3.6
+      },
+      "start_left_m": 0.0,
+      "start_heading_deg": 0.0,
+      "navigation_enabled": true,
+      "metrics": {
+        "command_recognised": true,
+        "recognised_at_s": 2.0,
+        "marker_disappeared_at_s": 3.1,
+        "intersection_entered_at_s": 10.3,
+        "command_before_intersection": true,
+        "remembered_command": "STRAIGHT",
+        "actual_exit": "straight",
+        "requested_exit_reached": true,
+        "wrong_exit": false,
+        "cone_contacts": 0,
+        "max_body_outside_m": 0.0,
+        "obstacle_contacts": 0,
+        "max_camera_empty_s": 3.400000000000001,
+        "reason": "exit_reached",
+        "policy_stop": null,
+        "navigation_pass": true,
+        "handoff_completed": true,
+        "command_consumed": true,
+        "final_speed_m_per_s": 0.5082991957691159
+      },
+      "timing": {
+        "tick_p95_ms": 7.431322941556573,
+        "tick_max_ms": 17.7302910014987
+      },
+      "events": [
+        {
+          "time_s": 2.0,
+          "x_m": -4.975553277864254,
+          "command": "STRAIGHT"
+        }
+      ],
+      "phases": [
+        {
+          "time_s": 0.0,
+          "phase": "approach",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 4.9,
+          "phase": "turn",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.0,
+          "phase": "exit",
+          "stop_reason": ""
+        },
+        {
+          "time_s": 17.3,
+          "phase": "complete",
+          "stop_reason": ""
+        }
+      ]
+    }
+  ]
+}

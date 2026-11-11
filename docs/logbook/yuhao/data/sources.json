@@ -1,0 +1,168 @@
+{
+  "description": "Historical simulation plots and scalar real-car diagnostic extracts for Yuhao Liu’s logbook. No new driving or experiment execution.",
+  "source_revision_context": {
+    "MPC": "f7052b2, settings/source hashes retained in original summary files",
+    "connected_uturn": "fd01806 branch-era result; exact source hashes retained in uturn-summary.json",
+    "junctions": "d59e812 historical 26 October reports",
+    "car_diagnosis": "bf5e08c historical 30 October records",
+    "stop_tests": "488ec30 historical 2 November acceptance"
+  },
+  "artifacts": [
+    {
+      "source": "build/mpc-speed-evaluation/trajectories.png",
+      "target": "figures/01_measured_speed.png",
+      "source_sha256": "2851f1d7f98f1194c44c4f4d7d97301bb1bfb925548787b0af3e1e80e75c8537",
+      "target_sha256": "2851f1d7f98f1194c44c4f4d7d97301bb1bfb925548787b0af3e1e80e75c8537",
+      "extraction": "Unchanged copy"
+    },
+    {
+      "source": "build/mpc-endpoint-evaluation/stopping-profiles.png",
+      "target": "figures/02_endpoint_profiles.png",
+      "source_sha256": "4bbd83e13bd4dbf9e2118d6788d46fc83446baf462a702fc7617c925eff74c21",
+      "target_sha256": "4bbd83e13bd4dbf9e2118d6788d46fc83446baf462a702fc7617c925eff74c21",
+      "extraction": "Unchanged copy"
+    },
+    {
+      "source": "build/connected-realtime/evaluation.png",
+      "target": "figures/03_connected_uturn.png",
+      "source_sha256": "21c94a30cc650c4184fd48c9ec69c5a6eca14d6db71d584d4326821f2d4b8b81",
+      "target_sha256": "21c94a30cc650c4184fd48c9ec69c5a6eca14d6db71d584d4326821f2d4b8b81",
+      "extraction": "Unchanged copy"
+    },
+    {
+      "source": "build/intersection-turning-20261026/signal_selection.png",
+      "target": "figures/04_junction_selection.png",
+      "source_sha256": "b77b9e475a342d426db60c99cbc63418f877a08f35cb3061d3a48e18100fe2ff",
+      "target_sha256": "b77b9e475a342d426db60c99cbc63418f877a08f35cb3061d3a48e18100fe2ff",
+      "extraction": "Unchanged copy"
+    },
+    {
+      "source": "build/mpc-speed-evaluation/metrics.csv",
+      "target": "data/mpc-speed-metrics.csv",
+      "source_sha256": "ed9ddc6b6d7873da8995d8ff8c8374a7ee1b7a8c718502b2f11bc578659be075",
+      "target_sha256": "4b7da3c84f16150890ad2d46c21e56058786fc4b885b3679426126cd81864c9c",
+      "extraction": "Unchanged copy; CSV line endings normalised to LF for repository attributes"
+    },
+    {
+      "source": "build/mpc-speed-evaluation/summary.json",
+      "target": "data/mpc-speed-summary.json",
+      "source_sha256": "7004975fcb13f683b531368eda459d0da1f04042f86ee000015b3aad8d2995e0",
+      "target_sha256": "7004975fcb13f683b531368eda459d0da1f04042f86ee000015b3aad8d2995e0",
+      "extraction": "Unchanged copy"
+    },
+    {
+      "source": "build/mpc-endpoint-evaluation/metrics.csv",
+      "target": "data/endpoint-metrics.csv",
+      "source_sha256": "f434a439f763984481869231b5425de93594aeb41b309ae899a79ab636ce7a60",
+      "target_sha256": "0effab5a93f80f984db52f53793e573b70a242c2a654b7d3c625e2c8bf500187",
+      "extraction": "Unchanged copy; CSV line endings normalised to LF for repository attributes"
+    },
+    {
+      "source": "build/mpc-endpoint-evaluation/summary.json",
+      "target": "data/endpoint-summary.json",
+      "source_sha256": "2dfd30af5d5739dd772eba3449088dcfc59e3a3afa9949a593ee1f26a65e1103",
+      "target_sha256": "2dfd30af5d5739dd772eba3449088dcfc59e3a3afa9949a593ee1f26a65e1103",
+      "extraction": "Unchanged copy"
+    },
+    {
+      "source": "build/intersection-turning-20261026/report.json",
+      "target": "data/cross-summary.json",
+      "source_sha256": "8dad8a686106208eea540c94b73e4898214220508b6e7529ebc4bca51ff173d9",
+      "target_sha256": "8dad8a686106208eea540c94b73e4898214220508b6e7529ebc4bca51ff173d9",
+      "extraction": "Unchanged copy"
+    },
+    {
+      "source": "build/t-intersection-20261026/report.json",
+      "target": "data/t-summary.json",
+      "source_sha256": "05a78377ffad5c856b8b50a1d9466356cc63afb9f140cba1d3f6611a5021b8fa",
+      "target_sha256": "05a78377ffad5c856b8b50a1d9466356cc63afb9f140cba1d3f6611a5021b8fa",
+      "extraction": "Unchanged copy"
+    },
+    {
+      "source": "build/car-left-after-size-20261030/analysis.json",
+      "target": "data/post-reload-events.json",
+      "source_sha256": "de089771b91532fd7116f95ef2ee96d034e331835247bd5008c20cce87888207",
+      "target_sha256": "de089771b91532fd7116f95ef2ee96d034e331835247bd5008c20cce87888207",
+      "extraction": "Unchanged copy"
+    },
+    {
+      "source": "build/connected-realtime/report.json",
+      "target": "data/uturn-summary.json",
+      "source_sha256": "78a8fc8e3ddfee989b1b85845d7e08faebabf634b8540e94bc78f5a86a07323d",
+      "target_sha256": "1bc7add530eba603f7064f307d25bf67d1f03ad9ec1dd00c804529e5bbab277c",
+      "extraction": "Keep controller, configuration, scope, source hashes, varied-layout batch and separate cap batch; omit other batches"
+    },
+    {
+      "source": "build/car-left-retest-20261030/recognition-analysis.json",
+      "target": "data/marker-range.csv",
+      "source_sha256": "6ff3174544dde6219cd94fd3d4d7aa61c18cecff82a6d4919c1d64380b568d2a",
+      "target_sha256": "28b05c07fd12c658cfbde8d0cd0278695cb04f2a01d5f3004c884fb34f538e86",
+      "extraction": "Flatten details to 41 observation rows. marker_size_m=0.25 from each report’s sizes_m; range_limit_m from report; CSV line endings normalised to LF for repository attributes"
+    },
+    {
+      "source": "build/car-left-after-size-20261030/runs/2026-10-30_15-02-43_observations.json",
+      "target": "data/post-reload-trace.csv",
+      "source_sha256": "6b5a6769a1aeff9d7c7dc15d123761607aa761de3f606512be05aa6472d97484",
+      "target_sha256": "95630f8fd06cb8c77fbea4eb1948a65fe351e0357f85c3c09798e82a31d3d7fe",
+      "extraction": "Complete prefix records only; action i, observation i and post-step memory i+1; 705 aligned scalar rows; CSV line endings normalised to LF for repository attributes"
+    },
+    {
+      "source": "build/car-left-after-size-20261030/runs/2026-10-30_15-02-43_memory.json",
+      "target": "data/post-reload-trace.csv",
+      "source_sha256": "e02b5ab3408a1d422343ed6012b144a1746b228ca3d75085541df55ab7aab1ea",
+      "target_sha256": "95630f8fd06cb8c77fbea4eb1948a65fe351e0357f85c3c09798e82a31d3d7fe",
+      "extraction": "Complete prefix records only; action i, observation i and post-step memory i+1; 705 aligned scalar rows; CSV line endings normalised to LF for repository attributes"
+    },
+    {
+      "source": "build/car-left-after-size-20261030/runs/2026-10-30_15-02-43_actions.json",
+      "target": "data/post-reload-trace.csv",
+      "source_sha256": "4f84393817d45d0db65fc45ab7d793f864f07724337f4f32b13b6040091fe459",
+      "target_sha256": "95630f8fd06cb8c77fbea4eb1948a65fe351e0357f85c3c09798e82a31d3d7fe",
+      "extraction": "Complete prefix records only; action i, observation i and post-step memory i+1; 705 aligned scalar rows; CSV line endings normalised to LF for repository attributes"
+    }
+  ],
+  "original_simulation_evaluators": [
+    "tests/policy/evaluate_mpc_speed.py",
+    "tests/policy/evaluate_endpoint.py",
+    "tests/policy/evaluate_connected_realtime.py at fd01806",
+    "tests/policy/intersection_turning.py at d59e812",
+    "tests/policy/t_intersection_simulation.py at d59e812"
+  ],
+  "generated_figures": [
+    {
+      "target": "figures/00_system.png",
+      "sha256": "41b4cd9aa754bbe2335eee2fdfc317c2055cbb80aa8833eee7702e8c94c90e9b",
+      "generator": "make_figures.py",
+      "generator_sha256": "4038e7048071666039ec50dd372e973e9bf2c66a9b465627fa742acb0a15468d",
+      "inputs": [],
+      "source_references": [
+        "policy/action_policy/mpc.py",
+        "policy/action_policy/policy.py",
+        "policy/action_policy/intersection.py",
+        "policy/action_policy/intersection_navigator.py",
+        "policy/control/control.py",
+        "docs/acceptance.md"
+      ],
+      "description": "Static rendering of the logbook system relationships; no experimental measurements invented"
+    },
+    {
+      "target": "figures/05_marker_range.png",
+      "sha256": "4d4e2c7b4d89eaae4f2296c055129c4f63190e3d6e82c8dc304a729de69ea633",
+      "generator": "make_figures.py",
+      "generator_sha256": "4038e7048071666039ec50dd372e973e9bf2c66a9b465627fa742acb0a15468d",
+      "inputs": [
+        "data/marker-range.csv"
+      ]
+    },
+    {
+      "target": "figures/06_post_reload_trace.png",
+      "sha256": "8c32bfa70d58da7bfe4ac39d5df512131f9831c87d5b33a16b1a19b2d39c2a4d",
+      "generator": "make_figures.py",
+      "generator_sha256": "4038e7048071666039ec50dd372e973e9bf2c66a9b465627fa742acb0a15468d",
+      "inputs": [
+        "data/post-reload-trace.csv",
+        "data/post-reload-events.json"
+      ]
+    }
+  ]
+}

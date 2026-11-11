@@ -4,9 +4,14 @@ log/
 logs/
 .verification/
 scenarios/data/original_data
+# Detached policy checkout used only to rebuild logbook figures.
+docs/logbook/ciaran/_policy_oct26/
 
 # macOS Finder metadata
 .DS_Store
+
+# Backup files
+*.drawio.bkp
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

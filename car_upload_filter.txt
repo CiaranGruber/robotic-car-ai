@@ -52,3 +52,7 @@
 - .gitlab/
 - tools/record_run.ps1
 - tools/sysid_analyze.py
+# Development tools, macOS folder metadata and pan-test recordings are not needed on the car.
+- tools/
+- .DS_Store
+- pan-test-*.csv

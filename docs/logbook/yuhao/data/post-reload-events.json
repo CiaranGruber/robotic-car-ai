@@ -1,0 +1,206 @@
+[
+  {
+    "run": "2026-10-30_15-02-12",
+    "captures": {
+      "observations": {
+        "complete_records": 33,
+        "remaining_chars": 2,
+        "closed_array": true
+      },
+      "memory": {
+        "complete_records": 33,
+        "remaining_chars": 2,
+        "closed_array": true
+      },
+      "actions": {
+        "complete_records": 33,
+        "remaining_chars": 2,
+        "closed_array": true
+      }
+    },
+    "aligned_post_steps": 32,
+    "transitions": [
+      {
+        "index": 0,
+        "elapsed_s": 0.029968040000312612,
+        "state": [
+          null,
+          null,
+          null
+        ],
+        "action": {
+          "drive_action": 0.0,
+          "steering_action": 0.02,
+          "camera_pan_action": 0.3,
+          "debug1": null,
+          "debug2": null
+        },
+        "pose": {
+          "x_m": 0.0,
+          "y_m": 0.0,
+          "heading_rad": 0.0
+        },
+        "turn": null
+      }
+    ]
+  },
+  {
+    "run": "2026-10-30_15-02-43",
+    "captures": {
+      "observations": {
+        "complete_records": 707,
+        "remaining_chars": 0,
+        "closed_array": false
+      },
+      "memory": {
+        "complete_records": 706,
+        "remaining_chars": 0,
+        "closed_array": false
+      },
+      "actions": {
+        "complete_records": 706,
+        "remaining_chars": 2,
+        "closed_array": true
+      }
+    },
+    "aligned_post_steps": 705,
+    "transitions": [
+      {
+        "index": 0,
+        "elapsed_s": 0.039214858999912394,
+        "state": [
+          null,
+          null,
+          null
+        ],
+        "action": {
+          "drive_action": 0.6094662309368191,
+          "steering_action": -0.09501109213759534,
+          "camera_pan_action": 0.3,
+          "debug1": -0.18223719213708922,
+          "debug2": 0.4898176724777969
+        },
+        "pose": {
+          "x_m": 0.0,
+          "y_m": 0.0,
+          "heading_rad": 0.0
+        },
+        "turn": null
+      },
+      {
+        "index": 32,
+        "elapsed_s": 3.02451327199924,
+        "state": [
+          "TURN_LEFT",
+          "APPROACH",
+          null
+        ],
+        "action": {
+          "drive_action": 0.5327224524801819,
+          "steering_action": -0.4860284869817528,
+          "camera_pan_action": 0.3,
+          "debug1": 0.055479942585891784,
+          "debug2": -0.2052710651225799
+        },
+        "pose": {
+          "x_m": 1.1647774079849784,
+          "y_m": -0.14092869118634194,
+          "heading_rad": -0.03463656598433866
+        },
+        "turn": {
+          "command": "TURN_LEFT",
+          "phase": "APPROACH",
+          "entry_x_m": 3.6211868446299524,
+          "entry_y_m": 0.22603789759990317,
+          "heading_rad": 0.17063449913824125,
+          "lane_width_m": 1.013457173502918,
+          "lane_side_before": "CENTRE",
+          "arc_centre_x_m": null,
+          "arc_centre_y_m": null,
+          "exit_x_m": null,
+          "exit_y_m": null,
+          "exit_heading_rad": null
+        },
+        "along_m": -2.4830492894210856,
+        "left_m": 0.05547994258589184,
+        "heading_error_deg": -11.761165687678902
+      },
+      {
+        "index": 63,
+        "elapsed_s": 5.438267789999372,
+        "state": [
+          "TURN_LEFT",
+          "APPROACH",
+          "LANE_LOSS"
+        ],
+        "action": {
+          "drive_action": 0.0,
+          "steering_action": 0.02,
+          "camera_pan_action": 0.3,
+          "debug1": -0.14223974345263474,
+          "debug2": -0.0835554294764068
+        },
+        "pose": {
+          "x_m": 2.399861795965843,
+          "y_m": -0.1641669792165265,
+          "heading_rad": -0.024101437825073346
+        },
+        "turn": {
+          "command": "TURN_LEFT",
+          "phase": "APPROACH",
+          "entry_x_m": 3.6331452262170636,
+          "entry_y_m": 0.07941288047754366,
+          "heading_rad": 0.05630440435346952,
+          "lane_width_m": 1.0370524309437126,
+          "lane_side_before": "CENTRE",
+          "arc_centre_x_m": null,
+          "arc_centre_y_m": null,
+          "exit_x_m": null,
+          "exit_y_m": null,
+          "exit_heading_rad": null
+        },
+        "along_m": -1.2450364514826502,
+        "left_m": -0.17379125944733445,
+        "heading_error_deg": -4.606915405025487
+      },
+      {
+        "index": 71,
+        "elapsed_s": 6.016966334000244,
+        "state": [
+          "TURN_LEFT",
+          "ARC",
+          "LANE_LOSS"
+        ],
+        "action": {
+          "drive_action": 0.0,
+          "steering_action": 0.02,
+          "camera_pan_action": 0.3,
+          "debug1": -0.14223974345263474,
+          "debug2": -0.0835554294764068
+        },
+        "pose": {
+          "x_m": 2.652498806352319,
+          "y_m": -0.19707355035144225,
+          "heading_rad": -0.018176386596290648
+        },
+        "turn": {
+          "command": "TURN_LEFT",
+          "phase": "ARC",
+          "entry_x_m": 3.632153974944309,
+          "entry_y_m": 0.0893117453276187,
+          "heading_rad": 0.09740743963497205,
+          "lane_width_m": 1.0321342213831861,
+          "lane_side_before": "CENTRE",
+          "arc_centre_x_m": 2.4498873987144036,
+          "arc_centre_y_m": 1.876384043927438,
+          "exit_x_m": null,
+          "exit_y_m": null,
+          "exit_heading_rad": null
+        },
+        "along_m": -1.0028632209484574,
+        "left_m": -0.1897528576835371,
+        "heading_error_deg": -6.622465423024848
+      }
+    ]
+  }
+]
