@@ -147,16 +147,20 @@ the turner during a turn, to car control (4.1). Constraint from 4.1: car 20 stee
 $$|o| \le \tfrac{w}{2} - c, \qquad o^{*} = \pm(\tfrac{w}{2}-c)\ \text{or}\ 0, \qquad o_k = o_{k-1} + \mathrm{clip}\big(o^{*} - o_{k-1},\ \pm 0.3\,\Delta s_k\big)$$
 
   ±0.12 m in a 0.8 m lane, ±0.22 m in a 1 m lane. The MPC sees the offset line as its path:
-  $e' = e - o$, $\kappa' = \kappa/(1 - \kappa o)$.
+  $e' = e - o$ and $\kappa' = \kappa/(1 - \kappa o)$ for the offset line.
 - **Markers → actions** (`markers.py`). Nearest posed marker ahead within 2 m, fired after 2 steps in a row. Keep-side
   IDs set the lane side; turn and straight IDs start the turner; an unknown ID latches a stop.
 - **Turner: APPROACH → ARC → EXIT** (`intersection.py`). Move to the outside line, then drive an arc of radius
-  $R = \max(R_{cfg}, 1/\kappa_{max})$ by pure pursuit, $\kappa = 2y/(x^2+y^2)$. Hand back to the MPC once the lane is
+  $R = \max(R_{cfg}, 1/\kappa_{max})$ by pure pursuit, $\kappa = 2y/(x^2+y^2)$. $R_{cfg}$: preferred radius in
+  the config (1.1 m left, 1.2 m right); $\kappa_{max}$: the car's steering limit that way (car 20: 0.48 left,
+  0.92 right 1/m), so the radius is never tighter than the car can drive; $(x, y)$: the pursuit target 0.8 m ahead
+  on the path, in the car's frame. Hand back to the MPC once the lane is
   found again after ≥ 60°. The arc may only start where the body clears both corners:
 
 $$\underbrace{-\sqrt{(R-b-r_c-m)^2 - (R-a-w/2)^2}}_{\text{inner side clears the inside corner cone}} \;\le\; s \;\le\; \underbrace{w_{cross} - r_c - m - \sqrt{f^2+(R+b)^2}}_{\text{outer front corner clears the far row}}$$
 
-  $s$: arc start along the approach (m, 0 = entry); $a$: how far the car moved aside; $b$ = 0.125 m half width;
+  $s$: arc start along the approach (m, 0 = entry); $a$: how far the car moved aside; $w$, $w_{cross}$: approach
+  and crossing road widths; $b$ = 0.125 m half width;
   $f$ = 0.30 m to the front; $r_c + m$ = 0.08 m cone plus margin. The code also corrects for heading error
   (Yuhao, 3.4). No valid $s$ → braking stop (the "geometry stop").
 
