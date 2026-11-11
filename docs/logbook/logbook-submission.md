@@ -340,36 +340,18 @@ first whose peak curvature stays within $\kappa_{max}$.
 
 *3. Choosing the combination.*
 
-- **Keep-clear stretches:** each obstacle needs clearance from $\max(0.05\ \text{m}, d_{stop})$ before it to 0.05 m
-  after it. Obstacles whose stretches overlap form one group, passed on one offset.
-- **Candidate offsets** beside each group: the middle of each free gap wide enough for the car, the point nearest the
-  usual line, 5 evenly spread points, and the previous step's line.
 - **Joining:** before the first group, hold the current line, then take the shortest move, arriving as the car's
   front reaches the stretch. Between groups, one of four ways: keep the offset; a move centred between them; a move
   spread over the whole gap; or back to the usual line and out again. After the last group, one move back to the
   usual line at the earliest point where the body keeps its clearances.
 - **Check and search:** each candidate is checked every 0.05 m with the car's body, a 0.25 × 0.60 m rectangle turned
   along the path. The search goes group by group, keeping the 6 cheapest partial paths, for up to 3 groups.
-- **Ranking**, in order: obstacles passed (nearest first) → how close it comes to passing the next → already beside
-  the obstacles before $d_{stop}$ → lowest cost
-
-$$J = \Delta s \sum \Big[w_{dev}(d - d_{usual})^2 + w_{smooth}\,\kappa_{add}^2 + w_{change}(d - d_{prev})^2\Big] - w_{clear}\cdot\text{room}$$
-
-*4. Parameters.*
-
-| Parameter | Value | Why |
-| --- | --- | --- |
-| Car body | 0.25 × 0.60 m | The notebook car's size (not measured), checked as a rectangle along the path |
-| Clearance to obstacle / to cone | 0.10 m / 0.05 m | Balance passing the narrowest gap against jumps in the detected positions; gap needed 0.25 + 0.10 + 0.05 = 0.40 m |
-| Keep-clear start | $\max(0.05\ \text{m}, d_{stop})$ = 0.60 m | The car is beside the obstacle before the stop would brake for it |
-| Move curvature $\kappa_{max}$ | 0.45 1/m | Just under the car's left limit 0.48, leaving room for the MPC to track; shorter moves |
-| Return curvature | 0.40 1/m | Back to the usual line sooner, while still passing an obstacle close behind |
-| $w_{dev}, w_{smooth}, w_{change}, w_{clear}$ | 1, 1, 1, 5 | Room beside the obstacles counts most; $w_{change}$ keeps the chosen side from step to step |
-| Search limits | 5 spread offsets, 6 kept paths, 3 groups | Bounds the work inside the real-time policy step |
+- **Ranking**, in order: obstacles passed (nearest first) → remaining distance to passing the next → already beside
+  the obstacles before $d_{stop}$
 
 ![Avoidance planner](zhenling/figures/Z7_avoidance_planner_candidates.png)
 
-*Real planner, 0.8 m lane, box right then left. (a) Grey: 22 candidates; blue: chosen line, body checked along it.
+*Simulation, 0.8 m lane, box right then left. (a) Grey: 22 candidates; blue: chosen line, body checked along it.
 (b) Curvature continuous, inside 0.45 1/m (car's left limit 0.48).*
 
 - **Local map:** dead-reckoned pose, nearest-cone matching (0.12 m), half a rigid fit per step; recalled cones only
@@ -397,7 +379,7 @@ readings, stopped 0.21–0.33 m short. (c) Simulated tolerance per setting; star
 - **26 Oct (best video):** passed a box right, then left (1.4 m apart), then stopped for a middle box whose gaps (0.31,
   0.12 m) were under the 0.40 m needed: braked at 0.69 m, stopped 0.23 m short.
 - S-bend (20 Oct): curvature flipped sign in 18/28 steps → 0/28 with the 3.5 m range. Local map halved the p95 lane
-  jump in all four 22 Oct drives. **Limits:** static obstacles only; car size not measured.
+  jump in all four 22 Oct drives. **Limits:** static obstacles only.
 
 ---
 
