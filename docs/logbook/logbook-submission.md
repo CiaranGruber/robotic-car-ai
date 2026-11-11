@@ -546,8 +546,8 @@ $$|o| \le \tfrac{w}{2} - c, \qquad o^{*} = \pm(\tfrac{w}{2}-c)\ \text{or}\ 0, \q
 - **Turner: APPROACH → ARC → EXIT** (`intersection.py`). Move to the outside line, then drive an arc of radius
   $R = \max(R_{cfg}, 1/\kappa_{max})$ by pure pursuit, $\kappa = 2y/(x^2+y^2)$. $R_{cfg}$: preferred radius in
   the config (1.1 m left, 1.2 m right); $\kappa_{max}$: the car's steering limit that way (car 20: 0.48 left,
-  0.92 right 1/m), so the radius is never tighter than the car can drive; $(x, y)$: the pursuit target 0.8 m ahead
-  on the path, in the car's frame. Hand back to the MPC once the lane is
+  0.92 right 1/m), so the radius is never tighter than the car can drive; $(x, y)$: the pursuit target a lookahead ahead on the
+  path (0.5 m on `dev`, 0.8 m on the fix branch), in the car's frame. Hand back to the MPC once the lane is
   found again after ≥ 60°. The arc may only start where the body clears both corners:
 
 $$\underbrace{-\sqrt{(R-b-r_c-m)^2 - (R-a-w/2)^2}}_{\text{inner side clears the inside corner cone}} \;\le\; s \;\le\; \underbrace{w_{cross} - r_c - m - \sqrt{f^2+(R+b)^2}}_{\text{outer front corner clears the far row}}$$
